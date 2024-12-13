@@ -4,12 +4,11 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 import '../ffi/bindings.dart';
 
-// Singleton class to manage Bluetooth interactions
 class FFI_BluetoothService {
   final BluetoothBindings _bindings = BluetoothBindings();
-  final StreamController<bool> _connectionController =
+  static final StreamController<bool> _connectionController =
       StreamController<bool>.broadcast();
-  final StreamController<String> _messageController =
+  static final StreamController<String> _messageController =
       StreamController<String>.broadcast();
 
   // Expose streams
@@ -31,7 +30,7 @@ class FFI_BluetoothService {
     // Set up the callback
     final callbackPointer =
         Pointer.fromFunction<ConnectionResultCallbackNative>(
-      _connectionResultCallback,
+      _staticConnectionResultCallback, // Use the static callback
     );
 
     // Start the Bluetooth service
@@ -44,14 +43,14 @@ class FFI_BluetoothService {
     }
   }
 
-  // The Dart callback that matches the C callback signature
-  void _connectionResultCallback(int success, Pointer<Utf8> message) {
+  // Static callback that can be used with FFI
+  static void _staticConnectionResultCallback(
+      int success, Pointer<Utf8> message) {
     String msg = message.toDartString();
     _messageController.add(msg);
     _connectionController.add(success == 1);
   }
 
-  // Dispose method to clean up
   void dispose() {
     _bindings.bluetooth_stop();
     _connectionController.close();
