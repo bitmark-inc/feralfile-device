@@ -1,0 +1,35 @@
+name: Flutter Lint
+
+on:
+  pull_request:
+    paths:
+      - '**.dart'
+      - 'pubspec.yaml'
+      - '**/lib/**'
+      - '**/test/**'
+
+jobs:
+  flutter_lint:
+    name: Lint Flutter Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.4'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter code
+        run: flutter analyze
+
+      - name: Check for Flutter analysis issues
+        if: failure()
+        run: |
+          echo "Flutter analysis found issues."
+          exit 1
