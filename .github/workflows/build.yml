@@ -104,5 +104,5 @@ jobs:
       - name: Upload Debian package
         uses: actions/upload-artifact@v3
         with:
-          name: feralfile-deb
-          path: feralfile_*.deb
+          name: feralfile-launcher-deb
+          path: feralfile-launcher_*.deb
