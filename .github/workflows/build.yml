@@ -20,7 +20,8 @@ jobs:
       - name: Install dependencies for C code
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build libbluetooth-dev libgtk-3-dev
+          sudo apt-get install -y build-essential cmake ninja-build libbluetooth-dev \
+          libgtk-3-dev libblkid-dev liblzma-dev libsecret-1-dev libjsoncpp-dev
           
           # Verify installations
           g++ --version
@@ -45,12 +46,21 @@ jobs:
           cd feralfile-bluetooth
           make clean
           make
-          # Verify the shared library exists
-          ls -l libbluetooth_service.so
+          # Copy to the correct location for Flutter to find it
+          mkdir -p ../build/linux/x64/release/bundle/lib/
+          cp libbluetooth_service.so ../build/linux/x64/release/bundle/lib/
           cd ..
 
       - name: Build Flutter app for Linux
-        run: flutter build linux
+        run: |
+          flutter config --enable-linux-desktop
+          flutter build linux --release --target-platform=linux-arm64
+
+      - name: Verify build artifacts
+        run: |
+          ls -l build/linux/arm64/release/bundle/
+          ls -l build/linux/arm64/release/bundle/lib/
+          file build/linux/arm64/release/bundle/lib/libbluetooth_service.so
 
       - name: Package as Debian .deb
         env:
