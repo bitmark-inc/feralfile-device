@@ -99,6 +99,13 @@ int bluetooth_init() {
         return -1;
     }
 
+    // Set the device as discoverable
+    system("bluetoothctl discoverable on");
+    system("bluetoothctl pairable on");
+    
+    // Set device name (optional)
+    system("bluetoothctl set-alias 'FeralFile-WiFi'");
+
     // Bind socket to the first available local Bluetooth adapter
     loc_addr.rc_family = AF_BLUETOOTH;
     loc_addr.rc_bdaddr = *BDADDR_ANY;
@@ -117,7 +124,7 @@ int bluetooth_init() {
         return -1;
     }
 
-    printf("Bluetooth service initialized. Listening for connections...\n");
+    printf("Bluetooth service initialized. Device is now discoverable...\n");
     return 0;
 }
 
