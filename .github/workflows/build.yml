@@ -1,4 +1,4 @@
-name: Build FeralFile App
+name: Build FeralFile App for ARM64
 
 on:
   workflow_dispatch:
@@ -7,14 +7,6 @@ on:
         description: 'Application version'
         required: true
         default: '0.0.1'
-      architecture:
-        description: 'Architecture'
-        required: true
-        type: choice
-        options:
-          - amd64
-          - arm64
-        default: arm64
 
 jobs:
   build:
@@ -64,7 +56,7 @@ jobs:
         env:
           APP_NAME: feralfile-launcher
           VERSION: ${{ github.event.inputs.version }}
-          ARCH: ${{ github.event.inputs.architecture }}
+          ARCH: ARM64
           DESCRIPTION: "Feral File Connection Assistant"
           MAINTAINER: "Bitmark Inc <support@feralfile.com>"
           INSTALL_DIR: "/opt/${{ env.APP_NAME }}"
@@ -74,7 +66,7 @@ jobs:
           mkdir -p package$INSTALL_DIR/lib
           
           # Copy Flutter app and C library
-          cp -r build/linux/x64/release/bundle/* package$INSTALL_DIR/
+          cp -r build/linux/arm64/release/bundle/* package$INSTALL_DIR/
           cp feralfile-bluetooth/libbluetooth_service.so package$INSTALL_DIR/lib/
           
           # Create control file with package metadata
@@ -83,7 +75,7 @@ jobs:
           Version: $VERSION
           Section: base
           Priority: optional
-          Architecture: $ARCH
+          Architecture: ARM64
           Maintainer: $MAINTAINER
           Description: $DESCRIPTION
           EOF
@@ -92,7 +84,7 @@ jobs:
           chmod -R 755 package$INSTALL_DIR
           
           # Build the .deb package
-          dpkg-deb --build package ${APP_NAME}_${VERSION}_${ARCH}.deb
+          dpkg-deb --build package ${APP_NAME}_${VERSION}_ARM64.deb
           
           # The .deb file will be named feralfile_1.0.0_arm64.deb
 
