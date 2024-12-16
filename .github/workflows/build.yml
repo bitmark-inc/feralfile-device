@@ -47,8 +47,8 @@ jobs:
           make clean
           make
           # Copy to the correct location for Flutter to find it
-          mkdir -p ../build/linux/x64/release/bundle/lib/
-          cp libbluetooth_service.so ../build/linux/x64/release/bundle/lib/
+          mkdir -p ../build/linux/arm64/release/bundle/lib/
+          cp libbluetooth_service.so ../build/linux/arm64/release/bundle/lib/
           cd ..
 
       - name: Build Flutter app for Linux
