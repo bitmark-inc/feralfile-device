@@ -19,7 +19,7 @@ on:
 jobs:
   build:
     name: Build and Package App
-    runs-on: ubuntu-latest
+    runs-on: ['self-hosted', 'ARM64']
 
     steps:
       - name: Checkout code
