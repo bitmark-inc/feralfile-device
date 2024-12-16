@@ -35,15 +35,24 @@ jobs:
             liblzma-dev \
             libsecret-1-dev \
             libjsoncpp-dev \
-            at-spi2-core
+            at-spi2-core \
+            libatspi2.0-dev
+          
+          # Set pkg-config path
+          export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
           
           # Verify installations
+          echo "Checking ATK version:"
           pkg-config --modversion atk
+          echo "Checking GTK version:"
           pkg-config --modversion gtk+-3.0
-          pkg-config --modversion at-spi2-core
+          echo "Checking AT-SPI version:"
+          pkg-config --modversion atspi-2
 
       - name: Get Flutter dependencies
-        run: flutter pub get
+        run: |
+          export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
+          flutter pub get
 
       - name: Build C library
         run: |
@@ -61,17 +70,14 @@ jobs:
           # Set GTK accessibility
           export GTK_MODULES=gail:atk-bridge
           export NO_AT_BRIDGE=0
+          # Set pkg-config path
+          export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
 
       - name: Build Flutter app for Linux
         run: |
+          export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
           flutter config --enable-linux-desktop
           flutter build linux --release --target-platform=linux-arm64
-
-      - name: Verify build artifacts
-        run: |
-          ls -l build/linux/arm64/release/bundle/
-          ls -l build/linux/arm64/release/bundle/lib/
-          file build/linux/arm64/release/bundle/lib/libbluetooth_service.so
 
       - name: Package as Debian .deb
         env:
@@ -82,15 +88,11 @@ jobs:
           MAINTAINER: "Bitmark Inc <support@feralfile.com>"
           INSTALL_DIR: "/opt/${{ env.APP_NAME }}"
         run: |
-          # Create package directory structure
           mkdir -p package/DEBIAN
           mkdir -p package$INSTALL_DIR/lib
-          
-          # Copy Flutter app and C library
           cp -r build/linux/arm64/release/bundle/* package$INSTALL_DIR/
           cp feralfile-bluetooth/libbluetooth_service.so package$INSTALL_DIR/lib/
           
-          # Create control file with package metadata
           cat <<EOF > package/DEBIAN/control
           Package: $APP_NAME
           Version: $VERSION
@@ -101,13 +103,8 @@ jobs:
           Description: $DESCRIPTION
           EOF
           
-          # Set permissions
           chmod -R 755 package$INSTALL_DIR
-          
-          # Build the .deb package
           dpkg-deb --build package ${APP_NAME}_${VERSION}_arm64.deb
-          
-          # The .deb file will be named feralfile_1.0.0_arm64.deb
 
       - name: Upload Debian package
         uses: actions/upload-artifact@v3
