@@ -37,11 +37,11 @@ static void log_debug(const char* format, ...) {
 static const gchar introspection_xml[] =
     "<node>"
     "  <interface name='org.bluez.GattService1'>"
-    "    <property name='UUID' type='s' access='read' default='" FERALFILE_SERVICE_UUID "'/>"
+    "    <property name='UUID' type='s' access='read'/>"
     "    <property name='Primary' type='b' access='read'/>"
     "  </interface>"
     "  <interface name='org.bluez.GattCharacteristic1'>"
-    "    <property name='UUID' type='s' access='read' default='" FERALFILE_WIFI_CHAR_UUID "'/>"
+    "    <property name='UUID' type='s' access='read'/>"
     "    <property name='Service' type='o' access='read'/>"
     "    <property name='Value' type='ay' access='read'/>"
     "    <property name='Notifying' type='b' access='read'/>"
@@ -113,6 +113,35 @@ static void handle_method_call(GDBusConnection *connection,
     }
 }
 
+static GVariant* handle_get_property(GDBusConnection *connection,
+                                   const gchar *sender,
+                                   const gchar *object_path,
+                                   const gchar *interface_name,
+                                   const gchar *property_name,
+                                   GError **error,
+                                   gpointer user_data) {
+    if (g_strcmp0(interface_name, "org.bluez.GattService1") == 0) {
+        if (g_strcmp0(property_name, "UUID") == 0) {
+            return g_variant_new_string(FERALFILE_SERVICE_UUID);
+        }
+        if (g_strcmp0(property_name, "Primary") == 0) {
+            return g_variant_new_boolean(TRUE);
+        }
+    } else if (g_strcmp0(interface_name, "org.bluez.GattCharacteristic1") == 0) {
+        if (g_strcmp0(property_name, "UUID") == 0) {
+            return g_variant_new_string(FERALFILE_WIFI_CHAR_UUID);
+        }
+    }
+    return NULL;
+}
+
+// Add this interface vtable structure after the handler
+static const GDBusInterfaceVTable interface_vtable = {
+    .method_call = handle_method_call,
+    .get_property = handle_get_property,
+    .set_property = NULL,
+};
+
 // BLE service main loop
 void* bluetooth_handler(void* arg) {
     main_loop = g_main_loop_new(NULL, FALSE);
@@ -127,6 +156,27 @@ int bluetooth_init() {
     introspection_data = g_dbus_node_info_new_for_xml(introspection_xml, &error);
     if (error) {
         log_debug("[%s] Failed to parse D-Bus interface: %s\n", LOG_TAG, error->message);
+        g_error_free(error);
+        return -1;
+    }
+    
+    // Register the D-Bus interface
+    GDBusConnection *connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+    if (error) {
+        log_debug("[%s] Failed to connect to D-Bus: %s\n", LOG_TAG, error->message);
+        g_error_free(error);
+        return -1;
+    }
+
+    registration_id = g_dbus_connection_register_object(connection,
+                                                      "/org/bluez/example/service0",
+                                                      introspection_data->interfaces[0],
+                                                      &interface_vtable,
+                                                      NULL,
+                                                      NULL,
+                                                      &error);
+    if (error) {
+        log_debug("[%s] Failed to register D-Bus object: %s\n", LOG_TAG, error->message);
         g_error_free(error);
         return -1;
     }
