@@ -29,15 +29,19 @@ static void log_debug(const char* format, ...) {
     va_end(args);
 }
 
+#define FERALFILE_SERVICE_NAME   "FeralFile Connection"
+#define FERALFILE_SERVICE_UUID   "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
+#define FERALFILE_WIFI_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"  // WiFi Configuration Characteristic
+
 // D-Bus interface definition for BLE GATT service
 static const gchar introspection_xml[] =
     "<node>"
     "  <interface name='org.bluez.GattService1'>"
-    "    <property name='UUID' type='s' access='read'/>"
+    "    <property name='UUID' type='s' access='read' default='" WIFI_SERVICE_UUID "'/>"
     "    <property name='Primary' type='b' access='read'/>"
     "  </interface>"
     "  <interface name='org.bluez.GattCharacteristic1'>"
-    "    <property name='UUID' type='s' access='read'/>"
+    "    <property name='UUID' type='s' access='read' default='" WIFI_CHARACTERISTIC_UUID "'/>"
     "    <property name='Service' type='o' access='read'/>"
     "    <property name='Value' type='ay' access='read'/>"
     "    <property name='Notifying' type='b' access='read'/>"
@@ -130,7 +134,7 @@ int bluetooth_init() {
     log_debug("[%s] Setting up Bluetooth device properties\n", LOG_TAG);
     system("bluetoothctl discoverable on");
     system("bluetoothctl pairable on");
-    system("bluetoothctl set-alias 'FeralFile-WiFi'");
+    system("bluetoothctl set-alias '" FERALFILE_SERVICE_NAME "'");
     
     log_debug("[%s] Bluetooth service initialized successfully\n", LOG_TAG);
     return 0;
