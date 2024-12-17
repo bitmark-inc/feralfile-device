@@ -36,7 +36,14 @@ jobs:
             libsecret-1-dev \
             libjsoncpp-dev \
             at-spi2-core \
-            libatspi2.0-dev
+            libatspi2.0-dev \
+            libglib2.0-dev \
+            libgio2.0-dev \
+            libdbus-1-dev \
+            libdbus-glib-1-dev \
+            bluetooth \
+            bluez \
+            bluez-tools
           
           # Set pkg-config path
           export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig

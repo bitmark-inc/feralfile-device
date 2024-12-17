@@ -4,154 +4,166 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/rfcomm.h>
+#include <glib.h>
+#include <gio/gio.h>
 #include <pthread.h>
+#include <syslog.h>
 
 // Global variables
-static int server_sock = 0, client_sock = 0;
-static struct sockaddr_rc loc_addr = { 0 }, rem_addr = { 0 };
-static socklen_t opt = sizeof(rem_addr);
+static GMainLoop *main_loop = NULL;
+static GDBusNodeInfo *introspection_data = NULL;
+static guint owner_id;
+static guint registration_id;
 static connection_result_callback result_callback = NULL;
 static pthread_t bluetooth_thread;
 
-// Function to handle client connection
-void* bluetooth_handler(void* arg) {
+// Add after global variables
+#define LOG_TAG "BluetoothService"
+static void log_debug(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    vsyslog(LOG_DEBUG, format, args);
+    vprintf(format, args);
+    va_end(args);
+}
+
+// D-Bus interface definition for BLE GATT service
+static const gchar introspection_xml[] =
+    "<node>"
+    "  <interface name='org.bluez.GattService1'>"
+    "    <property name='UUID' type='s' access='read'/>"
+    "    <property name='Primary' type='b' access='read'/>"
+    "  </interface>"
+    "  <interface name='org.bluez.GattCharacteristic1'>"
+    "    <property name='UUID' type='s' access='read'/>"
+    "    <property name='Service' type='o' access='read'/>"
+    "    <property name='Value' type='ay' access='read'/>"
+    "    <property name='Notifying' type='b' access='read'/>"
+    "    <method name='ReadValue'>"
+    "      <arg name='options' type='a{sv}' direction='in'/>"
+    "      <arg name='value' type='ay' direction='out'/>"
+    "    </method>"
+    "    <method name='WriteValue'>"
+    "      <arg name='value' type='ay' direction='in'/>"
+    "      <arg name='options' type='a{sv}' direction='in'/>"
+    "    </method>"
+    "  </interface>"
+    "</node>";
+
+// Function to handle BLE data reception
+static void handle_write_value(const guchar *value, gsize value_len) {
+    log_debug("[%s] Received write value request, length: %zu\n", LOG_TAG, value_len);
+    
     char buffer[1024] = {0};
-    int bytes_read;
-
-    // Accept the client connection
-    client_sock = accept(server_sock, (struct sockaddr*)&rem_addr, &opt);
-    if (client_sock < 0) {
-        perror("Accept failed");
+    memcpy(buffer, value, value_len < sizeof(buffer) ? value_len : sizeof(buffer) - 1);
+    log_debug("[%s] Received data: %s\n", LOG_TAG, buffer);
+    
+    char ssid[256] = {0};
+    char password[256] = {0};
+    
+    int parsed = sscanf(buffer, "{\"ssid\":\"%255[^\"]\",\"password\":\"%255[^\"]\"}", ssid, password);
+    log_debug("[%s] Parsed %d fields. SSID: %s\n", LOG_TAG, parsed, ssid);
+    
+    char command[512];
+    snprintf(command, sizeof(command), "nmcli dev wifi connect \"%s\" password \"%s\"", ssid, password);
+    log_debug("[%s] Executing command: nmcli dev wifi connect \"%s\" [password hidden]\n", LOG_TAG, ssid);
+    
+    int ret = system(command);
+    log_debug("[%s] nmcli command returned: %d\n", LOG_TAG, ret);
+    
+    if (ret == 0) {
+        log_debug("[%s] Successfully connected to WiFi\n", LOG_TAG);
         if (result_callback) {
-            result_callback(0, "Failed to accept Bluetooth connection.");
+            result_callback(1, "Wi-Fi connected successfully.");
         }
-        pthread_exit(NULL);
-    }
-
-    char client_address[19] = { 0 };
-    ba2str(&rem_addr.rc_bdaddr, client_address);
-    printf("Accepted connection from %s\n", client_address);
-
-    // Receive data (Wi-Fi credentials in JSON format)
-    bytes_read = read(client_sock, buffer, sizeof(buffer));
-    if (bytes_read > 0) {
-        buffer[bytes_read] = '\0';
-        printf("Received: %s\n", buffer);
-
-        // Parse JSON to extract SSID and Password
-        // For simplicity, assume the JSON is in the format: {"ssid":"Your_SSID","password":"Your_Password"}
-        char ssid[256] = {0};
-        char password[256] = {0};
-
-        // Simple parsing without error checking
-        sscanf(buffer, "{\"ssid\":\"%255[^\"]\",\"password\":\"%255[^\"]\"}", ssid, password);
-
-        printf("Parsed SSID: %s\nPassword: %s\n", ssid, password);
-
-        // Connect to Wi-Fi using nmcli
-        // WARNING: Executing shell commands can be insecure. Ensure inputs are sanitized.
-        char command[512];
-        snprintf(command, sizeof(command), "nmcli dev wifi connect \"%s\" password \"%s\"", ssid, password);
-        printf("Executing command: %s\n", command);
-
-        int ret = system(command);
-        if (ret == 0) {
-            printf("Wi-Fi connected successfully.\n");
-            if (result_callback) {
-                result_callback(1, "Wi-Fi connected successfully.");
-            }
-        } else {
-            printf("Failed to connect to Wi-Fi.\n");
-            if (result_callback) {
-                result_callback(0, "Failed to connect to Wi-Fi.");
-            }
-        }
-
-        // Send result back to client
-        char result_message[256];
-        if (ret == 0) {
-            snprintf(result_message, sizeof(result_message), "{\"success\":true,\"message\":\"Wi-Fi connected successfully.\"}");
-        } else {
-            snprintf(result_message, sizeof(result_message), "{\"success\":false,\"message\":\"Failed to connect to Wi-Fi.\"}");
-        }
-        write(client_sock, result_message, strlen(result_message));
     } else {
-        printf("No data received.\n");
+        log_debug("[%s] Failed to connect to WiFi\n", LOG_TAG);
         if (result_callback) {
-            result_callback(0, "No data received.");
+            result_callback(0, "Failed to connect to Wi-Fi.");
         }
     }
+}
 
-    // Close the client socket
-    close(client_sock);
-    printf("Disconnected.\n");
+// D-Bus method handlers
+static void handle_method_call(GDBusConnection *connection,
+                             const gchar *sender,
+                             const gchar *object_path,
+                             const gchar *interface_name,
+                             const gchar *method_name,
+                             GVariant *parameters,
+                             GDBusMethodInvocation *invocation,
+                             gpointer user_data) {
+    if (g_strcmp0(method_name, "WriteValue") == 0) {
+        GVariant *value_variant;
+        g_variant_get(parameters, "(@ay@a{sv})", &value_variant, NULL);
+        
+        gsize value_len;
+        const guchar *value = g_variant_get_fixed_array(value_variant, &value_len, 1);
+        
+        handle_write_value(value, value_len);
+        
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        g_variant_unref(value_variant);
+    }
+}
 
+// BLE service main loop
+void* bluetooth_handler(void* arg) {
+    main_loop = g_main_loop_new(NULL, FALSE);
+    g_main_loop_run(main_loop);
     pthread_exit(NULL);
 }
 
 int bluetooth_init() {
-    // Allocate socket
-    server_sock = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
-    if (server_sock < 0) {
-        perror("Failed to create socket");
+    log_debug("[%s] Initializing Bluetooth service\n", LOG_TAG);
+    
+    g_type_init();
+    
+    GError *error = NULL;
+    introspection_data = g_dbus_node_info_new_for_xml(introspection_xml, &error);
+    if (error) {
+        log_debug("[%s] Failed to parse D-Bus interface: %s\n", LOG_TAG, error->message);
+        g_error_free(error);
         return -1;
     }
-
-    // Set the device as discoverable
+    
+    log_debug("[%s] Setting up Bluetooth device properties\n", LOG_TAG);
     system("bluetoothctl discoverable on");
     system("bluetoothctl pairable on");
-    
-    // Set device name (optional)
     system("bluetoothctl set-alias 'FeralFile-WiFi'");
-
-    // Bind socket to the first available local Bluetooth adapter
-    loc_addr.rc_family = AF_BLUETOOTH;
-    loc_addr.rc_bdaddr = *BDADDR_ANY;
-    loc_addr.rc_channel = (uint8_t) 1; // RFCOMM channel
-
-    if (bind(server_sock, (struct sockaddr*)&loc_addr, sizeof(loc_addr)) < 0) {
-        perror("Bind failed");
-        close(server_sock);
-        return -1;
-    }
-
-    // Put socket into listening mode
-    if (listen(server_sock, 1) < 0) {
-        perror("Listen failed");
-        close(server_sock);
-        return -1;
-    }
-
-    printf("Bluetooth service initialized. Device is now discoverable...\n");
+    
+    log_debug("[%s] Bluetooth service initialized successfully\n", LOG_TAG);
     return 0;
 }
 
 int bluetooth_start(connection_result_callback callback) {
+    log_debug("[%s] Starting Bluetooth service\n", LOG_TAG);
     result_callback = callback;
 
-    // Start the Bluetooth handler thread
     if (pthread_create(&bluetooth_thread, NULL, bluetooth_handler, NULL) != 0) {
-        perror("Failed to create Bluetooth handler thread");
+        log_debug("[%s] Failed to create Bluetooth handler thread: %s\n", LOG_TAG, strerror(errno));
         return -1;
     }
 
+    log_debug("[%s] Bluetooth service started successfully\n", LOG_TAG);
     return 0;
 }
 
 void bluetooth_stop() {
-    // Close sockets
+    log_debug("[%s] Stopping Bluetooth service\n", LOG_TAG);
+    
     if (client_sock > 0) {
+        log_debug("[%s] Closing client socket\n", LOG_TAG);
         close(client_sock);
     }
     if (server_sock > 0) {
+        log_debug("[%s] Closing server socket\n", LOG_TAG);
         close(server_sock);
     }
 
-    // Cancel the thread
+    log_debug("[%s] Cancelling Bluetooth handler thread\n", LOG_TAG);
     pthread_cancel(bluetooth_thread);
     pthread_join(bluetooth_thread, NULL);
 
-    printf("Bluetooth service stopped.\n");
+    log_debug("[%s] Bluetooth service stopped successfully\n", LOG_TAG);
 }

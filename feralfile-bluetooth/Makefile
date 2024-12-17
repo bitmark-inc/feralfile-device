@@ -1,8 +1,8 @@
 # Makefile
 
 CC = gcc
-CFLAGS = -Wall -fPIC -O2
-LDFLAGS = -lbluetooth -pthread
+CFLAGS = -Wall -fPIC -O2 `pkg-config --cflags glib-2.0 gio-2.0 dbus-1`
+LDFLAGS = -lbluetooth -pthread `pkg-config --libs glib-2.0 gio-2.0 dbus-1`
 TARGET = libbluetooth_service.so
 
 all: $(TARGET)
