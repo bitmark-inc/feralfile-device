@@ -37,11 +37,11 @@ static void log_debug(const char* format, ...) {
 static const gchar introspection_xml[] =
     "<node>"
     "  <interface name='org.bluez.GattService1'>"
-    "    <property name='UUID' type='s' access='read' default='" WIFI_SERVICE_UUID "'/>"
+    "    <property name='UUID' type='s' access='read' default='" FERALFILE_SERVICE_UUID "'/>"
     "    <property name='Primary' type='b' access='read'/>"
     "  </interface>"
     "  <interface name='org.bluez.GattCharacteristic1'>"
-    "    <property name='UUID' type='s' access='read' default='" WIFI_CHARACTERISTIC_UUID "'/>"
+    "    <property name='UUID' type='s' access='read' default='" FERALFILE_WIFI_CHAR_UUID "'/>"
     "    <property name='Service' type='o' access='read'/>"
     "    <property name='Value' type='ay' access='read'/>"
     "    <property name='Notifying' type='b' access='read'/>"
