@@ -43,6 +43,7 @@ static const gchar introspection_xml[] =
     "  <interface name='org.bluez.GattCharacteristic1'>"
     "    <property name='UUID' type='s' access='read'/>"
     "    <property name='Service' type='o' access='read'/>"
+    "    <property name='Flags' type='as' access='read'/>"
     "    <method name='WriteValue'>"
     "      <arg name='value' type='ay' direction='in'/>"
     "      <arg name='options' type='a{sv}' direction='in'/>"
@@ -78,13 +79,17 @@ static GVariant* handle_get_property(GDBusConnection *connection,
                                      const gchar *property_name,
                                      GError **error,
                                      gpointer user_data) {
-    if (g_strcmp0(interface_name, "org.bluez.GattService1") == 0) {
-        if (g_strcmp0(property_name, "UUID") == 0) return g_variant_new_string(FERALFILE_SERVICE_UUID);
-        if (g_strcmp0(property_name, "Primary") == 0) return g_variant_new_boolean(TRUE);
-    }
     if (g_strcmp0(interface_name, "org.bluez.GattCharacteristic1") == 0) {
-        if (g_strcmp0(property_name, "UUID") == 0) return g_variant_new_string(FERALFILE_WIFI_CHAR_UUID);
-        if (g_strcmp0(property_name, "Service") == 0) return g_variant_new_object_path("/org/bluez/example/service0");
+        if (g_strcmp0(property_name, "UUID") == 0) {
+            return g_variant_new_string(FERALFILE_WIFI_CHAR_UUID);
+        }
+        if (g_strcmp0(property_name, "Service") == 0) {
+            return g_variant_new_object_path("/org/bluez/example/service0");
+        }
+        if (g_strcmp0(property_name, "Flags") == 0) {
+            // Return an array of flags: "write" and "read" if needed
+            return g_variant_new_strv((const gchar*[]){"write", NULL}, -1);
+        }
     }
     return NULL;
 }
