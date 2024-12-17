@@ -168,6 +168,7 @@ int bluetooth_init() {
         return -1;
     }
 
+    // Register both GattService1 and GattCharacteristic1 interfaces
     registration_id = g_dbus_connection_register_object(connection,
                                                       "/org/bluez/example/service0",
                                                       introspection_data->interfaces[0],
@@ -176,16 +177,78 @@ int bluetooth_init() {
                                                       NULL,
                                                       &error);
     if (error) {
-        log_debug("[%s] Failed to register D-Bus object: %s\n", LOG_TAG, error->message);
+        log_debug("[%s] Failed to register GattService1 interface: %s\n", LOG_TAG, error->message);
         g_error_free(error);
         return -1;
     }
-    
+
+    // Register the characteristic interface
+    guint char_registration_id = g_dbus_connection_register_object(connection,
+                                                                 "/org/bluez/example/service0/char0",
+                                                                 introspection_data->interfaces[1],
+                                                                 &interface_vtable,
+                                                                 NULL,
+                                                                 NULL,
+                                                                 &error);
+    if (error) {
+        log_debug("[%s] Failed to register GattCharacteristic1 interface: %s\n", LOG_TAG, error->message);
+        g_error_free(error);
+        return -1;
+    }
+
     log_debug("[%s] Setting up Bluetooth device properties\n", LOG_TAG);
     system("bluetoothctl discoverable on");
     system("bluetoothctl pairable on");
     system("bluetoothctl set-alias '" FERALFILE_SERVICE_NAME "'");
     
+    // Add advertisement setup
+    GDBusProxy *adapter_proxy = g_dbus_proxy_new_sync(connection,
+                                                     G_DBUS_PROXY_FLAGS_NONE,
+                                                     NULL,
+                                                     "org.bluez",
+                                                     "/org/bluez/hci0",
+                                                     "org.bluez.LEAdvertisingManager1",
+                                                     NULL,
+                                                     &error);
+    if (error) {
+        log_debug("[%s] Failed to create advertising manager proxy: %s\n", LOG_TAG, error->message);
+        g_error_free(error);
+        return -1;
+    }
+
+    // Create advertisement data
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
+    
+    // Add service UUID to advertisement
+    GVariantBuilder uuid_builder;
+    g_variant_builder_init(&uuid_builder, G_VARIANT_TYPE("as"));
+    g_variant_builder_add(&uuid_builder, "s", FERALFILE_SERVICE_UUID);
+    g_variant_builder_add(&builder, "{sv}", "ServiceUUIDs",
+                         g_variant_new("as", &uuid_builder));
+
+    // Set local name
+    g_variant_builder_add(&builder, "{sv}", "LocalName",
+                         g_variant_new_string(FERALFILE_SERVICE_NAME));
+
+    // Register advertisement
+    GVariant *advertisement = g_variant_new("(oa{sv})", "/org/bluez/example/advertisement0", &builder);
+    GVariant *result = g_dbus_proxy_call_sync(adapter_proxy,
+                                             "RegisterAdvertisement",
+                                             advertisement,
+                                             G_DBUS_CALL_FLAGS_NONE,
+                                             -1,
+                                             NULL,
+                                             &error);
+    if (error) {
+        log_debug("[%s] Failed to register advertisement: %s\n", LOG_TAG, error->message);
+        g_error_free(error);
+        return -1;
+    }
+
+    g_variant_unref(result);
+    g_object_unref(adapter_proxy);
+
     log_debug("[%s] Bluetooth service initialized successfully\n", LOG_TAG);
     return 0;
 }
