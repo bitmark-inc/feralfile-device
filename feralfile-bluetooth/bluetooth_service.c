@@ -16,6 +16,8 @@ static guint owner_id;
 static guint registration_id;
 static connection_result_callback result_callback = NULL;
 static pthread_t bluetooth_thread;
+static int client_sock = -1;
+static int server_sock = -1;
 
 // Add after global variables
 #define LOG_TAG "BluetoothService"
@@ -116,8 +118,6 @@ void* bluetooth_handler(void* arg) {
 
 int bluetooth_init() {
     log_debug("[%s] Initializing Bluetooth service\n", LOG_TAG);
-    
-    g_type_init();
     
     GError *error = NULL;
     introspection_data = g_dbus_node_info_new_for_xml(introspection_xml, &error);
