@@ -113,9 +113,7 @@ static GVariant* handle_get_property(GDBusConnection *connection,
             return g_variant_new_object_path(FERALFILE_SERVICE_PATH);
         if (g_strcmp0(property_name, "Flags") == 0) {
             const gchar *flags[] = {
-                "write",
                 "write-without-response",
-                "encrypt-write",
                 NULL
             };
             return g_variant_new_strv(flags, -1);
