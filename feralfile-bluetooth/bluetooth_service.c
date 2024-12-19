@@ -111,8 +111,15 @@ static GVariant* handle_get_property(GDBusConnection *connection,
             return g_variant_new_string(WIFI_CREDS_CHAR_UUID);
         if (g_strcmp0(property_name, "Service") == 0)
             return g_variant_new_object_path(FERALFILE_SERVICE_PATH);
-        if (g_strcmp0(property_name, "Flags") == 0)
-            return g_variant_new_strv((const gchar*[]){"write"}, -1);
+        if (g_strcmp0(property_name, "Flags") == 0) {
+            const gchar *flags[] = {
+                "write",
+                "write-without-response",
+                "encrypt-write",
+                NULL
+            };
+            return g_variant_new_strv(flags, -1);
+        }
     }
     return NULL;
 }
@@ -125,16 +132,24 @@ static void handle_method_call(GDBusConnection *connection,
                              GVariant *parameters,
                              GDBusMethodInvocation *invocation,
                              gpointer user_data) {
-    if (g_strcmp0(method_name, "WriteValue") == 0) {
-        GVariant *value_variant = NULL;
-        g_variant_get(parameters, "(@ay@a{sv})", &value_variant, NULL);
+    if (g_strcmp0(interface_name, "org.bluez.GattCharacteristic1") == 0) {
+        if (g_strcmp0(method_name, "WriteValue") == 0) {
+            GVariant *value_variant = NULL;
+            GVariant *options = NULL;
+            g_variant_get(parameters, "(@ay@a{sv})", &value_variant, &options);
 
-        gsize value_len;
-        const guchar *value = g_variant_get_fixed_array(value_variant, &value_len, 1);
-        handle_write_value(value, value_len);
+            gsize value_len;
+            const guchar *value = g_variant_get_fixed_array(value_variant, &value_len, 1);
+            
+            handle_write_value(value, value_len);
 
-        g_dbus_method_invocation_return_value(invocation, NULL);
-        g_variant_unref(value_variant);
+            g_dbus_method_invocation_return_value(invocation, NULL);
+            
+            if (value_variant)
+                g_variant_unref(value_variant);
+            if (options)
+                g_variant_unref(options);
+        }
     }
 }
 
@@ -182,6 +197,28 @@ int bluetooth_init() {
     if (!connection) {
         log_debug("[%s] Failed to connect to D-Bus: %s\n", LOG_TAG, error->message);
         return -1;
+    }
+
+    // Set Bluetooth adapter properties for security
+    GDBusProxy *adapter = g_dbus_proxy_new_sync(connection,
+                                               G_DBUS_PROXY_FLAGS_NONE,
+                                               NULL,
+                                               "org.bluez",
+                                               "/org/bluez/hci0",
+                                               "org.bluez.Adapter1",
+                                               NULL,
+                                               &error);
+    if (adapter) {
+        // Enable Pairable and set Pairing Mode
+        g_dbus_proxy_call_sync(adapter,
+                              "SetProperty",
+                              g_variant_new("(sv)", "Pairable", g_variant_new_boolean(TRUE)),
+                              G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
+        
+        g_dbus_proxy_call_sync(adapter,
+                              "SetProperty",
+                              g_variant_new("(sv)", "PairableTimeout", g_variant_new_uint32(0)),
+                              G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
     }
 
     // Register GATT Service and Characteristic
