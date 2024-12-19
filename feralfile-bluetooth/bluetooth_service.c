@@ -16,8 +16,6 @@
 static GMainLoop *main_loop = NULL;
 static GDBusNodeInfo *introspection_data = NULL;
 static GDBusNodeInfo *advertisement_introspection_data = NULL;
-static guint registration_id;
-static guint char_registration_id;
 static pthread_t bluetooth_thread;
 
 #define FERALFILE_SERVICE_NAME    "FeralFile Connection"
@@ -229,10 +227,14 @@ void bluetooth_set_credentials_callback(wifi_credentials_callback callback) {
     credentials_callback = callback;
 }
 
-int bluetooth_start() {
+int bluetooth_start(connection_result_callback callback) {
     if (pthread_create(&bluetooth_thread, NULL, bluetooth_handler, NULL) != 0) {
         log_debug("[%s] Failed to start Bluetooth thread\n", LOG_TAG);
         return -1;
+    }
+    
+    if (callback) {
+        callback(0); // Success
     }
     return 0;
 }
