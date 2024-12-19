@@ -49,6 +49,7 @@ static const gchar introspection_xml[] =
     "    <property name='UUID' type='s' access='read'/>"
     "    <property name='Service' type='o' access='read'/>"
     "    <property name='Flags' type='as' access='read'/>"
+    "    <property name='MTU' type='q' access='read'/>"
     "    <method name='WriteValue'>"
     "      <arg name='value' type='ay' direction='in'/>"
     "      <arg name='options' type='a{sv}' direction='in'/>"
@@ -113,6 +114,7 @@ static GVariant* handle_get_property(GDBusConnection *connection,
             return g_variant_new_object_path(FERALFILE_SERVICE_PATH);
         if (g_strcmp0(property_name, "Flags") == 0) {
             const gchar *flags[] = {
+                "write",
                 "write-without-response",
                 NULL
             };
