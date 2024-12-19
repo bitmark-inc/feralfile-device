@@ -230,11 +230,14 @@ void bluetooth_set_credentials_callback(wifi_credentials_callback callback) {
 int bluetooth_start(connection_result_callback callback) {
     if (pthread_create(&bluetooth_thread, NULL, bluetooth_handler, NULL) != 0) {
         log_debug("[%s] Failed to start Bluetooth thread\n", LOG_TAG);
+        if (callback) {
+            callback(-1, "Failed to start Bluetooth thread");
+        }
         return -1;
     }
     
     if (callback) {
-        callback(0); // Success
+        callback(0, "Bluetooth service started successfully");
     }
     return 0;
 }
