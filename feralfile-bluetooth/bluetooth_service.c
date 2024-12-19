@@ -49,7 +49,6 @@ static const gchar introspection_xml[] =
     "    <property name='UUID' type='s' access='read'/>"
     "    <property name='Service' type='o' access='read'/>"
     "    <property name='Flags' type='as' access='read'/>"
-    "    <property name='MTU' type='q' access='read'/>"
     "    <method name='WriteValue'>"
     "      <arg name='value' type='ay' direction='in'/>"
     "      <arg name='options' type='a{sv}' direction='in'/>"
@@ -114,7 +113,6 @@ static GVariant* handle_get_property(GDBusConnection *connection,
             return g_variant_new_object_path(FERALFILE_SERVICE_PATH);
         if (g_strcmp0(property_name, "Flags") == 0) {
             const gchar *flags[] = {
-                "write",
                 "write-without-response",
                 NULL
             };
@@ -223,16 +221,26 @@ int bluetooth_init() {
 
     // Register GATT Service and Characteristic
     introspection_data = g_dbus_node_info_new_for_xml(introspection_xml, &error);
-    g_dbus_connection_register_object(connection,
-                                    FERALFILE_SERVICE_PATH,
-                                    introspection_data->interfaces[0],
-                                    &gatt_interface_vtable,
-                                    NULL, NULL, &error);
-    g_dbus_connection_register_object(connection,
-                                    FERALFILE_CHAR_PATH,
-                                    introspection_data->interfaces[1],
-                                    &gatt_interface_vtable,
-                                    NULL, NULL, &error);
+    if (!g_dbus_connection_register_object(connection,
+                                       FERALFILE_SERVICE_PATH,
+                                       introspection_data->interfaces[0],
+                                       &gatt_interface_vtable,
+                                       NULL, NULL, &error)) {
+        log_debug("[%s] Failed to register GATT service: %s\n", LOG_TAG, error->message);
+        return -1;
+    } else {
+        log_debug("[%s] GATT service registered successfully with UUID: %s\n", LOG_TAG, FERALFILE_SERVICE_UUID);
+    }
+    if (!g_dbus_connection_register_object(connection,
+                                       FERALFILE_CHAR_PATH,
+                                       introspection_data->interfaces[1],
+                                       &gatt_interface_vtable,
+                                       NULL, NULL, &error)) {
+        log_debug("[%s] Failed to register GATT characteristic: %s\n", LOG_TAG, error->message);
+        return -1;
+    } else {
+        log_debug("[%s] GATT characteristic registered successfully with UUID: %s\n", LOG_TAG, WIFI_CREDS_CHAR_UUID);
+    }
 
     // Register BLE Advertisement
     advertisement_introspection_data = g_dbus_node_info_new_for_xml(advertisement_xml, &error);
