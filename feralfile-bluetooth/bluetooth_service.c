@@ -1,35 +1,27 @@
 // bluetooth_service.c
-#include "bluetooth_service.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <glib.h>
 #include <gio/gio.h>
+#include <glib.h>
 #include <pthread.h>
-#include <syslog.h>
-#include <errno.h>
 #include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <syslog.h>
+#include <unistd.h>
 
 #define LOG_TAG "BluetoothService"
 
 static GMainLoop *main_loop = NULL;
-static GDBusNodeInfo *introspection_data = NULL;
-static GDBusNodeInfo *advertisement_introspection_data = NULL;
 static pthread_t bluetooth_thread;
 
 #define FERALFILE_SERVICE_NAME    "FeralFile Connection"
-// UUIDs for your service and characteristic
 #define FERALFILE_SERVICE_UUID    "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
 #define WIFI_CREDS_CHAR_UUID      "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 
-// Application, service, and characteristic paths
 #define FERALFILE_APP_PATH        "/com/feralfile/device"
 #define FERALFILE_SERVICE_PATH    "/com/feralfile/device/service0"
 #define FERALFILE_CHAR_PATH       "/com/feralfile/device/service0/wifi_config"
 #define FERALFILE_ADV_PATH        "/com/feralfile/device/advertisement0"
 
-// Callback for WiFi credentials
 typedef void (*wifi_credentials_callback)(const char* ssid, const char* password);
 static wifi_credentials_callback credentials_callback = NULL;
 
@@ -41,13 +33,17 @@ static void log_debug(const char* format, ...) {
     va_end(args);
 }
 
-// Introspection XML for GATT Service and Characteristic
-static const gchar introspection_xml[] =
+/* Introspection data for the GATT service and characteristic */
+static const gchar service_introspection_xml[] =
     "<node>"
     "  <interface name='org.bluez.GattService1'>"
     "    <property name='UUID' type='s' access='read'/>"
     "    <property name='Primary' type='b' access='read'/>"
     "  </interface>"
+    "</node>";
+
+static const gchar char_introspection_xml[] =
+    "<node>"
     "  <interface name='org.bluez.GattCharacteristic1'>"
     "    <property name='UUID' type='s' access='read'/>"
     "    <property name='Service' type='o' access='read'/>"
@@ -59,7 +55,6 @@ static const gchar introspection_xml[] =
     "  </interface>"
     "</node>";
 
-// Advertisement introspection XML
 static const gchar advertisement_xml[] =
     "<node>"
     "  <interface name='org.bluez.LEAdvertisement1'>"
@@ -70,11 +65,92 @@ static const gchar advertisement_xml[] =
     "  </interface>"
     "</node>";
 
-// Handle incoming writes
+/* Global references */
+static GDBusObjectManagerServer *manager = NULL;
+
+/* Forward declarations */
+static GVariant* handle_service_get_property(GDBusConnection *connection,
+                                             const gchar *sender,
+                                             const gchar *object_path,
+                                             const gchar *interface_name,
+                                             const gchar *property_name,
+                                             GError **error,
+                                             gpointer user_data);
+
+static GVariant* handle_char_get_property(GDBusConnection *connection,
+                                          const gchar *sender,
+                                          const gchar *object_path,
+                                          const gchar *interface_name,
+                                          const gchar *property_name,
+                                          GError **error,
+                                          gpointer user_data);
+
+static void handle_write_value(const guchar *value, gsize value_len);
+
+static void handle_char_method_call(GDBusConnection *connection,
+                                    const gchar *sender,
+                                    const gchar *object_path,
+                                    const gchar *interface_name,
+                                    const gchar *method_name,
+                                    GVariant *parameters,
+                                    GDBusMethodInvocation *invocation,
+                                    gpointer user_data);
+
+static const GDBusInterfaceVTable service_interface_vtable = {
+    .method_call = NULL,
+    .get_property = handle_service_get_property,
+    .set_property = NULL,
+};
+
+static const GDBusInterfaceVTable char_interface_vtable = {
+    .method_call = handle_char_method_call,
+    .get_property = handle_char_get_property,
+    .set_property = NULL,
+};
+
+static GDBusNodeInfo *service_introspection_data = NULL;
+static GDBusNodeInfo *char_introspection_data = NULL;
+static GDBusNodeInfo *advertisement_introspection_data = NULL;
+
+static GVariant* handle_service_get_property(GDBusConnection *connection,
+                                             const gchar *sender,
+                                             const gchar *object_path,
+                                             const gchar *interface_name,
+                                             const gchar *property_name,
+                                             GError **error,
+                                             gpointer user_data) {
+    if (g_strcmp0(interface_name, "org.bluez.GattService1") == 0) {
+        if (g_strcmp0(property_name, "UUID") == 0)
+            return g_variant_new_string(FERALFILE_SERVICE_UUID);
+        if (g_strcmp0(property_name, "Primary") == 0)
+            return g_variant_new_boolean(TRUE);
+    }
+    return NULL;
+}
+
+static GVariant* handle_char_get_property(GDBusConnection *connection,
+                                          const gchar *sender,
+                                          const gchar *object_path,
+                                          const gchar *interface_name,
+                                          const gchar *property_name,
+                                          GError **error,
+                                          gpointer user_data) {
+    if (g_strcmp0(interface_name, "org.bluez.GattCharacteristic1") == 0) {
+        if (g_strcmp0(property_name, "UUID") == 0)
+            return g_variant_new_string(WIFI_CREDS_CHAR_UUID);
+        if (g_strcmp0(property_name, "Service") == 0)
+            return g_variant_new_object_path(FERALFILE_SERVICE_PATH);
+        if (g_strcmp0(property_name, "Flags") == 0) {
+            const gchar *flags[] = {"write-without-response", NULL};
+            return g_variant_new_strv(flags, -1);
+        }
+    }
+    return NULL;
+}
+
 static void handle_write_value(const guchar *value, gsize value_len) {
     log_debug("[%s] Received WiFi credentials. Length: %zu\n", LOG_TAG, value_len);
 
-    // Expect format: "SSID\nPASSWORD"
     char buffer[256] = {0};
     memcpy(buffer, value, value_len < sizeof(buffer) ? value_len : sizeof(buffer) - 1);
 
@@ -82,12 +158,11 @@ static void handle_write_value(const guchar *value, gsize value_len) {
     char *password = strchr(buffer, '\n');
     
     if (password != NULL) {
-        *password = '\0';  // Split the string
-        password++;        // Move to start of password
+        *password = '\0';
+        password++;
         
         log_debug("[%s] Parsed SSID: %s\n", LOG_TAG, ssid);
-        // Don't log password in production
-        
+        // Do not log the password in production
         if (credentials_callback) {
             credentials_callback(ssid, password);
         }
@@ -96,43 +171,14 @@ static void handle_write_value(const guchar *value, gsize value_len) {
     }
 }
 
-// Property handler
-static GVariant* handle_get_property(GDBusConnection *connection,
-                                     const gchar *sender,
-                                     const gchar *object_path,
-                                     const gchar *interface_name,
-                                     const gchar *property_name,
-                                     GError **error,
-                                     gpointer user_data) {
-    if (g_strcmp0(interface_name, "org.bluez.GattService1") == 0) {
-        if (g_strcmp0(property_name, "UUID") == 0)
-            return g_variant_new_string(FERALFILE_SERVICE_UUID);
-        if (g_strcmp0(property_name, "Primary") == 0)
-            return g_variant_new_boolean(TRUE);
-    } else if (g_strcmp0(interface_name, "org.bluez.GattCharacteristic1") == 0) {
-        if (g_strcmp0(property_name, "UUID") == 0)
-            return g_variant_new_string(WIFI_CREDS_CHAR_UUID);
-        if (g_strcmp0(property_name, "Service") == 0)
-            return g_variant_new_object_path(FERALFILE_SERVICE_PATH);
-        if (g_strcmp0(property_name, "Flags") == 0) {
-            const gchar *flags[] = {
-                "write-without-response",
-                NULL
-            };
-            return g_variant_new_strv(flags, -1);
-        }
-    }
-    return NULL;
-}
-
-static void handle_method_call(GDBusConnection *connection,
-                              const gchar *sender,
-                              const gchar *object_path,
-                              const gchar *interface_name,
-                              const gchar *method_name,
-                              GVariant *parameters,
-                              GDBusMethodInvocation *invocation,
-                              gpointer user_data) {
+static void handle_char_method_call(GDBusConnection *connection,
+                                    const gchar *sender,
+                                    const gchar *object_path,
+                                    const gchar *interface_name,
+                                    const gchar *method_name,
+                                    GVariant *parameters,
+                                    GDBusMethodInvocation *invocation,
+                                    gpointer user_data) {
     if (g_strcmp0(interface_name, "org.bluez.GattCharacteristic1") == 0) {
         if (g_strcmp0(method_name, "WriteValue") == 0) {
             GVariant *value_variant = NULL;
@@ -141,7 +187,6 @@ static void handle_method_call(GDBusConnection *connection,
 
             gsize value_len;
             const guchar *value = g_variant_get_fixed_array(value_variant, &value_len, 1);
-            
             handle_write_value(value, value_len);
 
             g_dbus_method_invocation_return_value(invocation, NULL);
@@ -154,14 +199,7 @@ static void handle_method_call(GDBusConnection *connection,
     }
 }
 
-// GATT interface vtable
-static const GDBusInterfaceVTable gatt_interface_vtable = {
-    .method_call = handle_method_call,
-    .get_property = handle_get_property,
-    .set_property = NULL,
-};
-
-// Advertisement property handler
+/* Advertisement handlers */
 static GVariant* advertisement_get_property(GDBusConnection *connection,
                                             const gchar *sender,
                                             const gchar *object_path,
@@ -184,7 +222,7 @@ static const GDBusInterfaceVTable advertisement_vtable = {
     .set_property = NULL,
 };
 
-void* bluetooth_handler(void* arg) {
+static void* bluetooth_handler(void* arg) {
     main_loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(main_loop);
     pthread_exit(NULL);
@@ -200,7 +238,7 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Set Bluetooth adapter properties for security
+    // Configure adapter
     GDBusProxy *adapter = g_dbus_proxy_new_sync(connection,
                                                 G_DBUS_PROXY_FLAGS_NONE,
                                                 NULL,
@@ -221,38 +259,53 @@ int bluetooth_init() {
                                G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
     }
 
-    // Parse introspection data
-    introspection_data = g_dbus_node_info_new_for_xml(introspection_xml, &error);
-    if (!introspection_data) {
-        log_debug("[%s] Failed to parse introspection: %s\n", LOG_TAG, error->message);
+    // Create an ObjectManager to hold our application
+    manager = g_dbus_object_manager_server_new(FERALFILE_APP_PATH);
+
+    // Parse introspection for service
+    service_introspection_data = g_dbus_node_info_new_for_xml(service_introspection_xml, &error);
+    if (!service_introspection_data) {
+        log_debug("[%s] Failed to parse service introspection: %s\n", LOG_TAG, error->message);
         return -1;
     }
 
-    // Register GATT Service
-    if (!g_dbus_connection_register_object(connection,
-                                           FERALFILE_SERVICE_PATH,
-                                           introspection_data->interfaces[0],
-                                           &gatt_interface_vtable,
-                                           NULL, NULL, &error)) {
-        log_debug("[%s] Failed to register GATT service: %s\n", LOG_TAG, error->message);
+    // Parse introspection for characteristic
+    char_introspection_data = g_dbus_node_info_new_for_xml(char_introspection_xml, &error);
+    if (!char_introspection_data) {
+        log_debug("[%s] Failed to parse char introspection: %s\n", LOG_TAG, error->message);
         return -1;
-    } else {
-        log_debug("[%s] GATT service registered successfully with UUID: %s\n", LOG_TAG, FERALFILE_SERVICE_UUID);
     }
 
-    // Register GATT Characteristic
-    if (!g_dbus_connection_register_object(connection,
-                                           FERALFILE_CHAR_PATH,
-                                           introspection_data->interfaces[1],
-                                           &gatt_interface_vtable,
-                                           NULL, NULL, &error)) {
-        log_debug("[%s] Failed to register GATT characteristic: %s\n", LOG_TAG, error->message);
-        return -1;
-    } else {
-        log_debug("[%s] GATT characteristic registered successfully with UUID: %s\n", LOG_TAG, WIFI_CREDS_CHAR_UUID);
-    }
+    // Create objects for service and characteristic
+    GDBusObjectSkeleton *service_object = g_dbus_object_skeleton_new(FERALFILE_SERVICE_PATH);
+    GDBusInterfaceSkeleton *service_iface = g_dbus_interface_skeleton_new(service_introspection_data->interfaces[0]);
+    g_dbus_interface_skeleton_export(service_iface, connection, FERALFILE_SERVICE_PATH, &error);
+    g_dbus_object_skeleton_add_interface(service_object, service_iface);
 
-    // Now register the application with the GATT Manager
+    GDBusObjectSkeleton *char_object = g_dbus_object_skeleton_new(FERALFILE_CHAR_PATH);
+    GDBusInterfaceSkeleton *char_iface = g_dbus_interface_skeleton_new(char_introspection_data->interfaces[0]);
+    g_dbus_interface_skeleton_export(char_iface, connection, FERALFILE_CHAR_PATH, &error);
+    g_dbus_object_skeleton_add_interface(char_object, char_iface);
+
+    // Set interface vtables
+    g_dbus_connection_register_object(connection,
+                                      FERALFILE_SERVICE_PATH,
+                                      service_introspection_data->interfaces[0],
+                                      &service_interface_vtable,
+                                      NULL, NULL, &error);
+
+    g_dbus_connection_register_object(connection,
+                                      FERALFILE_CHAR_PATH,
+                                      char_introspection_data->interfaces[0],
+                                      &char_interface_vtable,
+                                      NULL, NULL, &error);
+
+    // Add objects to manager
+    g_dbus_object_manager_server_export(manager, G_DBusObjectSkeleton * (service_object));
+    g_dbus_object_manager_server_export(manager, G_DBusObjectSkeleton * (char_object));
+    g_dbus_object_manager_server_set_connection(manager, connection);
+
+    // Register GATT application
     GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(connection,
                                                      G_DBUS_PROXY_FLAGS_NONE,
                                                      NULL,
@@ -262,7 +315,7 @@ int bluetooth_init() {
                                                      NULL,
                                                      &error);
     if (!gatt_manager) {
-        log_debug("[%s] Failed to get GattManager1: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        log_debug("[%s] Failed to get GattManager1: %s\n", LOG_TAG, error ? error->message : "Unknown");
         return -1;
     }
 
@@ -279,16 +332,18 @@ int bluetooth_init() {
     }
     g_variant_unref(result);
 
-    // Register BLE Advertisement
+    // Register advertisement
     advertisement_introspection_data = g_dbus_node_info_new_for_xml(advertisement_xml, &error);
-    if (!g_dbus_connection_register_object(connection,
-                                           FERALFILE_ADV_PATH,
-                                           advertisement_introspection_data->interfaces[0],
-                                           &advertisement_vtable,
-                                           NULL, NULL, &error)) {
-        log_debug("[%s] Failed to register advertisement: %s\n", LOG_TAG, error->message);
+    if (!advertisement_introspection_data) {
+        log_debug("[%s] Failed to parse advertisement introspection: %s\n", LOG_TAG, error->message);
         return -1;
     }
+
+    g_dbus_connection_register_object(connection,
+                                      FERALFILE_ADV_PATH,
+                                      advertisement_introspection_data->interfaces[0],
+                                      &advertisement_vtable,
+                                      NULL, NULL, &error);
 
     GDBusProxy *advertising_manager = g_dbus_proxy_new_sync(connection,
                                                             G_DBUS_PROXY_FLAGS_NONE,
@@ -299,7 +354,7 @@ int bluetooth_init() {
                                                             NULL,
                                                             &error);
     if (!advertising_manager) {
-        log_debug("[%s] Failed to get LEAdvertisingManager1: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        log_debug("[%s] Failed to get LEAdvertisingManager1: %s\n", LOG_TAG, error ? error->message : "Unknown");
         return -1;
     }
 
