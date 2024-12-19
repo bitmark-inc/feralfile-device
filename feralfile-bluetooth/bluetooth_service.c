@@ -19,14 +19,17 @@ static GDBusNodeInfo *advertisement_introspection_data = NULL;
 static pthread_t bluetooth_thread;
 
 #define FERALFILE_SERVICE_NAME    "FeralFile Connection"
+// UUIDs for your service and characteristic
 #define FERALFILE_SERVICE_UUID    "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
 #define WIFI_CREDS_CHAR_UUID      "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 
+// Application, service, and characteristic paths
+#define FERALFILE_APP_PATH        "/com/feralfile/device"
 #define FERALFILE_SERVICE_PATH    "/com/feralfile/device/service0"
-#define FERALFILE_CHAR_PATH      "/com/feralfile/device/service0/wifi_config"
-#define FERALFILE_ADV_PATH       "/com/feralfile/device/advertisement0"
+#define FERALFILE_CHAR_PATH       "/com/feralfile/device/service0/wifi_config"
+#define FERALFILE_ADV_PATH        "/com/feralfile/device/advertisement0"
 
-// Callback type for handling received WiFi credentials
+// Callback for WiFi credentials
 typedef void (*wifi_credentials_callback)(const char* ssid, const char* password);
 static wifi_credentials_callback credentials_callback = NULL;
 
@@ -67,7 +70,7 @@ static const gchar advertisement_xml[] =
     "  </interface>"
     "</node>";
 
-// Handle incoming write values
+// Handle incoming writes
 static void handle_write_value(const guchar *value, gsize value_len) {
     log_debug("[%s] Received WiFi credentials. Length: %zu\n", LOG_TAG, value_len);
 
@@ -83,7 +86,7 @@ static void handle_write_value(const guchar *value, gsize value_len) {
         password++;        // Move to start of password
         
         log_debug("[%s] Parsed SSID: %s\n", LOG_TAG, ssid);
-        // Don't log the actual password in production
+        // Don't log password in production
         
         if (credentials_callback) {
             credentials_callback(ssid, password);
@@ -93,14 +96,14 @@ static void handle_write_value(const guchar *value, gsize value_len) {
     }
 }
 
-// GATT Property Handler
+// Property handler
 static GVariant* handle_get_property(GDBusConnection *connection,
-                                   const gchar *sender,
-                                   const gchar *object_path,
-                                   const gchar *interface_name,
-                                   const gchar *property_name,
-                                   GError **error,
-                                   gpointer user_data) {
+                                     const gchar *sender,
+                                     const gchar *object_path,
+                                     const gchar *interface_name,
+                                     const gchar *property_name,
+                                     GError **error,
+                                     gpointer user_data) {
     if (g_strcmp0(interface_name, "org.bluez.GattService1") == 0) {
         if (g_strcmp0(property_name, "UUID") == 0)
             return g_variant_new_string(FERALFILE_SERVICE_UUID);
@@ -123,13 +126,13 @@ static GVariant* handle_get_property(GDBusConnection *connection,
 }
 
 static void handle_method_call(GDBusConnection *connection,
-                             const gchar *sender,
-                             const gchar *object_path,
-                             const gchar *interface_name,
-                             const gchar *method_name,
-                             GVariant *parameters,
-                             GDBusMethodInvocation *invocation,
-                             gpointer user_data) {
+                              const gchar *sender,
+                              const gchar *object_path,
+                              const gchar *interface_name,
+                              const gchar *method_name,
+                              GVariant *parameters,
+                              GDBusMethodInvocation *invocation,
+                              gpointer user_data) {
     if (g_strcmp0(interface_name, "org.bluez.GattCharacteristic1") == 0) {
         if (g_strcmp0(method_name, "WriteValue") == 0) {
             GVariant *value_variant = NULL;
@@ -151,21 +154,21 @@ static void handle_method_call(GDBusConnection *connection,
     }
 }
 
-// VTable for the GATT Characteristic
+// GATT interface vtable
 static const GDBusInterfaceVTable gatt_interface_vtable = {
     .method_call = handle_method_call,
     .get_property = handle_get_property,
     .set_property = NULL,
 };
 
-// VTable for BLE Advertisement
+// Advertisement property handler
 static GVariant* advertisement_get_property(GDBusConnection *connection,
-                                          const gchar *sender,
-                                          const gchar *object_path,
-                                          const gchar *interface_name,
-                                          const gchar *property_name,
-                                          GError **error,
-                                          gpointer user_data) {
+                                            const gchar *sender,
+                                            const gchar *object_path,
+                                            const gchar *interface_name,
+                                            const gchar *property_name,
+                                            GError **error,
+                                            gpointer user_data) {
     if (g_strcmp0(property_name, "Type") == 0)
         return g_variant_new_string("peripheral");
     if (g_strcmp0(property_name, "ServiceUUIDs") == 0)
@@ -199,70 +202,116 @@ int bluetooth_init() {
 
     // Set Bluetooth adapter properties for security
     GDBusProxy *adapter = g_dbus_proxy_new_sync(connection,
-                                               G_DBUS_PROXY_FLAGS_NONE,
-                                               NULL,
-                                               "org.bluez",
-                                               "/org/bluez/hci0",
-                                               "org.bluez.Adapter1",
-                                               NULL,
-                                               &error);
+                                                G_DBUS_PROXY_FLAGS_NONE,
+                                                NULL,
+                                                "org.bluez",
+                                                "/org/bluez/hci0",
+                                                "org.bluez.Adapter1",
+                                                NULL,
+                                                &error);
     if (adapter) {
-        // Enable Pairable and set Pairing Mode
         g_dbus_proxy_call_sync(adapter,
-                              "SetProperty",
-                              g_variant_new("(sv)", "Pairable", g_variant_new_boolean(TRUE)),
-                              G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
+                               "SetProperty",
+                               g_variant_new("(sv)", "Pairable", g_variant_new_boolean(TRUE)),
+                               G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
         
         g_dbus_proxy_call_sync(adapter,
-                              "SetProperty",
-                              g_variant_new("(sv)", "PairableTimeout", g_variant_new_uint32(0)),
-                              G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
+                               "SetProperty",
+                               g_variant_new("(sv)", "PairableTimeout", g_variant_new_uint32(0)),
+                               G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
     }
 
-    // Register GATT Service and Characteristic
+    // Parse introspection data
     introspection_data = g_dbus_node_info_new_for_xml(introspection_xml, &error);
+    if (!introspection_data) {
+        log_debug("[%s] Failed to parse introspection: %s\n", LOG_TAG, error->message);
+        return -1;
+    }
+
+    // Register GATT Service
     if (!g_dbus_connection_register_object(connection,
-                                       FERALFILE_SERVICE_PATH,
-                                       introspection_data->interfaces[0],
-                                       &gatt_interface_vtable,
-                                       NULL, NULL, &error)) {
+                                           FERALFILE_SERVICE_PATH,
+                                           introspection_data->interfaces[0],
+                                           &gatt_interface_vtable,
+                                           NULL, NULL, &error)) {
         log_debug("[%s] Failed to register GATT service: %s\n", LOG_TAG, error->message);
         return -1;
     } else {
         log_debug("[%s] GATT service registered successfully with UUID: %s\n", LOG_TAG, FERALFILE_SERVICE_UUID);
     }
+
+    // Register GATT Characteristic
     if (!g_dbus_connection_register_object(connection,
-                                       FERALFILE_CHAR_PATH,
-                                       introspection_data->interfaces[1],
-                                       &gatt_interface_vtable,
-                                       NULL, NULL, &error)) {
+                                           FERALFILE_CHAR_PATH,
+                                           introspection_data->interfaces[1],
+                                           &gatt_interface_vtable,
+                                           NULL, NULL, &error)) {
         log_debug("[%s] Failed to register GATT characteristic: %s\n", LOG_TAG, error->message);
         return -1;
     } else {
         log_debug("[%s] GATT characteristic registered successfully with UUID: %s\n", LOG_TAG, WIFI_CREDS_CHAR_UUID);
     }
 
+    // Now register the application with the GATT Manager
+    GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(connection,
+                                                     G_DBUS_PROXY_FLAGS_NONE,
+                                                     NULL,
+                                                     "org.bluez",
+                                                     "/org/bluez/hci0",
+                                                     "org.bluez.GattManager1",
+                                                     NULL,
+                                                     &error);
+    if (!gatt_manager) {
+        log_debug("[%s] Failed to get GattManager1: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        return -1;
+    }
+
+    GVariant *result = g_dbus_proxy_call_sync(gatt_manager,
+                                              "RegisterApplication",
+                                              g_variant_new("(oa{sv})", FERALFILE_APP_PATH, NULL),
+                                              G_DBUS_CALL_FLAGS_NONE,
+                                              -1,
+                                              NULL,
+                                              &error);
+    if (!result) {
+        log_debug("[%s] Failed to register GATT application: %s\n", LOG_TAG, error->message);
+        return -1;
+    }
+    g_variant_unref(result);
+
     // Register BLE Advertisement
     advertisement_introspection_data = g_dbus_node_info_new_for_xml(advertisement_xml, &error);
-    g_dbus_connection_register_object(connection,
-                                    FERALFILE_ADV_PATH,
-                                    advertisement_introspection_data->interfaces[0],
-                                    &advertisement_vtable,
-                                    NULL, NULL, &error);
+    if (!g_dbus_connection_register_object(connection,
+                                           FERALFILE_ADV_PATH,
+                                           advertisement_introspection_data->interfaces[0],
+                                           &advertisement_vtable,
+                                           NULL, NULL, &error)) {
+        log_debug("[%s] Failed to register advertisement: %s\n", LOG_TAG, error->message);
+        return -1;
+    }
 
     GDBusProxy *advertising_manager = g_dbus_proxy_new_sync(connection,
-                                                          G_DBUS_PROXY_FLAGS_NONE,
-                                                          NULL,
-                                                          "org.bluez",
-                                                          "/org/bluez/hci0",
-                                                          "org.bluez.LEAdvertisingManager1",
-                                                          NULL,
-                                                          &error);
+                                                            G_DBUS_PROXY_FLAGS_NONE,
+                                                            NULL,
+                                                            "org.bluez",
+                                                            "/org/bluez/hci0",
+                                                            "org.bluez.LEAdvertisingManager1",
+                                                            NULL,
+                                                            &error);
+    if (!advertising_manager) {
+        log_debug("[%s] Failed to get LEAdvertisingManager1: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        return -1;
+    }
 
-    g_dbus_proxy_call_sync(advertising_manager,
-                          "RegisterAdvertisement",
-                          g_variant_new("(oa{sv})", FERALFILE_ADV_PATH, NULL),
-                          G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
+    result = g_dbus_proxy_call_sync(advertising_manager,
+                                    "RegisterAdvertisement",
+                                    g_variant_new("(oa{sv})", FERALFILE_ADV_PATH, NULL),
+                                    G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
+    if (!result) {
+        log_debug("[%s] Failed to register advertisement: %s\n", LOG_TAG, error->message);
+        return -1;
+    }
+    g_variant_unref(result);
 
     log_debug("[%s] Bluetooth service initialized successfully\n", LOG_TAG);
     return 0;
