@@ -62,6 +62,15 @@ static const gchar advertisement_introspection_xml[] =
     "  </interface>"
     "</node>";
 
+static GDBusNodeInfo* find_node_by_name(GDBusNodeInfo *parent, const gchar *name) {
+    for (guint i = 0; i < parent->n_nodes; i++) {
+        if (g_strcmp0(parent->nodes[i]->name, name) == 0) {
+            return parent->nodes[i];
+        }
+    }
+    return NULL;
+}
+
 static GVariant *service_get_property(GDBusConnection *conn,
                                       const gchar *sender,
                                       const gchar *object_path,
@@ -106,12 +115,11 @@ static void handle_write_value(GDBusConnection *conn,
                                GVariant *parameters,
                                GDBusMethodInvocation *invocation,
                                gpointer user_data) {
+    // parameters: (ay a{sv})
     GVariant *options_variant = NULL;
     GVariant *data_variant = NULL;
-    
-    // Correct signature: (ay a{sv})
     g_variant_get(parameters, "(ay@a{sv})", &data_variant, &options_variant);
-    
+
     gsize len = 0;
     gconstpointer data = g_variant_get_fixed_array(data_variant, &len, sizeof(guchar));
     char buffer[256];
@@ -181,13 +189,15 @@ int bluetooth_init() {
         return -1;
     }
 
-    service_node = g_dbus_node_info_lookup_node(root_node, "service0");
+    // Find the service0 node
+    service_node = find_node_by_name(root_node, "service0");
     if (!service_node) {
         log_debug("[%s] service0 node not found\n", LOG_TAG);
         return -1;
     }
 
-    char_node = g_dbus_node_info_lookup_node(service_node, "char0");
+    // Find the char0 node
+    char_node = find_node_by_name(service_node, "char0");
     if (!char_node) {
         log_debug("[%s] char0 node not found\n", LOG_TAG);
         return -1;
