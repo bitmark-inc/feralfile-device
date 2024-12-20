@@ -296,7 +296,19 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Register application
+    // Register ObjectManager interface FIRST
+    guint objects_reg_id = g_dbus_connection_register_object(connection,
+                                                           "/org/bluez/example",
+                                                           g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
+                                                           &objects_vtable,
+                                                           NULL, NULL, &error);
+    if (error || !objects_reg_id) {
+        log_debug("[%s] Failed to register ObjectManager interface: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return -1;
+    }
+
+    // Then register the application
     GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(connection,
                                                      G_DBUS_PROXY_FLAGS_NONE,
                                                      NULL,
@@ -346,18 +358,6 @@ int bluetooth_init() {
     if (error) {
         log_debug("[%s] Advertisement registration failed: %s\n", LOG_TAG, error->message);
         g_error_free(error);
-        return -1;
-    }
-
-    // Register ObjectManager interface
-    guint objects_reg_id = g_dbus_connection_register_object(connection,
-                                                           "/org/bluez/example",
-                                                           g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
-                                                           &objects_vtable,
-                                                           NULL, NULL, &error);
-    if (error || !objects_reg_id) {
-        log_debug("[%s] Failed to register ObjectManager interface: %s\n", LOG_TAG, error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
         return -1;
     }
 
