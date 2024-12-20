@@ -20,7 +20,7 @@ static GDBusNodeInfo *char_node = NULL;
 static GDBusNodeInfo *advertisement_introspection_data = NULL;
 static pthread_t bluetooth_thread;
 
-typedef void (*connection_result_callback)(int);
+typedef void (*connection_result_callback)(int, const char*);
 static connection_result_callback result_callback = NULL;
 
 static void log_debug(const char* format, ...) {
@@ -125,22 +125,23 @@ static void handle_write_value(GDBusConnection *conn,
     GVariant *array_variant = NULL;
     GVariant *options_variant = NULL;
     
-    // Correctly extract the array and options from parameters
     g_variant_get(parameters, "(@ay@a{sv})", &array_variant, &options_variant);
 
-    // Get the data bytes
     const guint8 *data;
     gsize n_elements;
     data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guint8));
 
-    // Copy to buffer and ensure null termination
     char buffer[256];
     memset(buffer, 0, sizeof(buffer));
     memcpy(buffer, data, MIN(n_elements, sizeof(buffer) - 1));
     
     log_debug("[%s] WriteValue received: %s\n", LOG_TAG, buffer);
 
-    // Clean up
+    // Call the result callback with the received data
+    if (result_callback) {
+        result_callback(1, buffer);  // 1 indicates success
+    }
+
     g_dbus_method_invocation_return_value(invocation, NULL);
     g_variant_unref(array_variant);
     g_variant_unref(options_variant);

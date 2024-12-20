@@ -1,52 +1,35 @@
 // lib/services/bluetooth_service.dart
 import 'dart:async';
+import 'package:feralfile/services/logger.dart';
+
 import '../ffi/bluetooth_service.dart';
 import '../models/wifi_credentials.dart';
 import 'wifi_service.dart';
 import 'chromium_launcher.dart';
 import 'dart:io';
 
-typedef ConnectionResultCallback = void Function(bool success, String message);
-
 class BluetoothService {
   final FFI_BluetoothService _ffiService = FFI_BluetoothService();
-  ConnectionResultCallback? _callback;
+  void Function(WifiCredentials)? _onCredentialsReceived;
 
-  BluetoothService();
+  void startListening(void Function(WifiCredentials) onCredentialsReceived) {
+    _onCredentialsReceived = onCredentialsReceived;
 
-  // Initialize and start listening
-  void startListening(ConnectionResultCallback callback) {
-    _callback = callback;
+    _ffiService.onMessage.listen((jsonStr) {
+      try {
+        // Parse the received WiFi credentials
+        WifiCredentials credentials = WifiCredentials.fromJson(jsonStr);
 
-    // Listen to connection results from FFI service
-    _ffiService.onConnectionResult.listen((success) async {
-      if (_callback != null) {
-        _callback!(
-            success,
-            success
-                ? 'Wi-Fi connected successfully.'
-                : 'Failed to connect to Wi-Fi.');
-
-        if (success) {
-          // If connected successfully, launch Chromium
-          await ChromiumLauncher.launchChromium('https://feralfile.com');
-
-          // Optionally, exit the app
-          exit(0);
-        } else {
-          // Handle failure (e.g., show a notification, retry, etc.)
+        // Callback with the credentials
+        if (_onCredentialsReceived != null) {
+          _onCredentialsReceived!(credentials);
         }
+      } catch (e) {
+        logger.warning('Failed to parse WiFi credentials: $e');
       }
-    });
-
-    // Listen to messages
-    _ffiService.onMessage.listen((message) {
-      print('Bluetooth Message: $message');
-      // You can update the UI or handle messages as needed
     });
   }
 
-  // Dispose resources
   void dispose() {
     _ffiService.dispose();
   }
