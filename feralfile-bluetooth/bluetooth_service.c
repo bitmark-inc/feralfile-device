@@ -33,6 +33,11 @@ static void log_debug(const char* format, ...) {
 
 static const gchar service_xml[] =
     "<node>"
+    "  <interface name='org.freedesktop.DBus.ObjectManager'>"
+    "    <method name='GetManagedObjects'>"
+    "      <arg name='objects' type='a{oa{sa{sv}}}' direction='out'/>"
+    "    </method>"
+    "  </interface>"
     "  <node name='service0'>"
     "    <interface name='org.bluez.GattService1'>"
     "      <property name='UUID' type='s' access='read'/>"
@@ -167,6 +172,49 @@ static const GDBusInterfaceVTable advertisement_vtable = {
     .set_property = NULL,
 };
 
+static void handle_get_objects(GDBusConnection *conn,
+                             const gchar *sender,
+                             const gchar *object_path,
+                             const gchar *interface_name,
+                             const gchar *method_name,
+                             GVariant *parameters,
+                             GDBusMethodInvocation *invocation,
+                             gpointer user_data) {
+    GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE("a{oa{sa{sv}}}"));
+    
+    // Add service object
+    GVariantBuilder *service_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sa{sv}}"));
+    GVariantBuilder *service_props = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(service_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_SERVICE_UUID));
+    g_variant_builder_add(service_props, "{sv}", "Primary", g_variant_new_boolean(TRUE));
+    g_variant_builder_add(service_builder, "{sa{sv}}", "org.bluez.GattService1", service_props);
+    g_variant_builder_add(builder, "{oa{sa{sv}}}", "/org/bluez/example/service0", service_builder);
+    
+    // Add characteristic object
+    GVariantBuilder *char_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sa{sv}}"));
+    GVariantBuilder *char_props = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(char_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_WIFI_CHAR_UUID));
+    g_variant_builder_add(char_props, "{sv}", "Service", g_variant_new_object_path("/org/bluez/example/service0"));
+    const gchar* flags[] = {"write", NULL};
+    g_variant_builder_add(char_props, "{sv}", "Flags", g_variant_new_strv(flags, -1));
+    g_variant_builder_add(char_builder, "{sa{sv}}", "org.bluez.GattCharacteristic1", char_props);
+    g_variant_builder_add(builder, "{oa{sa{sv}}}", "/org/bluez/example/service0/char0", char_builder);
+    
+    g_dbus_method_invocation_return_value(invocation, g_variant_new("(a{oa{sa{sv}}})", builder));
+    
+    g_variant_builder_unref(builder);
+    g_variant_builder_unref(service_builder);
+    g_variant_builder_unref(char_builder);
+    g_variant_builder_unref(service_props);
+    g_variant_builder_unref(char_props);
+}
+
+static const GDBusInterfaceVTable objects_vtable = {
+    .method_call = handle_get_objects,
+    .get_property = NULL,
+    .set_property = NULL
+};
+
 static void* bluetooth_handler(void* arg) {
     main_loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(main_loop);
@@ -298,6 +346,18 @@ int bluetooth_init() {
     if (error) {
         log_debug("[%s] Advertisement registration failed: %s\n", LOG_TAG, error->message);
         g_error_free(error);
+        return -1;
+    }
+
+    // Register ObjectManager interface
+    guint objects_reg_id = g_dbus_connection_register_object(connection,
+                                                           "/org/bluez/example",
+                                                           g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
+                                                           &objects_vtable,
+                                                           NULL, NULL, &error);
+    if (error || !objects_reg_id) {
+        log_debug("[%s] Failed to register ObjectManager interface: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
         return -1;
     }
 
