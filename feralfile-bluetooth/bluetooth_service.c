@@ -63,10 +63,12 @@ static const gchar advertisement_introspection_xml[] =
     "</node>";
 
 static GDBusNodeInfo* find_node_by_name(GDBusNodeInfo *parent, const gchar *name) {
-    for (guint i = 0; i < parent->n_nodes; i++) {
-        if (g_strcmp0(parent->nodes[i]->name, name) == 0) {
-            return parent->nodes[i];
+    GDBusNodeInfo **nodes = parent->nodes;
+    while (*nodes != NULL) {
+        if (g_strcmp0((*nodes)->path, name) == 0) {
+            return *nodes;
         }
+        nodes++;
     }
     return NULL;
 }
