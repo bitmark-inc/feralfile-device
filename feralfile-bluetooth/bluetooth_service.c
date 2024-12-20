@@ -3,10 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <pthread.h>
 #include <syslog.h>
-#include <errno.h>
 #include <stdarg.h>
 
 #define LOG_TAG "BluetoothService"
@@ -15,13 +13,14 @@
 #define FERALFILE_WIFI_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 
 static GMainLoop *main_loop = NULL;
-static GDBusNodeInfo *introspection_data = NULL;
-static GDBusNodeInfo *advertisement_introspection_data = NULL;
 static GDBusConnection *connection = NULL;
+static GDBusNodeInfo *root_node = NULL;
+static GDBusNodeInfo *service_node = NULL;
+static GDBusNodeInfo *char_node = NULL;
+static GDBusNodeInfo *advertisement_introspection_data = NULL;
 static pthread_t bluetooth_thread;
 
 typedef void (*connection_result_callback)(int);
-
 static connection_result_callback result_callback = NULL;
 
 static void log_debug(const char* format, ...) {
@@ -102,20 +101,27 @@ static GVariant *char_get_property(GDBusConnection *conn,
 static void handle_write_value(GDBusConnection *conn,
                                const gchar *sender,
                                const gchar *object_path,
+                               const gchar *interface_name,
+                               const gchar *method_name,
                                GVariant *parameters,
-                               GDBusMethodInvocation *invocation) {
-    GVariant *value_variant = NULL;
-    g_variant_get(parameters, "(@ay@a{sv})", &value_variant, NULL);
-
+                               GDBusMethodInvocation *invocation,
+                               gpointer user_data) {
+    GVariant *options_variant = NULL;
+    GVariant *data_variant = NULL;
+    
+    // Correct signature: (ay a{sv})
+    g_variant_get(parameters, "(ay@a{sv})", &data_variant, &options_variant);
+    
     gsize len = 0;
-    const guchar *data = g_variant_get_fixed_array(value_variant, &len, sizeof(guchar));
+    gconstpointer data = g_variant_get_fixed_array(data_variant, &len, sizeof(guchar));
     char buffer[256];
     memset(buffer, 0, sizeof(buffer));
-    memcpy(buffer, data, (len < sizeof(buffer) ? len : sizeof(buffer)-1));
+    memcpy(buffer, data, len < sizeof(buffer) ? len : sizeof(buffer)-1);
     log_debug("[%s] WriteValue received: %s\n", LOG_TAG, buffer);
 
-    g_variant_unref(value_variant);
     g_dbus_method_invocation_return_value(invocation, NULL);
+    g_variant_unref(data_variant);
+    g_variant_unref(options_variant);
 }
 
 static const GDBusInterfaceVTable service_vtable = {
@@ -125,7 +131,7 @@ static const GDBusInterfaceVTable service_vtable = {
 };
 
 static const GDBusInterfaceVTable char_vtable = {
-    .method_call = (GDBusInterfaceMethodCallFunc)handle_write_value,
+    .method_call = handle_write_value,
     .get_property = char_get_property,
     .set_property = NULL
 };
@@ -168,42 +174,54 @@ int bluetooth_init() {
         return -1;
     }
 
-    introspection_data = g_dbus_node_info_new_for_xml(service_xml, &error);
-    if (error) {
-        log_debug("[%s] Failed to parse service XML: %s\n", LOG_TAG, error->message);
-        g_error_free(error);
+    root_node = g_dbus_node_info_new_for_xml(service_xml, &error);
+    if (!root_node || error) {
+        log_debug("[%s] Failed to parse service XML: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return -1;
+    }
+
+    service_node = g_dbus_node_info_lookup_node(root_node, "service0");
+    if (!service_node) {
+        log_debug("[%s] service0 node not found\n", LOG_TAG);
+        return -1;
+    }
+
+    char_node = g_dbus_node_info_lookup_node(service_node, "char0");
+    if (!char_node) {
+        log_debug("[%s] char0 node not found\n", LOG_TAG);
         return -1;
     }
 
     // Register the service object
     guint service_reg_id = g_dbus_connection_register_object(connection,
                                                              "/org/bluez/example/service0",
-                                                             introspection_data->interfaces[0],
+                                                             service_node->interfaces[0],
                                                              &service_vtable,
                                                              NULL, NULL, &error);
-    if (!service_reg_id) {
-        log_debug("[%s] Failed to register service object: %s\n", LOG_TAG, error->message);
-        g_error_free(error);
+    if (error || !service_reg_id) {
+        log_debug("[%s] Failed to register service object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
         return -1;
     }
 
     // Register the characteristic object
     guint char_reg_id = g_dbus_connection_register_object(connection,
                                                           "/org/bluez/example/service0/char0",
-                                                          introspection_data->interfaces[1],
+                                                          char_node->interfaces[0],
                                                           &char_vtable,
                                                           NULL, NULL, &error);
-    if (!char_reg_id) {
-        log_debug("[%s] Failed to register characteristic object: %s\n", LOG_TAG, error->message);
-        g_error_free(error);
+    if (error || !char_reg_id) {
+        log_debug("[%s] Failed to register characteristic object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
         return -1;
     }
 
-    // Register the advertisement object
+    // Register advertisement
     advertisement_introspection_data = g_dbus_node_info_new_for_xml(advertisement_introspection_xml, &error);
-    if (error) {
-        log_debug("[%s] Failed to parse advertisement XML: %s\n", LOG_TAG, error->message);
-        g_error_free(error);
+    if (!advertisement_introspection_data || error) {
+        log_debug("[%s] Failed to parse advertisement XML: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
         return -1;
     }
 
@@ -212,13 +230,13 @@ int bluetooth_init() {
                                                         advertisement_introspection_data->interfaces[0],
                                                         &advertisement_vtable,
                                                         NULL, NULL, &error);
-    if (!ad_reg_id) {
-        log_debug("[%s] Failed to register advertisement object: %s\n", LOG_TAG, error->message);
-        g_error_free(error);
+    if (error || !ad_reg_id) {
+        log_debug("[%s] Failed to register advertisement object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
         return -1;
     }
 
-    // Get GattManager1 proxy to register application
+    // Register application
     GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(connection,
                                                      G_DBUS_PROXY_FLAGS_NONE,
                                                      NULL,
@@ -227,13 +245,12 @@ int bluetooth_init() {
                                                      "org.bluez.GattManager1",
                                                      NULL,
                                                      &error);
-    if (!gatt_manager) {
-        log_debug("[%s] Failed to get GattManager1 proxy: %s\n", LOG_TAG, error->message);
-        g_error_free(error);
+    if (!gatt_manager || error) {
+        log_debug("[%s] Failed to get GattManager1: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
         return -1;
     }
 
-    // Register the application (service + characteristics)
     g_dbus_proxy_call_sync(gatt_manager,
                            "RegisterApplication",
                            g_variant_new("(oa{sv})", "/org/bluez/example", NULL),
@@ -247,7 +264,7 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Get LEAdvertisingManager1 proxy to register advertisement
+    // Register advertisement
     GDBusProxy *advertising_manager = g_dbus_proxy_new_sync(connection,
                                                             G_DBUS_PROXY_FLAGS_NONE,
                                                             NULL,
@@ -256,9 +273,9 @@ int bluetooth_init() {
                                                             "org.bluez.LEAdvertisingManager1",
                                                             NULL,
                                                             &error);
-    if (!advertising_manager) {
-        log_debug("[%s] Failed to get LEAdvertisingManager1 proxy: %s\n", LOG_TAG, error->message);
-        g_error_free(error);
+    if (!advertising_manager || error) {
+        log_debug("[%s] Failed to get LEAdvertisingManager1: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
         return -1;
     }
 
