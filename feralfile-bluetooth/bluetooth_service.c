@@ -90,74 +90,126 @@ static void* bluetooth_handler(void* arg) {
 
 int bluetooth_init() {
     GError *error = NULL;
+    GDBusConnection *connection = NULL;
+    GDBusProxy *gatt_manager = NULL;
+    GattService1 *service_skeleton = NULL;
+    GattCharacteristic1 *char_skeleton = NULL;
+    GDBusObjectManagerServer *manager = NULL;
+    GDBusObjectSkeleton *service_object = NULL;
+    GDBusObjectSkeleton *char_object = NULL;
+    gboolean success = FALSE;
 
-    GDBusConnection *connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+    // Get D-Bus connection
+    connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
     if (!connection) {
         log_debug("[%s] Failed to connect to D-Bus: %s\n", LOG_TAG, error->message);
-        return -1;
+        g_clear_error(&error);
+        goto cleanup;
     }
 
     // Set up GATT Manager
-    GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(connection,
-                                                     G_DBUS_PROXY_FLAGS_NONE,
-                                                     NULL,
-                                                     "org.bluez",
-                                                     "/org/bluez/hci0",
-                                                     "org.bluez.GattManager1",
-                                                     NULL,
-                                                     &error);
+    gatt_manager = g_dbus_proxy_new_sync(connection,
+                                        G_DBUS_PROXY_FLAGS_NONE,
+                                        NULL,
+                                        "org.bluez",
+                                        "/org/bluez/hci0",
+                                        "org.bluez.GattManager1",
+                                        NULL,
+                                        &error);
     if (!gatt_manager) {
         log_debug("[%s] Failed to get GattManager1: %s\n", LOG_TAG, error->message);
-        return -1;
+        g_clear_error(&error);
+        goto cleanup;
     }
 
-    // Create GATT Service Skeleton
-    GattService1 *service_skeleton = gatt_service1_skeleton_new();
+    // Create service skeleton with error checking
+    service_skeleton = gatt_service1_skeleton_new();
+    if (!service_skeleton) {
+        log_debug("[%s] Failed to create service skeleton\n", LOG_TAG);
+        goto cleanup;
+    }
+
+    // Create characteristic skeleton with error checking
+    char_skeleton = gatt_characteristic1_skeleton_new();
+    if (!char_skeleton) {
+        log_debug("[%s] Failed to create characteristic skeleton\n", LOG_TAG);
+        goto cleanup;
+    }
+
+    // Set up Object Manager
+    manager = g_dbus_object_manager_server_new(FERALFILE_APP_PATH);
+    if (!manager) {
+        log_debug("[%s] Failed to create object manager\n", LOG_TAG);
+        goto cleanup;
+    }
+
+    // Create and set up service object
+    service_object = g_dbus_object_skeleton_new(FERALFILE_SERVICE_PATH);
+    if (!service_object) {
+        log_debug("[%s] Failed to create service object\n", LOG_TAG);
+        goto cleanup;
+    }
+
+    // Create and set up characteristic object
+    char_object = g_dbus_object_skeleton_new(FERALFILE_CHAR_PATH);
+    if (!char_object) {
+        log_debug("[%s] Failed to create characteristic object\n", LOG_TAG);
+        goto cleanup;
+    }
+
+    // Set properties
     g_object_set(G_OBJECT(service_skeleton),
                  "uuid", FERALFILE_SERVICE_UUID,
                  "primary", TRUE,
                  NULL);
 
-    // Create GATT Characteristic Skeleton
-    GattCharacteristic1 *char_skeleton = gatt_characteristic1_skeleton_new();
     g_object_set(G_OBJECT(char_skeleton),
                  "uuid", WIFI_CREDS_CHAR_UUID,
                  "service", FERALFILE_SERVICE_PATH,
                  "flags", g_variant_new_strv((const gchar*[]){"write-without-response", NULL}, -1),
                  NULL);
 
-    // Connect signals for characteristic methods
+    // Connect signals and export objects
     g_signal_connect(char_skeleton, "handle-method-call", G_CALLBACK(on_characteristic_method_call), NULL);
 
-    // Set up Object Manager
-    GDBusObjectManagerServer *manager = g_dbus_object_manager_server_new(FERALFILE_APP_PATH);
-
-    // Add service and characteristic to Object Manager
-    GDBusObjectSkeleton *service_object = g_dbus_object_skeleton_new(FERALFILE_SERVICE_PATH);
     g_dbus_object_skeleton_add_interface(service_object, G_DBUS_INTERFACE_SKELETON(service_skeleton));
-
-    GDBusObjectSkeleton *char_object = g_dbus_object_skeleton_new(FERALFILE_CHAR_PATH);
     g_dbus_object_skeleton_add_interface(char_object, G_DBUS_INTERFACE_SKELETON(char_skeleton));
 
     g_dbus_object_manager_server_export(manager, service_object);
     g_dbus_object_manager_server_export(manager, char_object);
     g_dbus_object_manager_server_set_connection(manager, connection);
 
-    // Register application with GattManager1
+    // Register application
     GVariant *result = g_dbus_proxy_call_sync(gatt_manager,
-                                              "RegisterApplication",
-                                              g_variant_new("(oa{sv})", FERALFILE_APP_PATH, NULL),
-                                              G_DBUS_CALL_FLAGS_NONE,
-                                              -1,
-                                              NULL,
-                                              &error);
+                                             "RegisterApplication",
+                                             g_variant_new("(oa{sv})", FERALFILE_APP_PATH, NULL),
+                                             G_DBUS_CALL_FLAGS_NONE,
+                                             -1,
+                                             NULL,
+                                             &error);
     if (!result) {
         log_debug("[%s] Failed to register GATT application: %s\n", LOG_TAG, error->message);
-        return -1;
+        g_clear_error(&error);
+        goto cleanup;
     }
     g_variant_unref(result);
 
+    success = TRUE;
     log_debug("[%s] Bluetooth service initialized successfully\n", LOG_TAG);
+
+cleanup:
+    // Only clean up objects if initialization failed
+    if (!success) {
+        if (service_object) g_object_unref(service_object);
+        if (char_object) g_object_unref(char_object);
+        if (manager) g_object_unref(manager);
+        if (service_skeleton) g_object_unref(service_skeleton);
+        if (char_skeleton) g_object_unref(char_skeleton);
+        if (gatt_manager) g_object_unref(gatt_manager);
+        if (connection) g_object_unref(connection);
+        return -1;
+    }
+
     return 0;
 }
 
