@@ -122,20 +122,27 @@ static void handle_write_value(GDBusConnection *conn,
                                GVariant *parameters,
                                GDBusMethodInvocation *invocation,
                                gpointer user_data) {
-    // parameters: (ay a{sv})
+    GVariant *array_variant = NULL;
     GVariant *options_variant = NULL;
-    GVariant *data_variant = NULL;
-    g_variant_get(parameters, "(ay@a{sv})", &data_variant, &options_variant);
+    
+    // Correctly extract the array and options from parameters
+    g_variant_get(parameters, "(@ay@a{sv})", &array_variant, &options_variant);
 
-    gsize len = 0;
-    gconstpointer data = g_variant_get_fixed_array(data_variant, &len, sizeof(guchar));
+    // Get the data bytes
+    const guint8 *data;
+    gsize n_elements;
+    data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guint8));
+
+    // Copy to buffer and ensure null termination
     char buffer[256];
     memset(buffer, 0, sizeof(buffer));
-    memcpy(buffer, data, len < sizeof(buffer) ? len : sizeof(buffer)-1);
+    memcpy(buffer, data, MIN(n_elements, sizeof(buffer) - 1));
+    
     log_debug("[%s] WriteValue received: %s\n", LOG_TAG, buffer);
 
+    // Clean up
     g_dbus_method_invocation_return_value(invocation, NULL);
-    g_variant_unref(data_variant);
+    g_variant_unref(array_variant);
     g_variant_unref(options_variant);
 }
 
