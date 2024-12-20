@@ -1,4 +1,3 @@
-// bluetooth_service.c
 #include <gio/gio.h>
 #include <glib.h>
 #include <pthread.h>
@@ -8,7 +7,7 @@
 #include <syslog.h>
 #include <unistd.h>
 
-#include "gatt-interfaces.h" // Include the generated header from gdbus-codegen
+#include "gatt-interfaces.h" // Include the generated header
 
 #define LOG_TAG "BluetoothService"
 
@@ -36,6 +35,7 @@ static void log_debug(const char* format, ...) {
 
 static void handle_write_value(const guchar *value, gsize value_len) {
     log_debug("[%s] Received WiFi credentials. Length: %zu\n", LOG_TAG, value_len);
+
     char buffer[256] = {0};
     memcpy(buffer, value, value_len < sizeof(buffer) ? value_len : sizeof(buffer) - 1);
 
@@ -54,11 +54,11 @@ static void handle_write_value(const guchar *value, gsize value_len) {
     }
 }
 
-static void on_char_method_call(OrgBluezGattCharacteristic1 *interface,
-                                GDBusMethodInvocation *invocation,
-                                const gchar *method_name,
-                                GVariant *parameters,
-                                gpointer user_data) {
+static void on_characteristic_method_call(GattCharacteristic1 *interface,
+                                          GDBusMethodInvocation *invocation,
+                                          const gchar *method_name,
+                                          GVariant *parameters,
+                                          gpointer user_data) {
     if (g_strcmp0(method_name, "WriteValue") == 0) {
         GVariant *value_variant = NULL;
         GVariant *options = NULL;
@@ -75,9 +75,10 @@ static void on_char_method_call(OrgBluezGattCharacteristic1 *interface,
         if (options)
             g_variant_unref(options);
     } else {
-        g_dbus_method_invocation_return_derror(invocation,
-                                               "org.bluez.Error.NotSupported",
-                                               "Method not supported");
+        g_dbus_method_invocation_return_error(invocation,
+                                              G_DBUS_ERROR,
+                                              G_DBUS_ERROR_UNKNOWN_METHOD,
+                                              "Unknown method: %s", method_name);
     }
 }
 
@@ -96,60 +97,7 @@ int bluetooth_init() {
         return -1;
     }
 
-    GDBusProxy *adapter = g_dbus_proxy_new_sync(connection,
-                                                G_DBUS_PROXY_FLAGS_NONE,
-                                                NULL,
-                                                "org.bluez",
-                                                "/org/bluez/hci0",
-                                                "org.bluez.Adapter1",
-                                                NULL,
-                                                &error);
-    if (adapter) {
-        g_dbus_proxy_call_sync(adapter,
-                               "SetProperty",
-                               g_variant_new("(sv)", "Pairable", g_variant_new_boolean(TRUE)),
-                               G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
-        
-        g_dbus_proxy_call_sync(adapter,
-                               "SetProperty",
-                               g_variant_new("(sv)", "PairableTimeout", g_variant_new_uint32(0)),
-                               G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
-    }
-
-    // Create an ObjectManager for the application
-    GDBusObjectManagerServer *manager = g_dbus_object_manager_server_new(FERALFILE_APP_PATH);
-
-    // Create and set up the GATT service skeleton
-    OrgBluezGattService1 *service_iface = org_bluez_gatt_service1_skeleton_new();
-    g_object_set(G_OBJECT(service_iface),
-                 "uuid", FERALFILE_SERVICE_UUID,
-                 "primary", TRUE,
-                 NULL);
-
-    // Create and set up the GATT characteristic skeleton
-    OrgBluezGattCharacteristic1 *char_iface = org_bluez_gatt_characteristic1_skeleton_new();
-    g_object_set(G_OBJECT(char_iface),
-                 "uuid", WIFI_CREDS_CHAR_UUID,
-                 "service", FERALFILE_SERVICE_PATH,
-                 "flags", g_variant_new_strv((const gchar*[]){"write-without-response", NULL}, -1),
-                 NULL);
-
-    // Connect signal for method calls on the characteristic
-    g_signal_connect(char_iface, "handle-method-call", G_CALLBACK(on_char_method_call), NULL);
-
-    // Create object skeletons
-    GDBusObjectSkeleton *service_object = g_dbus_object_skeleton_new(FERALFILE_SERVICE_PATH);
-    g_dbus_object_skeleton_add_interface(service_object, G_DBUS_INTERFACE_SKELETON(service_iface));
-
-    GDBusObjectSkeleton *char_object = g_dbus_object_skeleton_new(FERALFILE_CHAR_PATH);
-    g_dbus_object_skeleton_add_interface(char_object, G_DBUS_INTERFACE_SKELETON(char_iface));
-
-    // Export objects on the manager
-    g_dbus_object_manager_server_export(manager, service_object);
-    g_dbus_object_manager_server_export(manager, char_object);
-    g_dbus_object_manager_server_set_connection(manager, connection);
-
-    // Register Application with GattManager1
+    // Set up GATT Manager
     GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(connection,
                                                      G_DBUS_PROXY_FLAGS_NONE,
                                                      NULL,
@@ -163,18 +111,51 @@ int bluetooth_init() {
         return -1;
     }
 
-    GVariant *res = g_dbus_proxy_call_sync(gatt_manager,
-                                           "RegisterApplication",
-                                           g_variant_new("(oa{sv})", FERALFILE_APP_PATH, NULL),
-                                           G_DBUS_CALL_FLAGS_NONE,
-                                           -1,
-                                           NULL,
-                                           &error);
-    if (!res) {
+    // Create GATT Service Skeleton
+    GattService1 *service_skeleton = gatt_service1_skeleton_new();
+    g_object_set(G_OBJECT(service_skeleton),
+                 "uuid", FERALFILE_SERVICE_UUID,
+                 "primary", TRUE,
+                 NULL);
+
+    // Create GATT Characteristic Skeleton
+    GattCharacteristic1 *char_skeleton = gatt_characteristic1_skeleton_new();
+    g_object_set(G_OBJECT(char_skeleton),
+                 "uuid", WIFI_CREDS_CHAR_UUID,
+                 "service", FERALFILE_SERVICE_PATH,
+                 "flags", g_variant_new_strv((const gchar*[]){"write-without-response", NULL}, -1),
+                 NULL);
+
+    // Connect signals for characteristic methods
+    g_signal_connect(char_skeleton, "handle-method-call", G_CALLBACK(on_characteristic_method_call), NULL);
+
+    // Set up Object Manager
+    GDBusObjectManagerServer *manager = g_dbus_object_manager_server_new(FERALFILE_APP_PATH);
+
+    // Add service and characteristic to Object Manager
+    GDBusObjectSkeleton *service_object = g_dbus_object_skeleton_new(FERALFILE_SERVICE_PATH);
+    g_dbus_object_skeleton_add_interface(service_object, G_DBUS_INTERFACE_SKELETON(service_skeleton));
+
+    GDBusObjectSkeleton *char_object = g_dbus_object_skeleton_new(FERALFILE_CHAR_PATH);
+    g_dbus_object_skeleton_add_interface(char_object, G_DBUS_INTERFACE_SKELETON(char_skeleton));
+
+    g_dbus_object_manager_server_export(manager, service_object);
+    g_dbus_object_manager_server_export(manager, char_object);
+    g_dbus_object_manager_server_set_connection(manager, connection);
+
+    // Register application with GattManager1
+    GVariant *result = g_dbus_proxy_call_sync(gatt_manager,
+                                              "RegisterApplication",
+                                              g_variant_new("(oa{sv})", FERALFILE_APP_PATH, NULL),
+                                              G_DBUS_CALL_FLAGS_NONE,
+                                              -1,
+                                              NULL,
+                                              &error);
+    if (!result) {
         log_debug("[%s] Failed to register GATT application: %s\n", LOG_TAG, error->message);
         return -1;
     }
-    g_variant_unref(res);
+    g_variant_unref(result);
 
     log_debug("[%s] Bluetooth service initialized successfully\n", LOG_TAG);
     return 0;
@@ -184,17 +165,10 @@ void bluetooth_set_credentials_callback(wifi_credentials_callback callback) {
     credentials_callback = callback;
 }
 
-int bluetooth_start(connection_result_callback callback) {
+int bluetooth_start() {
     if (pthread_create(&bluetooth_thread, NULL, bluetooth_handler, NULL) != 0) {
         log_debug("[%s] Failed to start Bluetooth thread\n", LOG_TAG);
-        if (callback) {
-            callback(-1, "Failed to start Bluetooth thread");
-        }
         return -1;
-    }
-    
-    if (callback) {
-        callback(0, "Bluetooth service started successfully");
     }
     return 0;
 }
