@@ -27,11 +27,11 @@ class FFI_BluetoothService {
       return;
     }
 
-    // Set up the callback
+    // Set up the callback with proper isolate handling
     final callbackPointer =
-        Pointer.fromFunction<ConnectionResultCallbackNative>(
-      _staticConnectionResultCallback, // Use the static callback
-    );
+        NativeCallable<ConnectionResultCallbackNative>.isolateLocal(
+      _staticConnectionResultCallback,
+    ).nativeFunction;
 
     // Start the Bluetooth service
     int startResult = _bindings.bluetooth_start(callbackPointer);
@@ -55,5 +55,6 @@ class FFI_BluetoothService {
     _bindings.bluetooth_stop();
     _connectionController.close();
     _messageController.close();
+    // Make sure to clean up any NativeCallable resources if needed
   }
 }
