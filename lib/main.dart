@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'screens/home_screen.dart';
-import 'cubits/connection_cubit.dart';
+import 'cubits/ble_connection_cubit.dart';
 import 'services/logger.dart';
 
 void main() {
@@ -21,8 +21,8 @@ class FeralFileApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.black,
       ),
       home: BlocProvider(
-        create: (context) => ConnectionCubit()..startListening(),
-        child: HomeScreen(),
+        create: (context) => BLEConnectionCubit()..startListening(),
+        child: const HomeScreen(),
       ),
     );
   }
