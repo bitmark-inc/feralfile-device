@@ -27,21 +27,25 @@ class FFI_BluetoothService {
       return;
     }
 
-    // Set up the callback with proper isolate handling
-    final callbackPointer =
-        NativeCallable<ConnectionResultCallbackNative>.isolateLocal(
+    // Set up the callback as a listener for background thread safety
+    late final NativeCallable<ConnectionResultCallbackNative> callback;
+    callback = NativeCallable<ConnectionResultCallbackNative>.listener(
       _staticConnectionResultCallback,
-    ).nativeFunction;
+    );
 
     // Start the Bluetooth service
-    int startResult = _bindings.bluetooth_start(callbackPointer);
+    int startResult = _bindings.bluetooth_start(callback.nativeFunction);
     if (startResult != 0) {
       _messageController.add('Failed to start Bluetooth service.');
+      callback.close();
     } else {
       _messageController
           .add('Bluetooth service started. Waiting for connections...');
     }
   }
+
+  // Store the callback reference for cleanup
+  NativeCallable<ConnectionResultCallbackNative>? _callback;
 
   // Static callback that can be used with FFI
   static void _staticConnectionResultCallback(
@@ -55,6 +59,8 @@ class FFI_BluetoothService {
     _bindings.bluetooth_stop();
     _connectionController.close();
     _messageController.close();
-    // Make sure to clean up any NativeCallable resources if needed
+    // Clean up the native callback
+    _callback?.close();
+    _callback = null;
   }
 }
