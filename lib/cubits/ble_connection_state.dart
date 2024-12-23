@@ -1,23 +1,29 @@
+enum BLEConnectionStatus {
+  initial,
+  connecting,
+  connected,
+}
+
 class BLEConnectionState {
+  final BLEConnectionStatus status;
+  final String ssid;
   final bool isProcessing;
-  final String statusMessage;
-  final String displayName;
 
   BLEConnectionState({
+    this.status = BLEConnectionStatus.initial,
+    this.ssid = '',
     this.isProcessing = false,
-    this.statusMessage = 'Waiting for Wi-Fi credentials via Bluetooth...',
-    this.displayName = 'LG-423',
   });
 
   BLEConnectionState copyWith({
+    BLEConnectionStatus? status,
+    String? ssid,
     bool? isProcessing,
-    String? statusMessage,
-    String? displayName,
   }) {
     return BLEConnectionState(
+      status: status ?? this.status,
+      ssid: ssid ?? this.ssid,
       isProcessing: isProcessing ?? this.isProcessing,
-      statusMessage: statusMessage ?? this.statusMessage,
-      displayName: displayName ?? this.displayName,
     );
   }
 }

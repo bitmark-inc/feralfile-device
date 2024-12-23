@@ -17,7 +17,7 @@ class HomeScreen extends StatelessWidget {
             flex: 2,
             child: Container(
               color: Colors.black,
-              padding: const EdgeInsets.all(40),
+              padding: const EdgeInsets.all(80),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -25,7 +25,7 @@ class HomeScreen extends StatelessWidget {
                     'assets/images/ff-logo.svg',
                     height: 60,
                   ),
-                  const SizedBox(height: 80),
+                  const SizedBox(height: 120),
                   const Text(
                     'Display exhibitions\nand your collection\nto any screen',
                     style: TextStyle(
@@ -35,55 +35,64 @@ class HomeScreen extends StatelessWidget {
                       height: 1.2,
                     ),
                   ),
-                  const SizedBox(height: 60),
-                  Text(
-                    'Open the Feral File app on your\nphone to sync your collection.',
-                    style: TextStyle(
-                      fontFamily: 'PPMori',
-                      fontSize: 28,
-                      color: Colors.grey[300],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 100),
                   BlocBuilder<BLEConnectionCubit, BLEConnectionState>(
                     builder: (context, state) {
+                      String instructionText = '';
+
+                      switch (state.status) {
+                        case BLEConnectionStatus.initial:
+                          instructionText =
+                              'Open the Feral File app, go to the Profile tab,\n'
+                              'and select Wi-Fi. Wait until it finds a\n'
+                              'Feral File Display device and tap to connect.\n\n'
+                              'Make sure your phone is connected to the Wi-Fi\n'
+                              'network you want to use for the display.';
+                        case BLEConnectionStatus.connecting:
+                          instructionText = 'Received Wi-Fi credentials.\n'
+                              'Connecting to network "${state.ssid}"...';
+                        case BLEConnectionStatus.connected:
+                          instructionText = 'Connected successfully!\n'
+                              'Launching display interface...';
+                      }
+
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Display Name: ${state.displayName}',
+                          const Text(
+                            'Feral File Display',
                             style: TextStyle(
                               fontFamily: 'PPMori',
                               fontSize: 28,
-                              color: Colors.grey[300],
+                              color: Colors.grey,
                             ),
                           ),
                           if (state.isProcessing) ...[
                             const SizedBox(height: 20),
                             const CircularProgressIndicator(),
-                            const SizedBox(height: 10),
-                            Text(
-                              state.statusMessage,
-                              style: TextStyle(
-                                fontFamily: 'PPMori',
-                                fontSize: 24,
-                                color: Colors.grey[400],
+                          ],
+                          // Right panel instruction text moved here
+                          Expanded(
+                            flex: 3,
+                            child: Center(
+                              child: Text(
+                                instructionText,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: 'PPMori',
+                                  fontSize: 42,
+                                  color: Colors.grey[300],
+                                  height: 1.4,
+                                ),
                               ),
                             ),
-                          ],
+                          ),
                         ],
                       );
                     },
                   ),
                 ],
               ),
-            ),
-          ),
-          // Right panel - Empty black background
-          const Expanded(
-            flex: 3,
-            child: ColoredBox(
-              color: Colors.black,
             ),
           ),
         ],

@@ -25,8 +25,8 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
 
     emit(state.copyWith(
       isProcessing: true,
-      statusMessage:
-          'Received SSID: ${credentials.ssid}\nConnecting to Wi-Fi...',
+      status: BLEConnectionStatus.connecting,
+      ssid: credentials.ssid,
     ));
 
     logger.info('[BLEConnectionCubit] Attempting to connect to WiFi network');
@@ -37,8 +37,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       logger.info(
           '[BLEConnectionCubit] Successfully connected to ${credentials.ssid}');
       emit(state.copyWith(
-        statusMessage:
-            'Connected to ${credentials.ssid}. Launching Chromium...',
+        status: BLEConnectionStatus.connected,
       ));
 
       logger.info('[BLEConnectionCubit] Launching Chromium browser');
@@ -51,7 +50,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       logger.info('[BLEConnectionCubit] Failed to connect to WiFi network');
       emit(state.copyWith(
         isProcessing: false,
-        statusMessage: 'Failed to connect to ${credentials.ssid}',
+        status: BLEConnectionStatus.initial,
       ));
     }
   }
