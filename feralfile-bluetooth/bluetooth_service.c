@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <syslog.h>
 #include <stdarg.h>
+#include <time.h>
 
 #define LOG_TAG "BluetoothService"
 #define FERALFILE_SERVICE_NAME   "FeralFile Connection"
@@ -23,11 +24,42 @@ static pthread_t bluetooth_thread;
 typedef void (*connection_result_callback)(int, const char*);
 static connection_result_callback result_callback = NULL;
 
+static FILE* log_file = NULL;
+
+void bluetooth_set_logfile(const char* path) {
+    if (log_file != NULL) {
+        fclose(log_file);
+    }
+    log_file = fopen(path, "a");
+}
+
 static void log_debug(const char* format, ...) {
     va_list args;
     va_start(args, format);
+    
+    // Get current time
+    time_t now;
+    time(&now);
+    char timestamp[26];
+    ctime_r(&now, timestamp);
+    timestamp[24] = '\0'; // Remove newline
+    
+    // Log to syslog
     vsyslog(LOG_DEBUG, format, args);
+    
+    // Log to console
+    printf("%s: ", timestamp);
     vprintf(format, args);
+    printf("\n");
+    
+    // Log to file if available
+    if (log_file != NULL) {
+        fprintf(log_file, "%s: DEBUG: ", timestamp);
+        vfprintf(log_file, format, args);
+        fprintf(log_file, "\n");
+        fflush(log_file);
+    }
+    
     va_end(args);
 }
 

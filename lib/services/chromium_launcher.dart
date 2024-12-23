@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:feralfile/services/logger.dart';
+
 class ChromiumLauncher {
   // Launch Chromium in full-screen mode with the specified URL
   static Future<void> launchChromium(String url) async {
@@ -7,13 +9,14 @@ class ChromiumLauncher {
       // Check if Chromium is installed
       ProcessResult whichResult = await Process.run('which', ['chromium']);
       if (whichResult.exitCode != 0) {
-        print('Chromium is not installed.');
+        logger.info('Chromium is not installed.');
         return;
       }
 
       // Launch Chromium in kiosk mode (full-screen without UI elements)
       await Process.start('chromium', [
         '--kiosk',
+        '--disable-extensions',
         url,
         '--no-first-run',
         '--disable-translate',
@@ -22,9 +25,9 @@ class ChromiumLauncher {
         '--disable-features=TranslateUI',
       ]);
 
-      print('Chromium launched in kiosk mode.');
+      logger.info('Chromium launched in kiosk mode.');
     } catch (e) {
-      print('Error launching Chromium: $e');
+      logger.info('Error launching Chromium: $e');
     }
   }
 }

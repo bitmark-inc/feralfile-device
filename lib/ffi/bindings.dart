@@ -23,12 +23,16 @@ typedef BluetoothStartDart = int Function(
 typedef BluetoothStopNative = Void Function();
 typedef BluetoothStopDart = void Function();
 
+typedef SetLogFileNative = Void Function(Pointer<Utf8> path);
+typedef SetLogFileDart = void Function(Pointer<Utf8> path);
+
 class BluetoothBindings {
   late DynamicLibrary _lib;
 
   late BluetoothInitDart bluetooth_init;
   late BluetoothStartDart bluetooth_start;
   late BluetoothStopDart bluetooth_stop;
+  late SetLogFileDart bluetooth_set_logfile;
 
   BluetoothBindings() {
     // Load the shared library
@@ -49,6 +53,10 @@ class BluetoothBindings {
 
     bluetooth_stop = _lib
         .lookup<NativeFunction<BluetoothStopNative>>('bluetooth_stop')
+        .asFunction();
+
+    bluetooth_set_logfile = _lib
+        .lookup<NativeFunction<SetLogFileNative>>('bluetooth_set_logfile')
         .asFunction();
   }
 }
