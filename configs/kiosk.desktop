@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=Kiosk
+Exec=chromium-browser --kiosk --disable-infobars --disable-session-crashed-bubble --noerrdialogs https://display.feralfile.com
+X-GNOME-Autostart-enabled=true
