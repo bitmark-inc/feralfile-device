@@ -50,8 +50,35 @@ class FFI_BluetoothService {
   // Static callback that can be used with FFI
   static void _staticConnectionResultCallback(
       int success, Pointer<Utf8> message) {
-    String msg = message.toDartString();
-    _messageController.add(msg);
+    try {
+      // Add null check and proper UTF-8 decoding
+      if (message.address == 0) {
+        _messageController.add('Error: Received null message');
+        return;
+      }
+
+      String msg;
+      try {
+        msg = message.toDartString();
+      } catch (e) {
+        // If UTF-8 conversion fails, try to decode bytes manually
+        final bytes =
+            message.cast<Uint8>().asTypedList(256); // Adjust size as needed
+        final nullTerminator = bytes.indexOf(0);
+        final validBytes =
+            nullTerminator >= 0 ? bytes.sublist(0, nullTerminator) : bytes;
+        msg = utf8.decode(validBytes, allowMalformed: true);
+      }
+
+      _messageController.add(msg);
+    } catch (e) {
+      _messageController.add('Error processing message: ${e.toString()}');
+    } finally {
+      // Ensure we free the memory allocated by C
+      if (message.address != 0) {
+        malloc.free(message);
+      }
+    }
     _connectionController.add(success == 1);
   }
 

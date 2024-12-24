@@ -147,36 +147,39 @@ static GVariant *char_get_property(GDBusConnection *conn,
 }
 
 static void handle_write_value(GDBusConnection *conn,
-                               const gchar *sender,
-                               const gchar *object_path,
-                               const gchar *interface_name,
-                               const gchar *method_name,
-                               GVariant *parameters,
-                               GDBusMethodInvocation *invocation,
-                               gpointer user_data) {
+                             const gchar *sender,
+                             const gchar *object_path,
+                             const gchar *interface_name,
+                             const gchar *method_name,
+                             GVariant *parameters,
+                             GDBusMethodInvocation *invocation,
+                             gpointer user_data) {
     GVariant *array_variant = NULL;
     GVariant *options_variant = NULL;
-    
-    g_variant_get(parameters, "(@ay@a{sv})", &array_variant, &options_variant);
+    g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
 
-    const guint8 *data;
     gsize n_elements;
-    data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guint8));
-
-    char buffer[256];
-    memset(buffer, 0, sizeof(buffer));
-    memcpy(buffer, data, MIN(n_elements, sizeof(buffer) - 1));
+    const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
     
-    log_debug("[%s] WriteValue received: %s\n", LOG_TAG, buffer);
-
-    // Call the result callback with the received data
-    if (result_callback) {
-        result_callback(1, buffer);  // 1 indicates success
+    // Ensure null termination and proper UTF-8 encoding
+    gchar *utf8_data = g_strndup((const gchar *)data, n_elements);
+    if (!g_utf8_validate(utf8_data, -1, NULL)) {
+        g_free(utf8_data);
+        g_dbus_method_invocation_return_error(invocation, G_DBUS_ERROR,
+            G_DBUS_ERROR_INVALID_ARGS, "Invalid UTF-8 sequence");
+        return;
     }
 
-    g_dbus_method_invocation_return_value(invocation, NULL);
+    // Process the message and call the callback
+    if (result_callback) {
+        result_callback(1, utf8_data);
+    }
+
+    g_free(utf8_data);
     g_variant_unref(array_variant);
-    g_variant_unref(options_variant);
+    if (options_variant) g_variant_unref(options_variant);
+    
+    g_dbus_method_invocation_return_value(invocation, NULL);
 }
 
 static const GDBusInterfaceVTable service_vtable = {
