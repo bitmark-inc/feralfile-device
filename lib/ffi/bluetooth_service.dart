@@ -1,5 +1,6 @@
 // lib/ffi/bluetooth_service.dart
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 import '../ffi/bindings.dart';
