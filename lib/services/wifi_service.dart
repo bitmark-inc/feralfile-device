@@ -1,5 +1,7 @@
 // lib/services/wifi_service.dart
 import 'dart:io';
+import 'package:feralfile/services/logger.dart';
+
 import '../models/wifi_credentials.dart';
 
 class WifiService {
@@ -34,14 +36,14 @@ class WifiService {
           );
 
           if (addResult.exitCode == 0) {
-            print('Connected to Wi-Fi: ${credentials.ssid}');
+            logger.info('Connected to Wi-Fi: ${credentials.ssid}');
             return true;
           } else {
-            print('Failed to connect to Wi-Fi: ${addResult.stderr}');
+            logger.info('Failed to connect to Wi-Fi: ${addResult.stderr}');
             return false;
           }
         } else {
-          print('SSID already known. Attempting to connect...');
+          logger.info('SSID already known. Attempting to connect...');
           // Attempt to connect
           ProcessResult connectResult = await Process.run(
             'nmcli',
@@ -49,22 +51,20 @@ class WifiService {
           );
 
           if (connectResult.exitCode == 0) {
-            print('Connected to Wi-Fi: ${credentials.ssid}');
+            logger.info('Connected to Wi-Fi: ${credentials.ssid}');
             return true;
           } else {
-            print('Failed to connect to Wi-Fi: ${connectResult.stderr}');
+            logger.info('Failed to connect to Wi-Fi: ${connectResult.stderr}');
             return false;
           }
         }
       } else {
-        print('Failed to list Wi-Fi networks: ${checkResult.stderr}');
+        logger.info('Failed to list Wi-Fi networks: ${checkResult.stderr}');
         return false;
       }
     } catch (e) {
-      print('Error connecting to Wi-Fi: $e');
+      logger.info('Error connecting to Wi-Fi: $e');
       return false;
     }
   }
-
-  // Optionally, implement methods to disconnect, check status, etc.
 }
