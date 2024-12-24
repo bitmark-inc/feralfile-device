@@ -16,7 +16,6 @@ project/
 │   ├── setup_kiosk.sh        # Chromium kiosk setup script
 │   └── shrink_image.sh       # Image shrinking script using PiShrink
 ├── configs/                  # Configuration files
-│   ├── wpa_supplicant.conf   # Wi-Fi configuration template
 │   ├── kiosk.desktop         # Chromium autostart configuration
 │   ├── config.txt            # Raspberry Pi boot config
 │   └── 99-display-hotplug.rules  # Udev rule for HDMI hotplug
