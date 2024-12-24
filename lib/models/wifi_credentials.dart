@@ -14,10 +14,10 @@ class WifiCredentials {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
+  String toJson() {
+    return jsonEncode({
       'ssid': ssid,
       'password': password,
-    };
+    });
   }
 }
