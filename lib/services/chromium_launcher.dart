@@ -30,4 +30,9 @@ class ChromiumLauncher {
       logger.info('Error launching Chromium: $e');
     }
   }
+
+  static Future<void> launchAndExit() async {
+    await launchChromium('https://display.feralfile.com');
+    exit(0);
+  }
 }

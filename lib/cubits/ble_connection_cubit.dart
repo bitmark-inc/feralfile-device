@@ -40,12 +40,11 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
         status: BLEConnectionStatus.connected,
       ));
 
-      logger.info('[BLEConnectionCubit] Launching Chromium browser');
-      await ChromiumLauncher.launchChromium('https://display.feralfile.com');
       logger.info('[BLEConnectionCubit] Disposing Bluetooth service');
       _bluetoothService.dispose();
-      logger.info('[BLEConnectionCubit] Exiting application');
-      exit(0);
+
+      logger.info('[BLEConnectionCubit] Launching Chromium browser');
+      await ChromiumLauncher.launchAndExit();
     } else {
       logger.info('[BLEConnectionCubit] Failed to connect to WiFi network');
       emit(state.copyWith(

@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'screens/home_screen.dart';
 import 'cubits/ble_connection_cubit.dart';
 import 'services/logger.dart';
+import 'services/wifi_service.dart';
+import 'services/chromium_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main() async {
@@ -13,7 +15,17 @@ void main() async {
   await windowManager.setFullScreen(true);
 
   setupLogging();
-  runApp(const FeralFileApp());
+
+  // Check if already connected to WiFi
+  bool isConnected = await WifiService.isConnectedToWifi();
+
+  if (isConnected) {
+    logger.info('Already connected to WiFi. Launching Chromium directly...');
+    await ChromiumLauncher.launchAndExit();
+  } else {
+    logger.info('No WiFi connection. Starting connection UI...');
+    runApp(const FeralFileApp());
+  }
 }
 
 class FeralFileApp extends StatelessWidget {

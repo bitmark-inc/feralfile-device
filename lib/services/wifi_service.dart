@@ -83,4 +83,28 @@ class WifiService {
       return false;
     }
   }
+
+  static Future<bool> isConnectedToWifi() async {
+    try {
+      ProcessResult result = await Process.run(
+        'nmcli',
+        ['-t', '-f', 'DEVICE,STATE', 'dev'],
+      );
+
+      if (result.exitCode == 0) {
+        List<String> connections = result.stdout.toString().split('\n');
+        for (String connection in connections) {
+          if (connection.contains('wifi:connected')) {
+            logger.info('Device is connected to WiFi');
+            return true;
+          }
+        }
+      }
+      logger.info('Device is not connected to WiFi');
+      return false;
+    } catch (e) {
+      logger.warning('Error checking WiFi status: $e');
+      return false;
+    }
+  }
 }
