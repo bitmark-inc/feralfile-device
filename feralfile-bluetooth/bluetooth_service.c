@@ -161,21 +161,13 @@ static void handle_write_value(GDBusConnection *conn,
     gsize n_elements;
     const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
     
-    // Ensure null termination and proper UTF-8 encoding
-    gchar *utf8_data = g_strndup((const gchar *)data, n_elements);
-    if (!g_utf8_validate(utf8_data, -1, NULL)) {
-        g_free(utf8_data);
-        g_dbus_method_invocation_return_error(invocation, G_DBUS_ERROR,
-            G_DBUS_ERROR_INVALID_ARGS, "Invalid UTF-8 sequence");
-        return;
-    }
+    log_debug("[%s] Received %zu bytes of data", LOG_TAG, n_elements);
 
-    // Process the message and call the callback
+    // Pass raw bytes to callback
     if (result_callback) {
-        result_callback(1, utf8_data);
+        result_callback(1, (const char*)data);
     }
 
-    g_free(utf8_data);
     g_variant_unref(array_variant);
     if (options_variant) g_variant_unref(options_variant);
     

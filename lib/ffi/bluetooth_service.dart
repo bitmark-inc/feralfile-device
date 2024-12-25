@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
+import 'package:feralfile/services/logger.dart';
 import 'package:ffi/ffi.dart';
 import '../ffi/bindings.dart';
 
@@ -50,37 +51,25 @@ class FFI_BluetoothService {
 
   // Static callback that can be used with FFI
   static void _staticConnectionResultCallback(
-      int success, Pointer<Utf8> message) {
+      int success, Pointer<Uint8> data) {
     try {
-      // Add null check and proper UTF-8 decoding
-      if (message.address == 0) {
-        _messageController.add('Error: Received null message');
-        return;
+      // Get the length of data by finding null terminator
+      int length = 0;
+      while (data[length] != 0) {
+        length++;
       }
 
-      String msg;
-      try {
-        msg = message.toDartString();
-      } catch (e) {
-        // If UTF-8 conversion fails, try to decode bytes manually
-        final bytes =
-            message.cast<Uint8>().asTypedList(256); // Adjust size as needed
-        final nullTerminator = bytes.indexOf(0);
-        final validBytes =
-            nullTerminator >= 0 ? bytes.sublist(0, nullTerminator) : bytes;
-        msg = utf8.decode(validBytes, allowMalformed: true);
-      }
+      // Convert raw bytes to Uint8List
+      final bytes = data.asTypedList(length);
 
-      _messageController.add(msg);
+      // Decode UTF-8 and parse JSON in Dart
+      final utf8String = utf8.decode(bytes);
+      logger.info('received message: $utf8String');
+
+      _messageController.add(utf8String);
     } catch (e) {
       _messageController.add('Error processing message: ${e.toString()}');
-    } finally {
-      // Ensure we free the memory allocated by C
-      if (message.address != 0) {
-        malloc.free(message);
-      }
     }
-    _connectionController.add(success == 1);
   }
 
   void dispose() {

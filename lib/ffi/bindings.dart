@@ -5,7 +5,7 @@ import 'package:ffi/ffi.dart';
 
 // Define the callback signature
 typedef ConnectionResultCallbackNative = Void Function(
-    Int32 success, Pointer<Utf8> message);
+    Int32 success, Pointer<Uint8> data);
 typedef ConnectionResultCallbackDart = void Function(
     int success, String message);
 
