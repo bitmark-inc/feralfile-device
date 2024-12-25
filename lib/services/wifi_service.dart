@@ -95,8 +95,7 @@ class WifiService {
         List<String> connections = result.stdout.toString().trim().split('\n');
         for (String connection in connections) {
           // Specifically look for the wlan0 interface
-          if (connection.startsWith('wlan0:') &&
-              connection.endsWith('connected')) {
+          if (connection.contains('wlan0:connected')) {
             logger.info('WiFi interface (wlan0) is connected');
             return true;
           }
