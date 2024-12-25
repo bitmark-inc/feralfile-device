@@ -53,25 +53,47 @@ class FFI_BluetoothService {
   static void _staticConnectionResultCallback(
       int success, Pointer<Uint8> data) {
     try {
-      // Convert raw pointer to a large enough Uint8List.
+      // Convert raw pointer to a Uint8List
       final rawBytes = data.asTypedList(1024);
+      var offset = 0;
 
-      // Find the first null terminator.
-      final terminatorIndex = rawBytes.indexOf(0);
-      if (terminatorIndex == -1) {
-        // No null terminator found; decode the entire buffer or handle error.
-        throw Exception("No null terminator found in data.");
-      }
+      // Read SSID length (varint)
+      var (ssidLength, ssidOffset) = _readVarint(rawBytes, offset);
+      offset = ssidOffset;
 
-      // Sublist up to (but not including) the null terminator.
-      final trimmedBytes = rawBytes.sublist(0, terminatorIndex);
+      // Read SSID
+      final ssid = ascii.decode(rawBytes.sublist(offset, offset + ssidLength));
+      offset += ssidLength;
 
-      // Decode the (potentially) trimmed bytes.
-      final utf8String = utf8.decode(trimmedBytes);
-      _messageController.add(utf8String);
+      // Read password length (varint)
+      var (passwordLength, passwordOffset) = _readVarint(rawBytes, offset);
+      offset = passwordOffset;
+
+      // Read password
+      final password =
+          ascii.decode(rawBytes.sublist(offset, offset + passwordLength));
+
+      // Construct message
+      final message = 'Received credentials - SSID: $ssid, Password: $password';
+      _messageController.add(message);
     } catch (e) {
       _messageController.add('Error processing message: $e');
     }
+  }
+
+  // Helper method to read varint
+  static (int value, int newOffset) _readVarint(Uint8List bytes, int offset) {
+    var value = 0;
+    var shift = 0;
+
+    while (true) {
+      final byte = bytes[offset++];
+      value |= (byte & 0x7F) << shift;
+      if ((byte & 0x80) == 0) break;
+      shift += 7;
+    }
+
+    return (value, offset);
   }
 
   void dispose() {
