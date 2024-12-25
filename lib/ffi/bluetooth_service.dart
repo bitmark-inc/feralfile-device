@@ -53,22 +53,24 @@ class FFI_BluetoothService {
   static void _staticConnectionResultCallback(
       int success, Pointer<Uint8> data) {
     try {
-      // Get the length of data by finding null terminator
-      int length = 0;
-      while (data[length] != 0) {
-        length++;
+      // Convert raw pointer to a large enough Uint8List.
+      final rawBytes = data.asTypedList(1024);
+
+      // Find the first null terminator.
+      final terminatorIndex = rawBytes.indexOf(0);
+      if (terminatorIndex == -1) {
+        // No null terminator found; decode the entire buffer or handle error.
+        throw Exception("No null terminator found in data.");
       }
 
-      // Convert raw bytes to Uint8List
-      final bytes = data.asTypedList(length);
+      // Sublist up to (but not including) the null terminator.
+      final trimmedBytes = rawBytes.sublist(0, terminatorIndex);
 
-      // Decode UTF-8 and parse JSON in Dart
-      final utf8String = utf8.decode(bytes);
-      logger.info('received message: $utf8String');
-
+      // Decode the (potentially) trimmed bytes.
+      final utf8String = utf8.decode(trimmedBytes);
       _messageController.add(utf8String);
     } catch (e) {
-      _messageController.add('Error processing message: ${e.toString()}');
+      _messageController.add('Error processing message: $e');
     }
   }
 
