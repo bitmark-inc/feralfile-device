@@ -92,15 +92,17 @@ class WifiService {
       );
 
       if (result.exitCode == 0) {
-        List<String> connections = result.stdout.toString().split('\n');
+        List<String> connections = result.stdout.toString().trim().split('\n');
         for (String connection in connections) {
-          if (connection.contains('wifi:connected')) {
-            logger.info('Device is connected to WiFi');
+          // Specifically look for the wlan0 interface
+          if (connection.startsWith('wlan0:') &&
+              connection.endsWith('connected')) {
+            logger.info('WiFi interface (wlan0) is connected');
             return true;
           }
         }
       }
-      logger.info('Device is not connected to WiFi');
+      logger.info('WiFi interface (wlan0) is not connected');
       return false;
     } catch (e) {
       logger.warning('Error checking WiFi status: $e');
