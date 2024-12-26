@@ -43,7 +43,7 @@ class WifiService {
               'dev',
               'wifi',
               'connect',
-              '"${credentials.ssid}"',
+              credentials.ssid,
               'password',
               '"${credentials.password}"',
             ],
