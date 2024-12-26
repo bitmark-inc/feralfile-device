@@ -22,61 +22,32 @@ class WifiService {
 
   static Future<bool> connect(WifiCredentials credentials) async {
     try {
-      // First, check if the SSID is already known
-      ProcessResult checkResult = await Process.run(
+      // First, try to delete any existing connection with this SSID
+      await Process.run(
         'nmcli',
-        ['-t', '-f', 'SSID', 'dev', 'wifi'],
+        ['connection', 'delete', credentials.ssid],
       );
 
-      if (checkResult.exitCode == 0) {
-        List<String> ssids = checkResult.stdout
-            .toString()
-            .split('\n')
-            .where((line) => line.trim().isNotEmpty)
-            .toList();
+      // Add the new Wi-Fi connection with provided credentials
+      ProcessResult addResult = await Process.run(
+        'nmcli',
+        [
+          'dev',
+          'wifi',
+          'connect',
+          credentials.ssid,
+          'password',
+          credentials.password,
+        ],
+        runInShell: true,
+      );
 
-        if (!ssids.contains(credentials.ssid)) {
-          // Add the new Wi-Fi connection
-          ProcessResult addResult = await Process.run(
-            'nmcli',
-            [
-              'dev',
-              'wifi',
-              'connect',
-              credentials.ssid,
-              'password',
-              credentials.password,
-            ],
-            runInShell: true,
-          );
-
-          if (addResult.exitCode == 0) {
-            logger.info('Connected to Wi-Fi: ${credentials.ssid}');
-            await _saveCredentials(credentials);
-            return true;
-          } else {
-            logger.info('Failed to connect to Wi-Fi: ${addResult.stderr}');
-            return false;
-          }
-        } else {
-          logger.info('SSID already known. Attempting to connect...');
-          // Attempt to connect
-          ProcessResult connectResult = await Process.run(
-            'nmcli',
-            ['dev', 'wifi', 'connect', credentials.ssid],
-          );
-
-          if (connectResult.exitCode == 0) {
-            logger.info('Connected to Wi-Fi: ${credentials.ssid}');
-            await _saveCredentials(credentials);
-            return true;
-          } else {
-            logger.info('Failed to connect to Wi-Fi: ${connectResult.stderr}');
-            return false;
-          }
-        }
+      if (addResult.exitCode == 0) {
+        logger.info('Connected to Wi-Fi: ${credentials.ssid}');
+        await _saveCredentials(credentials);
+        return true;
       } else {
-        logger.info('Failed to list Wi-Fi networks: ${checkResult.stderr}');
+        logger.info('Failed to connect to Wi-Fi: ${addResult.stderr}');
         return false;
       }
     } catch (e) {
