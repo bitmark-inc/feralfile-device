@@ -36,25 +36,43 @@ class WifiService {
             .toList();
 
         if (!ssids.contains(credentials.ssid)) {
-          // Add the new Wi-Fi connection
+          // First, add the new connection
           ProcessResult addResult = await Process.run(
             'nmcli',
             [
-              'dev',
+              'connection',
+              'add',
+              'type',
               'wifi',
-              'connect',
+              'con-name',
               credentials.ssid,
-              'password',
-              credentials.password,
+              'ssid',
+              credentials.ssid,
+              'wifi-sec.key-mgmt',
+              'wpa-psk',
+              'wifi-sec.psk',
+              credentials.password
             ],
           );
 
           if (addResult.exitCode == 0) {
-            logger.info('Connected to Wi-Fi: ${credentials.ssid}');
-            await _saveCredentials(credentials);
-            return true;
+            // Then activate the connection
+            ProcessResult upResult = await Process.run(
+              'nmcli',
+              ['connection', 'up', credentials.ssid],
+            );
+
+            if (upResult.exitCode == 0) {
+              logger.info('Connected to Wi-Fi: ${credentials.ssid}');
+              await _saveCredentials(credentials);
+              return true;
+            } else {
+              logger.info(
+                  'Failed to activate Wi-Fi connection: ${upResult.stderr}');
+              return false;
+            }
           } else {
-            logger.info('Failed to connect to Wi-Fi: ${addResult.stderr}');
+            logger.info('Failed to add Wi-Fi connection: ${addResult.stderr}');
             return false;
           }
         } else {
