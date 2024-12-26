@@ -36,43 +36,25 @@ class WifiService {
             .toList();
 
         if (!ssids.contains(credentials.ssid)) {
-          // First, add the new connection
+          // Add the new Wi-Fi connection
           ProcessResult addResult = await Process.run(
             'nmcli',
             [
-              'connection',
-              'add',
-              'type',
+              'dev',
               'wifi',
-              'con-name',
-              credentials.ssid,
-              'ssid',
-              credentials.ssid,
-              'wifi-sec.key-mgmt',
-              'wpa-psk',
-              'wifi-sec.psk',
-              credentials.password
+              'connect',
+              '"${credentials.ssid}"',
+              'password',
+              '"${credentials.password}"',
             ],
           );
 
           if (addResult.exitCode == 0) {
-            // Then activate the connection
-            ProcessResult upResult = await Process.run(
-              'nmcli',
-              ['connection', 'up', credentials.ssid],
-            );
-
-            if (upResult.exitCode == 0) {
-              logger.info('Connected to Wi-Fi: ${credentials.ssid}');
-              await _saveCredentials(credentials);
-              return true;
-            } else {
-              logger.info(
-                  'Failed to activate Wi-Fi connection: ${upResult.stderr}');
-              return false;
-            }
+            logger.info('Connected to Wi-Fi: ${credentials.ssid}');
+            await _saveCredentials(credentials);
+            return true;
           } else {
-            logger.info('Failed to add Wi-Fi connection: ${addResult.stderr}');
+            logger.info('Failed to connect to Wi-Fi: ${addResult.stderr}');
             return false;
           }
         } else {
@@ -80,7 +62,7 @@ class WifiService {
           // Attempt to connect
           ProcessResult connectResult = await Process.run(
             'nmcli',
-            ['dev', 'wifi', 'connect', credentials.ssid],
+            ['dev', 'wifi', 'connect', '"${credentials.ssid}"'],
           );
 
           if (connectResult.exitCode == 0) {
