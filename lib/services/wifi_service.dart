@@ -62,7 +62,7 @@ class WifiService {
           // Attempt to connect
           ProcessResult connectResult = await Process.run(
             'nmcli',
-            ['dev', 'wifi', 'connect', '"${credentials.ssid}"'],
+            ['dev', 'wifi', 'connect', credentials.ssid],
           );
 
           if (connectResult.exitCode == 0) {
