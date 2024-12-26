@@ -45,8 +45,9 @@ class WifiService {
               'connect',
               credentials.ssid,
               'password',
-              '"${credentials.password}"',
+              credentials.password,
             ],
+            runInShell: true,
           );
 
           if (addResult.exitCode == 0) {
