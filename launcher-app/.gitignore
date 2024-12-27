@@ -1,0 +1,86 @@
+# Flutter/Dart related files
+**/build/
+**/ios/
+**/android/
+**/macos/
+**/windows/
+**/web/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.package
+**/.packages
+**/pubspec.lock
+**/.pub-cache/
+**/generated_plugin_registrant.dart
+
+# IDE and Editor specific files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.orig
+
+# Logs and Temporary Files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.DS_Store
+*.class
+*.lock
+*.gz
+*.zip
+*.tar
+*.log.*
+*.pid
+
+# Coverage
+coverage/
+*.lcov
+
+# System Files
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin
+*.apk
+*.ipa
+*.app
+*.map
+
+# Generated Files
+*.generated.*
+*.metadata
+*.lock
+*.bak
+*.tmp
+*.orig
+*.log
+
+# Environment Files
+.env
+.env.*
+*.secret
+
+# Ignore Flutter Linux-specific build outputs
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugin_registrant.h
+linux/flutter/flutter_generated_plugin_registrant.cc
+
+# Package manager files
+.packages
+.pub-cache/
+.dart_tool/
+
+# Additional generated folders
+*.gradle
+*.idea
