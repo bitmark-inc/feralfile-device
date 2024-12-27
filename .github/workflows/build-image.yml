@@ -32,53 +32,16 @@ jobs:
           name: feralfile-launcher-deb
           path: ./custom-stage/packages
 
-      - name: Create Custom Stage
+      - name: Remame the package
         run: |
-          # Create necessary directories
-          mkdir -p custom-stage/01-install-app
-          
-          # Create prerun.sh
-          cat > custom-stage/prerun.sh <<EOF
-          #!/bin/bash -e
-          if [ ! -d "\${ROOTFS_DIR}" ]; then
-            copy_previous
-          fi
-          EOF
-          chmod +x custom-stage/prerun.sh
-          
-          # Create install script
-          cat > custom-stage/01-install-app/00-run-chroot.sh <<EOF
-          #!/bin/bash
-          mkdir -p /opt/feralfile
-          dpkg -i /custom-stage/packages/feralfile-launcher_${{ github.event.inputs.version }}_arm64.deb
-          
-          # Create systemd service
-          cat > /etc/systemd/system/feralfile-launcher.service <<SERVICE
-          [Unit]
-          Description=Feral File Launcher
-          After=network.target
-          
-          [Service]
-          ExecStart=/opt/feralfile/launcher
-          Restart=always
-          User=feralfile
-          WorkingDirectory=/opt/feralfile
-          Environment=DISPLAY=:0
-          Environment=XAUTHORITY=/home/feralfile/.Xauthority
-          
-          [Install]
-          WantedBy=multi-user.target
-          SERVICE
-          
-          systemctl enable feralfile-launcher.service
-          EOF
-          chmod +x custom-stage/01-install-app/00-run-chroot.sh
+          # Rename downloaded package
+          mv ./custom-stage/packages/feralfile-launcher_${{ github.event.inputs.version }}_arm64.deb ./custom-stage/packages/feralfile-launcher_arm64.deb
 
       - name: Build Pi OS Image with pi-gen-action
         uses: usimd/pi-gen-action@v1
         with:
           image-name: feralfile-device-${{ github.event.inputs.version }}
-          stage-list: stage0 stage1 stage2 stage3 ./custom-stage
+          stage-list: stage0 stage1 stage2 ./custom-stage
           compression: zip
           compression-level: 6
           username: feralfile
