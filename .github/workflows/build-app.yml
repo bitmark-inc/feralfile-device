@@ -1,17 +1,20 @@
 name: Build FeralFile App for ARM64
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       version:
-        description: 'Application version'
         required: true
-        default: '0.0.1'
+        type: string
+        description: 'Application version'
 
 jobs:
   build:
     name: Build and Package App
     runs-on: ['self-hosted', 'ARM64']
+    defaults:
+      run:
+        working-directory: launcher-app
 
     steps:
       - name: Checkout code
@@ -88,11 +91,11 @@ jobs:
       - name: Package as Debian .deb
         env:
           APP_NAME: feralfile-launcher
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ inputs.version }}
           ARCH: arm64
           DESCRIPTION: "Feral File Connection Assistant"
           MAINTAINER: "Bitmark Inc <support@feralfile.com>"
-          INSTALL_DIR: "/opt/${{ env.APP_NAME }}"
+          INSTALL_DIR: "/opt/feralfile"
         run: |
           mkdir -p package/DEBIAN
           mkdir -p package$INSTALL_DIR/lib
@@ -116,4 +119,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: feralfile-launcher-deb
-          path: feralfile-launcher_*.deb
+          path: launcher-app/feralfile-launcher_*.deb

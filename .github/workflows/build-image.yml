@@ -1,0 +1,100 @@
+name: Build Feral File Device Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image version'
+        required: true
+        default: '0.0.1'
+
+jobs:
+  # --- STEP 1: Reuse Build App Job ---
+  build-app:
+    uses: ./.github/workflows/build-app.yml
+    with:
+      version: ${{ github.event.inputs.version }}
+
+  # --- STEP 2: Build Raspberry Pi Image ---
+  build-image:
+    name: Generate Raspberry Pi OS Image
+    runs-on: ['self-hosted', 'Linux']
+    needs: build-app
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Feral File Launcher App
+        uses: actions/download-artifact@v3
+        with:
+          name: feralfile-launcher-deb
+          path: ./custom-stage/packages
+
+      - name: Create Custom Stage
+        run: |
+          mkdir -p custom-stage/packages
+          
+          # Create prerun.sh
+          cat > custom-stage/prerun.sh <<EOF
+          #!/bin/bash -e
+          if [ ! -d "\${ROOTFS_DIR}" ]; then
+            copy_previous
+          fi
+          EOF
+          chmod +x custom-stage/prerun.sh
+          
+          # Create install script
+          cat > custom-stage/01-install-app/00-run-chroot.sh <<EOF
+          #!/bin/bash
+          mkdir -p /opt/feralfile
+          dpkg -i /custom-stage/packages/feralfile-launcher_*.deb
+          
+          # Create systemd service
+          cat > /etc/systemd/system/feralfile-launcher.service <<SERVICE
+          [Unit]
+          Description=Feral File Launcher
+          After=network.target
+          
+          [Service]
+          ExecStart=/opt/feralfile/launcher
+          Restart=always
+          User=feralfile
+          WorkingDirectory=/opt/feralfile
+          Environment=DISPLAY=:0
+          Environment=XAUTHORITY=/home/feralfile/.Xauthority
+          
+          [Install]
+          WantedBy=multi-user.target
+          SERVICE
+          
+          systemctl enable feralfile-launcher.service
+          EOF
+          chmod +x custom-stage/01-install-app/00-run-chroot.sh
+
+      - name: Build Pi OS Image with pi-gen-action
+        uses: usimd/pi-gen-action@v1
+        with:
+          image-name: feralfile-device-${{ github.event.inputs.version }}
+          stage-list: stage0 stage1 stage2 ./custom-stage
+          compression: zip
+          compression-level: 6
+          username: feralfile
+          password: feralfile
+          hostname: FeralFileDevice
+          locale: en_US.UTF-8
+          keyboard-keymap: us
+          keyboard-layout: English (US)
+          release: bookworm
+          enable-ssh: 1
+          disable-first-boot-user-rename: 1
+          export-last-stage-only: true
+          wpa-country: 'US'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          verbose-output: true
+
+      - name: Upload Final Image to Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: feralfile-device-image
+          path: pi-gen/deploy/*.zip
