@@ -67,5 +67,4 @@ jobs:
 
       - name: Cleanup Docker Containers
         if: always()
-        continue-on-error: true
-        run: sudo docker rm -v pigen_work
+        run: sudo docker rm -v pigen_work || true
