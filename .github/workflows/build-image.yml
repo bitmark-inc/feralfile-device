@@ -100,3 +100,7 @@ jobs:
         with:
           name: feralfile-device-image
           path: pi-gen/deploy/*.zip
+
+      - name: Cleanup Docker Containers
+        if: always()
+        run: docker rm -v pigen_work
