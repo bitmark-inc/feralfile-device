@@ -12,6 +12,7 @@
 #define FERALFILE_SERVICE_NAME   "FeralFile Connection"
 #define FERALFILE_SERVICE_UUID   "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
 #define FERALFILE_WIFI_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+#define AGENT_PATH "/org/bluez/example/agent"
 
 static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
@@ -96,6 +97,44 @@ static const gchar advertisement_introspection_xml[] =
     "    <property name='Type' type='s' access='read'/>"
     "    <property name='ServiceUUIDs' type='as' access='read'/>"
     "    <property name='LocalName' type='s' access='read'/>"
+    "  </interface>"
+    "</node>";
+
+static const gchar agent_introspection_xml[] =
+    "<node>"
+    "  <interface name='org.bluez.Agent1'>"
+    "    <method name='Release'>"
+    "    </method>"
+    "    <method name='RequestPinCode'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='pincode' type='s' direction='out'/>"
+    "    </method>"
+    "    <method name='DisplayPinCode'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='pincode' type='s' direction='in'/>"
+    "    </method>"
+    "    <method name='RequestPasskey'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='passkey' type='u' direction='out'/>"
+    "    </method>"
+    "    <method name='DisplayPasskey'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='passkey' type='u' direction='in'/>"
+    "      <arg name='entered' type='q' direction='in'/>"
+    "    </method>"
+    "    <method name='RequestConfirmation'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='passkey' type='u' direction='in'/>"
+    "    </method>"
+    "    <method name='RequestAuthorization'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "    </method>"
+    "    <method name='AuthorizeService'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='uuid' type='s' direction='in'/>"
+    "    </method>"
+    "    <method name='Cancel'>"
+    "    </method>"
     "  </interface>"
     "</node>";
 
@@ -250,6 +289,104 @@ static const GDBusInterfaceVTable objects_vtable = {
     .set_property = NULL
 };
 
+static void handle_agent_method_call(GDBusConnection *conn,
+                                   const gchar *sender,
+                                   const gchar *object_path,
+                                   const gchar *interface_name,
+                                   const gchar *method_name,
+                                   GVariant *parameters,
+                                   GDBusMethodInvocation *invocation,
+                                   gpointer user_data) {
+    log_debug("[%s] Agent method called: %s", LOG_TAG, method_name);
+    
+    // Auto-accept all pairing requests
+    if (g_strcmp0(method_name, "RequestConfirmation") == 0 ||
+        g_strcmp0(method_name, "RequestAuthorization") == 0 ||
+        g_strcmp0(method_name, "AuthorizeService") == 0) {
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    } else if (g_strcmp0(method_name, "RequestPasskey") == 0) {
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(u)", 0));
+    } else if (g_strcmp0(method_name, "RequestPinCode") == 0) {
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(s)", "0000"));
+    } else {
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    }
+}
+
+static const GDBusInterfaceVTable agent_vtable = {
+    .method_call = handle_agent_method_call,
+    .get_property = NULL,
+    .set_property = NULL
+};
+
+static void register_agent(GDBusConnection *connection) {
+    log_debug("[%s] Registering agent", LOG_TAG);
+    GError *error = NULL;
+    
+    // Register agent object
+    GDBusNodeInfo *agent_node = g_dbus_node_info_new_for_xml(agent_introspection_xml, &error);
+    if (!agent_node || error) {
+        log_debug("[%s] Failed to parse agent XML: %s", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return;
+    }
+
+    g_dbus_connection_register_object(connection,
+                                    AGENT_PATH,
+                                    agent_node->interfaces[0],
+                                    &agent_vtable,
+                                    NULL, NULL, &error);
+    if (error) {
+        log_debug("[%s] Failed to register agent: %s", LOG_TAG, error->message);
+        g_error_free(error);
+        return;
+    }
+
+    // Register agent with AgentManager
+    GDBusProxy *agent_manager = g_dbus_proxy_new_sync(connection,
+                                                     G_DBUS_PROXY_FLAGS_NONE,
+                                                     NULL,
+                                                     "org.bluez",
+                                                     "/org/bluez",
+                                                     "org.bluez.AgentManager1",
+                                                     NULL,
+                                                     &error);
+    if (!agent_manager || error) {
+        log_debug("[%s] Failed to get AgentManager1: %s", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return;
+    }
+
+    g_dbus_proxy_call_sync(agent_manager,
+                          "RegisterAgent",
+                          g_variant_new("(os)", AGENT_PATH, "NoInputNoOutput"),
+                          G_DBUS_CALL_FLAGS_NONE,
+                          -1,
+                          NULL,
+                          &error);
+    if (error) {
+        log_debug("[%s] Failed to register agent with AgentManager: %s", LOG_TAG, error->message);
+        g_error_free(error);
+        return;
+    }
+
+    // Set as default agent
+    g_dbus_proxy_call_sync(agent_manager,
+                          "RequestDefaultAgent",
+                          g_variant_new("(o)", AGENT_PATH),
+                          G_DBUS_CALL_FLAGS_NONE,
+                          -1,
+                          NULL,
+                          &error);
+    if (error) {
+        log_debug("[%s] Failed to set default agent: %s", LOG_TAG, error->message);
+        g_error_free(error);
+        return;
+    }
+
+    log_debug("[%s] Agent registered successfully", LOG_TAG);
+}
+
 static void* bluetooth_handler(void* arg) {
     main_loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(main_loop);
@@ -395,6 +532,8 @@ int bluetooth_init() {
         g_error_free(error);
         return -1;
     }
+
+    register_agent(connection);
 
     log_debug("[%s] Bluetooth initialized successfully\n", LOG_TAG);
     return 0;
