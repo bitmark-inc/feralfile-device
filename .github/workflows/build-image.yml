@@ -19,7 +19,7 @@ jobs:
   # --- STEP 2: Build Raspberry Pi Image ---
   build-image:
     name: Generate Raspberry Pi OS Image
-    runs-on: ['self-hosted', 'Linux', 'X64']
+    runs-on: ['self-hosted', 'ARM64']
     needs: build-app
 
     steps:
