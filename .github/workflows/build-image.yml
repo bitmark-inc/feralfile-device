@@ -45,7 +45,7 @@ jobs:
           compression: zip
           compression-level: 6
           username: feralfile
-          password: ''
+          password: feralfile
           pi-gen-version: arm64
           hostname: FeralFileDevice
           locale: en_US.UTF-8
