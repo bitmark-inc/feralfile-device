@@ -11,6 +11,7 @@ on:
 jobs:
   # --- STEP 1: Reuse Build App Job ---
   build-app:
+    name: Build Feral File Launcher App
     uses: ./.github/workflows/build-app.yml
     with:
       version: ${{ github.event.inputs.version }}
