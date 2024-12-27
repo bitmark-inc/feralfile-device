@@ -66,4 +66,4 @@ jobs:
 
       - name: Cleanup Docker Containers
         if: always()
-        run: docker rm -v pigen_work
+        run: sudo docker rm -v pigen_work
