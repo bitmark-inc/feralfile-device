@@ -50,7 +50,7 @@ jobs:
           cat > custom-stage/01-install-app/00-run-chroot.sh <<EOF
           #!/bin/bash
           mkdir -p /opt/feralfile
-          dpkg -i /custom-stage/packages/feralfile-launcher_*.deb
+          dpkg -i /custom-stage/packages/feralfile-launcher_${{ github.event.inputs.version }}_arm64.deb
           
           # Create systemd service
           cat > /etc/systemd/system/feralfile-launcher.service <<SERVICE
@@ -78,7 +78,7 @@ jobs:
         uses: usimd/pi-gen-action@v1
         with:
           image-name: feralfile-device-${{ github.event.inputs.version }}
-          stage-list: stage0 stage1 stage2 ./custom-stage
+          stage-list: stage0 stage1 stage2 stage3 ./custom-stage
           compression: zip
           compression-level: 6
           username: feralfile
