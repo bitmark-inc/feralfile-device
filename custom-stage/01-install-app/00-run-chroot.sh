@@ -1,6 +1,5 @@
 #!/bin/bash
-mkdir -p /opt/feralfile
-dpkg -i /custom-stage/packages/feralfile-launcher_arm64.deb
+dpkg -i custom-stage/packages/feralfile-launcher_arm64.deb
 
 # Create systemd service
 cat > /etc/systemd/system/feralfile-launcher.service <<SERVICE
