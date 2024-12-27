@@ -33,7 +33,8 @@ jobs:
 
       - name: Create Custom Stage
         run: |
-          mkdir -p custom-stage/packages
+          # Create necessary directories
+          mkdir -p custom-stage/01-install-app
           
           # Create prerun.sh
           cat > custom-stage/prerun.sh <<EOF
