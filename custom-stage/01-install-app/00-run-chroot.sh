@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copy the .deb file into the chroot environment first
+cp "${ROOTFS_DIR}/feralfile-launcher_arm64.deb" ./ 2>/dev/null || true
+
 dpkg -i feralfile-launcher_arm64.deb
 
 # Create systemd service
