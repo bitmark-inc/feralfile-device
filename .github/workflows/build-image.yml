@@ -45,13 +45,14 @@ jobs:
           compression: zip
           compression-level: 6
           username: feralfile
-          password: feralfile
+          password: ''
+          pi-gen-version: arm64
           hostname: FeralFileDevice
           locale: en_US.UTF-8
           keyboard-keymap: us
           keyboard-layout: English (US)
           release: bookworm
-          enable-ssh: 1
+          enable-ssh: 0
           disable-first-boot-user-rename: 1
           export-last-stage-only: true
           wpa-country: 'US'
@@ -66,4 +67,5 @@ jobs:
 
       - name: Cleanup Docker Containers
         if: always()
+        continue-on-error: true
         run: sudo docker rm -v pigen_work

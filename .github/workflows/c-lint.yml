@@ -1,32 +1,24 @@
 name: C Lint
 
-on:
-  pull_request:
-    paths:
-      - 'feralfile-bluetooth/**.c'
-      - 'feralfile-bluetooth/**.h'
-      - 'feralfile-bluetooth/**.cpp'
-      - 'feralfile-bluetooth/**.hpp'
-      - 'feralfile-bluetooth/**.cc'
+on: [pull_request]
 
 jobs:
-  c_lint:
-    name: Lint C Code
+  lint:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Install cppcheck
-        run: sudo apt-get update && sudo apt-get install -y cppcheck
+        run: sudo apt-get install -y cppcheck
 
-      - name: Run cppcheck
-        run: |
-          cppcheck --enable=all --inconclusive --std=c11 --force feralfile-bluetooth/
+      - name: Install reviewdog
+        uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
 
-      - name: Check for cppcheck issues
-        if: failure()
+      - name: Run cppcheck and reviewdog
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "cppcheck found issues in C code."
-          exit 1
+          cppcheck --enable=all --xml --xml-version=2 . 2> cppcheck-result.xml
+          reviewdog -f=cppcheck -reporter=github-pr-review

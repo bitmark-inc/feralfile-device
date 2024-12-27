@@ -4,25 +4,22 @@ policykit-1
 xserver-xorg-video-fbdev
 xserver-xorg
 xinit
+lightdm
+lightdm-gtk-greeter
+
+# Audio
+alsa-utils
+pulseaudio
+pulseaudio-module-bluetooth
+
+# Bluetooth
+bluetooth
+bluez
+blueman
 
 # Browser
 chromium
 rpi-chromium-mods
-
-# Graphics
-mesa-vulkan-drivers
-
-# Basic audio
-alsa-utils
-
-# Required fonts
-fonts-liberation2
-
-# Bluetooth support
-bluetooth
-bluez
-bluez-tools
-python3-bluez
 
 # Flutter app dependencies
 libgtk-3-0
