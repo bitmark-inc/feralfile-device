@@ -8,7 +8,7 @@ cat > /home/feralfile/.config/autostart/feralfile-launcher.desktop <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=Feral File Launcher
-Exec=/opt/feralfile/launcher
+Exec=/opt/feralfile/feralfile
 X-GNOME-Autostart-enabled=true
 DESKTOP
 
