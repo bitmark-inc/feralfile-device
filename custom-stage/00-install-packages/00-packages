@@ -1,38 +1,14 @@
-# Essential desktop
+gstreamer1.0-x gstreamer1.0-omx gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-libav
+gtk2-engines alsa-utils
 desktop-base
+git
 policykit-1
-xserver-xorg-video-fbdev
-xserver-xorg
-xinit
-lightdm
-lightdm-gtk-greeter
-
-# Audio
-alsa-utils
-pulseaudio
-pulseaudio-module-bluetooth
-
-# Bluetooth
-bluetooth
-bluez
-blueman
-
-# Browser
-chromium
-rpi-chromium-mods
-
-# Flutter app dependencies
-libgtk-3-0
-libblkid1
-liblzma5
-libsecret-1-0
-libjsoncpp25
-libatk1.0-0
-libatk-bridge2.0-0
-libatspi2.0-0
-libcairo2
-libdbus-1-3
-libdbus-glib-1-2
-libglib2.0-0
-libpango-1.0-0
-libpangocairo-1.0-0
+gvfs
+rfkill
+chromium rpi-chromium-mods libwidevinecdm0
+gldriver-test
+fonts-droid-fallback
+fonts-liberation2
+obconf
+raindrop
+vulkan-tools mesa-vulkan-drivers
