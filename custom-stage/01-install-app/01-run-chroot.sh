@@ -14,3 +14,14 @@ DESKTOP
 
 # Set correct ownership
 chown -R feralfile:feralfile /home/feralfile/.config
+
+# Configure auto-login for feralfile user
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/12-autologin.conf <<EOF
+[Seat:*]
+autologin-user=feralfile
+autologin-user-timeout=0
+EOF
+
+# Create btautopair file to enable Bluetooth HID auto-pairing
+touch /boot/firmware/btautopair
