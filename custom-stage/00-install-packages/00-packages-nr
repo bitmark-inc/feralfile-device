@@ -5,3 +5,4 @@ zenity xdg-utils
 gvfs-backends gvfs-fuse
 lightdm gnome-themes-extra-data gnome-icon-theme
 gnome-keyring
+bluez
