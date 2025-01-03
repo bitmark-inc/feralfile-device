@@ -7,6 +7,3 @@ chromium rpi-chromium-mods libwidevinecdm0
 gldriver-test
 fonts-droid-fallback
 fonts-liberation2
-obconf
-raindrop
-vulkan-tools mesa-vulkan-drivers

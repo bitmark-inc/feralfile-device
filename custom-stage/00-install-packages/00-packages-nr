@@ -1,8 +1,5 @@
 xserver-xorg-video-fbdev xserver-xorg xinit
-mousepad
-lxde lxtask menu-xdg
-zenity xdg-utils
+lxde
+xdg-utils
 gvfs-backends gvfs-fuse
-lightdm gnome-themes-extra-data gnome-icon-theme
-gnome-keyring
 bluez
