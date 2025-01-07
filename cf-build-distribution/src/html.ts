@@ -37,8 +37,9 @@ export function generateHtml(files: FileInfo[]): string {
     }
     .version-cell {
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       gap: 8px;
+      align-items: center;
     }
 
     /* Modal styles */
@@ -104,6 +105,12 @@ export function generateHtml(files: FileInfo[]): string {
         width: 95%;
       }
     }
+
+    .size-info {
+      color: #666;
+      min-width: 80px;
+      display: inline-block;
+    }
   </style>
 </head>
 <body>
@@ -122,10 +129,19 @@ export function generateHtml(files: FileInfo[]): string {
           <td>${file.branch}</td>
           <td>${file.version}</td>
           <td>
+            ${file.debUrl ? `
             <div class="version-cell">
-              ${file.debUrl ? `<a href="/download/${file.debUrl}">Download Feral File launcher app (Expert only)</a>` : ''}
-              ${file.zipUrl ? `<a href="/download/${file.zipUrl}">Download Raspberry Pi Image</a> <a href="#" onclick="showGuide(event)">How to flash</a>` : ''}
+              <a href="/download/${file.debUrl}">Download Feral File launcher app</a>
+              <span class="size-info">${file.debSize ? `(${file.debSize})` : ''}</span>
+              <span style="color: #666">(Expert only)</span>
             </div>
+            ` : ''}${file.zipUrl ? `
+            <div class="version-cell">
+              <a href="/download/${file.zipUrl}">Download Raspberry Pi Image</a>
+              <span class="size-info">${file.zipSize ? `(${file.zipSize})` : ''}</span>
+              <a href="#" onclick="showGuide(event)">How to flash</a>
+            </div>
+            ` : ''}
           </td>
         </tr>
       `).join('')}
