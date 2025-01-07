@@ -63,14 +63,30 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           verbose-output: true
 
+      - name: Install rclone
+        run: |
+          sudo apt-get update && sudo apt-get install -y rclone
+          
+      - name: Configure rclone
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf << EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          secret_access_key = ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          acl = private
+          no_check_bucket = true
+          EOF
+
       - name: Upload to Cloudflare R2
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           # Get the first zip file from the deploy directory
           IMAGE_FILE=$(ls pi-gen/deploy/*.zip | head -n 1)
-          npx wrangler r2 object put ${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_${{ github.event.inputs.version }}.zip --file "$IMAGE_FILE"
+          # Upload with rclone using 100MB chunk size for optimal performance
+          rclone copy "$IMAGE_FILE" r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_${{ github.event.inputs.version }}.zip --s3-upload-cutoff=100M --s3-chunk-size=100M
 
       - name: Cleanup Docker Containers
         if: always()
