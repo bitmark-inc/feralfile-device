@@ -1,0 +1,83 @@
+name: Build Feral File Device Image to Cloudflare R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image version'
+        required: true
+        default: '0.0.1'
+
+jobs:
+  # --- STEP 1: Reuse Build App Job ---
+  build-app:
+    name: Build Feral File Launcher App
+    uses: ./.github/workflows/build-app-to-cf.yml
+    with:
+      version: ${{ github.event.inputs.version }}
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  # --- STEP 2: Build Raspberry Pi Image ---
+  build-image:
+    name: Generate Raspberry Pi OS Image
+    runs-on: ['self-hosted', 'ARM64']
+    needs: build-app
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download Launcher App from R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npm install wrangler@latest
+          npx wrangler r2 object get ${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_launcher_${{ github.event.inputs.version }}.deb
+          mv ./feralfile-launcher_${{ github.event.inputs.version }}_arm64.deb ./custom-stage/01-install-app/feralfile-launcher_arm64.deb
+
+      - name: Remame the package
+        run: |
+          # Rename downloaded package
+          mv ./custom-stage/packages/feralfile-launcher_${{ github.event.inputs.version }}_arm64.deb ./custom-stage/01-install-app/feralfile-launcher_arm64.deb
+
+      - name: Build Pi OS Image with pi-gen-action
+        uses: usimd/pi-gen-action@v1
+        with:
+          image-name: feralfile-device-${{ github.event.inputs.version }}
+          stage-list: stage0 stage1 stage2 ./custom-stage
+          compression: zip
+          compression-level: 6
+          username: feralfile
+          password: feralfile
+          pi-gen-version: arm64
+          hostname: FeralFileDevice
+          locale: en_US.UTF-8
+          keyboard-keymap: us
+          keyboard-layout: English (US)
+          release: bookworm
+          enable-ssh: 0
+          disable-first-boot-user-rename: 1
+          export-last-stage-only: true
+          wpa-country: 'US'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          verbose-output: true
+
+      - name: Upload to Cloudflare R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Get the first zip file from the deploy directory
+          IMAGE_FILE=$(ls pi-gen/deploy/*.zip | head -n 1)
+          npx wrangler r2 object put ${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_${{ github.event.inputs.version }}.zip --file "$IMAGE_FILE"
+
+      - name: Cleanup Docker Containers
+        if: always()
+        run: sudo docker rm -v pigen_work || true

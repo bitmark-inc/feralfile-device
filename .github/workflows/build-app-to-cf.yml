@@ -1,0 +1,136 @@
+name: Build FeralFile App for ARM64 to Cloudflare R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: 'Application version'
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: 'Application version'
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+
+jobs:
+  build:
+    name: Build and Package App
+    runs-on: ['self-hosted', 'ARM64']
+    defaults:
+      run:
+        working-directory: launcher-app
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            libbluetooth-dev \
+            libgtk-3-dev \
+            libatk1.0-dev \
+            libatk-bridge2.0-dev \
+            libglib2.0-dev \
+            libpango1.0-dev \
+            libcairo2-dev \
+            libblkid-dev \
+            liblzma-dev \
+            libsecret-1-dev \
+            libjsoncpp-dev \
+            at-spi2-core \
+            libatspi2.0-dev \
+            libglib2.0-dev \
+            libdbus-1-dev \
+            libdbus-glib-1-dev \
+            bluetooth \
+            bluez \
+            bluez-tools
+          
+          # Set pkg-config path
+          export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
+          
+          # Verify installations
+          echo "Checking ATK version:"
+          pkg-config --modversion atk
+          echo "Checking GTK version:"
+          pkg-config --modversion gtk+-3.0
+          echo "Checking AT-SPI version:"
+          pkg-config --modversion atspi-2
+
+      - name: Get Flutter dependencies
+        run: |
+          export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
+          flutter pub get
+
+      - name: Build C library
+        run: |
+          cd feralfile-bluetooth
+          make clean
+          make
+          mkdir -p ../build/linux/arm64/release/bundle/lib/
+          cp libbluetooth_service.so ../build/linux/arm64/release/bundle/lib/
+          cd ..
+
+      - name: Configure ATK
+        run: |
+          # Ensure AT-SPI is running
+          sudo systemctl start at-spi-dbus-bus.service || true
+          # Set GTK accessibility
+          export GTK_MODULES=gail:atk-bridge
+          export NO_AT_BRIDGE=0
+          # Set pkg-config path
+          export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
+
+      - name: Build Flutter app for Linux
+        run: |
+          export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
+          flutter config --enable-linux-desktop
+          flutter build linux --release --target-platform=linux-arm64
+
+      - name: Package as Debian .deb
+        env:
+          APP_NAME: feralfile-launcher
+          VERSION: ${{ inputs.version }}
+          ARCH: arm64
+          DESCRIPTION: "Feral File Connection Assistant"
+          MAINTAINER: "Bitmark Inc <support@feralfile.com>"
+          INSTALL_DIR: "/opt/feralfile"
+        run: |
+          mkdir -p package/DEBIAN
+          mkdir -p package$INSTALL_DIR/lib
+          cp -r build/linux/arm64/release/bundle/* package$INSTALL_DIR/
+          cp feralfile-bluetooth/libbluetooth_service.so package$INSTALL_DIR/lib/
+          
+          cat <<EOF > package/DEBIAN/control
+          Package: $APP_NAME
+          Version: $VERSION
+          Section: base
+          Priority: optional
+          Architecture: arm64
+          Maintainer: $MAINTAINER
+          Description: $DESCRIPTION
+          EOF
+          
+          chmod -R 755 package$INSTALL_DIR
+          dpkg-deb --build package ${APP_NAME}_${VERSION}_arm64.deb
+
+      - name: Upload to Cloudflare R2
+        run: |
+          echo "*** Uploading to Cloudflare R2 ***"
+          npm install wrangler@latest
+          CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }} CLOUDFLARE_ACCOUNT_ID=${{ secrets.CLOUDFLARE_ACCOUNT_ID }} npx wrangler r2 object put ${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_launcher_${{ inputs.version }}.deb --file feralfile-launcher_${{ inputs.version }}_arm64.deb
