@@ -14,7 +14,9 @@ on:
         type: string
         description: 'Application version'
     secrets:
-      CLOUDFLARE_API_TOKEN:
+      CLOUDFLARE_ACCESS_KEY_ID:
+        required: true
+      CLOUDFLARE_SECRET_ACCESS_KEY:
         required: true
       CLOUDFLARE_ACCOUNT_ID:
         required: true
