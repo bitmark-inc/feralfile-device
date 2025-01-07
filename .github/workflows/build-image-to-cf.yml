@@ -61,7 +61,12 @@ jobs:
       - name: Download Launcher App from R2
         run: |
           APP_VERSION="${{ github.event.inputs.existing_app_version || github.event.inputs.version }}"
-          rclone copyto r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_launcher_${APP_VERSION}.deb custom-stage/01-install-app/feralfile-launcher_arm64.deb
+          rclone copyto "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile-launcher_${APP_VERSION}.deb" "custom-stage/01-install-app/feralfile-launcher_arm64.deb" \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=32 \
+            --verbose \
+            --stats=1s
 
       - name: Build Pi OS Image with pi-gen-action
         uses: usimd/pi-gen-action@v1
@@ -89,8 +94,13 @@ jobs:
         run: |
           # Get the first zip file from the deploy directory
           IMAGE_FILE=$(ls pi-gen/deploy/*.zip | head -n 1)
-          # Upload with rclone using 100MB chunk size for optimal performance
-          rclone copyto "$IMAGE_FILE" "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_${{ github.event.inputs.version }}.zip" --s3-upload-cutoff=100M --s3-chunk-size=100M
+          # Upload with rclone using multiple threads and verbose logging
+          rclone copyto "$IMAGE_FILE" "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_${{ github.event.inputs.version }}.zip" \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=7 \
+            --verbose \
+            --stats=1s
 
       - name: Cleanup Docker Containers
         if: always()

@@ -151,5 +151,10 @@ jobs:
 
       - name: Upload to Cloudflare R2
         run: |
-          # Upload with rclone using 100MB chunk size for optimal performance
-          rclone copy feralfile-launcher_${{ inputs.version }}_arm64.deb r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} --s3-upload-cutoff=100M --s3-chunk-size=100M
+          # Upload with rclone using multiple threads and verbose logging
+          rclone copy feralfile-launcher_${{ inputs.version }}_arm64.deb r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=32 \
+            --verbose \
+            --stats=1s
