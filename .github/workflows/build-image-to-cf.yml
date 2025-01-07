@@ -39,13 +39,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npm install wrangler@latest
-          npx wrangler r2 object get ${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_launcher_${{ github.event.inputs.version }}.deb
-          mv ./feralfile-launcher_${{ github.event.inputs.version }}_arm64.deb ./custom-stage/01-install-app/feralfile-launcher_arm64.deb
-
-      - name: Remame the package
-        run: |
-          # Rename downloaded package
-          mv ./custom-stage/packages/feralfile-launcher_${{ github.event.inputs.version }}_arm64.deb ./custom-stage/01-install-app/feralfile-launcher_arm64.deb
+          npx wrangler r2 object get ${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_launcher_${{ github.event.inputs.version }}.deb --file custom-stage/01-install-app/feralfile-launcher_arm64.deb
 
       - name: Build Pi OS Image with pi-gen-action
         uses: usimd/pi-gen-action@v1
