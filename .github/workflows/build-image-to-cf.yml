@@ -61,7 +61,7 @@ jobs:
       - name: Download Launcher App from R2
         run: |
           APP_VERSION="${{ github.event.inputs.existing_app_version || github.event.inputs.version }}"
-          rclone copyto "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile-launcher_${APP_VERSION}.deb" "custom-stage/01-install-app/feralfile-launcher_arm64.deb" \
+          rclone copyto "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile-launcher_${APP_VERSION}_arm64.deb" "custom-stage/01-install-app/feralfile-launcher_arm64.deb" \
             --s3-upload-cutoff=100M \
             --s3-chunk-size=100M \
             --transfers=32 \
