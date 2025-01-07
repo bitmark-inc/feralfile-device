@@ -31,11 +31,13 @@ export async function listFiles(bucket: R2Bucket): Promise<FileInfo[]> {
   const files: FileInfo[] = [];
   
   for (const obj of objects.objects) {
-    const [branch, filename] = obj.key.split('/');
+    const parts = obj.key.split('/');
+    const filename = parts.pop();
+    const branch = parts.join('/');
     if (!filename) continue;
 
-    if (filename.includes('feralfile_device_launcher')) {
-      const version = filename.match(/launcher_(.+?)\.deb/)?.[1];
+    if (filename.includes('feralfile-launcher')) {
+      const version = filename.match(/launcher_(.+?)_arm64\.deb/)?.[1];
       if (version) {
         const existing = files.find(f => f.branch === branch && f.version === version);
         if (existing) {
@@ -53,7 +55,7 @@ export async function listFiles(bucket: R2Bucket): Promise<FileInfo[]> {
         }
       }
     } else if (filename.includes('feralfile_device')) {
-      const version = filename.match(/device_(.+?)\.zip/)?.[1];
+      const version = filename.match(/feralfile_device_(.+?)\.zip/)?.[1]?.replace('_arm64', '');
       if (version) {
         const existing = files.find(f => f.branch === branch && f.version === version);
         if (existing) {
