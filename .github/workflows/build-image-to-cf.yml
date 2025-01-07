@@ -7,11 +7,16 @@ on:
         description: 'Image version'
         required: true
         default: '0.0.1'
+      existing_app_version:
+        description: 'Existing app version (leave empty to build new app)'
+        required: false
+        type: string
 
 jobs:
   # --- STEP 1: Reuse Build App Job ---
   build-app:
     name: Build Feral File Launcher App
+    if: ${{ github.event.inputs.existing_app_version == '' }}
     uses: ./.github/workflows/build-app-to-cf.yml
     with:
       version: ${{ github.event.inputs.version }}
@@ -24,7 +29,8 @@ jobs:
   build-image:
     name: Generate Raspberry Pi OS Image
     runs-on: ['self-hosted', 'ARM64']
-    needs: build-app
+    needs: [build-app]
+    if: ${{ always() && (needs.build-app.result == 'success' || needs.build-app.result == 'skipped') }}
 
     steps:
       - name: Checkout Repository
@@ -54,7 +60,8 @@ jobs:
 
       - name: Download Launcher App from R2
         run: |
-          rclone copy r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_launcher_${{ github.event.inputs.version }}.deb custom-stage/01-install-app/feralfile-launcher_arm64.deb
+          APP_VERSION="${{ github.event.inputs.existing_app_version || github.event.inputs.version }}"
+          rclone copyto r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_launcher_${APP_VERSION}.deb custom-stage/01-install-app/feralfile-launcher_arm64.deb
 
       - name: Build Pi OS Image with pi-gen-action
         uses: usimd/pi-gen-action@v1
