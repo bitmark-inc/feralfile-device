@@ -1,5 +1,6 @@
 // lib/services/bluetooth_service.dart
 import 'dart:ffi';
+import 'dart:isolate';
 import 'package:feralfile/services/logger.dart';
 
 import '../ffi/bindings.dart';
@@ -11,6 +12,7 @@ class BluetoothService {
   final BluetoothBindings _bindings = BluetoothBindings();
   final CommandService _commandService = CommandService();
   static void Function(WifiCredentials)? _onCredentialsReceived;
+  static final _commandPort = ReceivePort();
 
   BluetoothService() {
     _initialize();
@@ -45,6 +47,12 @@ class BluetoothService {
     } else {
       logger.info('Bluetooth service started. Waiting for connections...');
     }
+
+    _commandPort.listen((message) {
+      if (message is List) {
+        CommandService().handleCommand(message[0], message[1]);
+      }
+    });
   }
 
   // Store the callback reference for cleanup
@@ -87,13 +95,21 @@ class BluetoothService {
 
   // Make callback static
   static void _staticCommandCallback(int success, Pointer<Uint8> data) {
+    // Copy data to prevent memory issues
+    final bytes = data.asTypedList(1024).sublist(0);
+    // Fire and forget - no waiting
+    Isolate.spawn(_parseCommandInIsolate, [_commandPort.sendPort, bytes]);
+  }
+
+  static void _parseCommandInIsolate(List<dynamic> args) {
+    final SendPort sendPort = args[0];
+    final Uint8List bytes = args[1];
+
     try {
-      final rawBytes = data.asTypedList(1024);
-      var (command, commandData, _) =
-          VarintParser.parseDoubleString(rawBytes, 0);
-      CommandService().handleCommand(command, commandData);
+      var (command, commandData, _) = VarintParser.parseDoubleString(bytes, 0);
+      sendPort.send([command, commandData]);
     } catch (e) {
-      logger.warning('Error processing command: $e');
+      // Handle error
     }
   }
 }
