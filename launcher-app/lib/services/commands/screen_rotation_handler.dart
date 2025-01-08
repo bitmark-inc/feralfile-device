@@ -16,7 +16,7 @@ class ScreenRotationHandler implements CommandHandler {
         logger.info('Screen rotated $rotation');
       }
     } catch (e) {
-      logger.warning('Error rotating screen: $e');
+      logger.severe('Error rotating screen: $e');
     }
   }
 }
