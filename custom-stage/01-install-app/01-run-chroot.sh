@@ -2,15 +2,15 @@
 
 dpkg -i feralfile-launcher_arm64.deb
 
-# Create autostart directory and desktop entry
-mkdir -p /home/feralfile/.config/autostart
-cat > /home/feralfile/.config/autostart/feralfile-launcher.desktop <<DESKTOP
-[Desktop Entry]
-Type=Application
-Name=Feral File Launcher
-Exec=/opt/feralfile/feralfile
-X-GNOME-Autostart-enabled=true
-DESKTOP
+# Create autostart
+mkdir -p /home/feralfile/.config/openbox
+cat > /home/feralfile/.config/openbox/autostart <<EOF
+xset s off
+xset s noblank
+xset -dpms
+
+/opt/feralfile/feralfile &
+EOF
 
 # Set correct ownership
 chown -R feralfile:feralfile /home/feralfile/.config
