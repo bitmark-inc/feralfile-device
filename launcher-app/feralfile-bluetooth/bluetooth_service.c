@@ -9,9 +9,10 @@
 #include <time.h>
 
 #define LOG_TAG "BluetoothService"
-#define FERALFILE_SERVICE_NAME   "FeralFile Connection"
+#define FERALFILE_SERVICE_NAME   "FeralFile Device"
 #define FERALFILE_SERVICE_UUID   "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
-#define FERALFILE_WIFI_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+#define FERALFILE_SETUP_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+#define FERALFILE_CMD_CHAR_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 
 static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
@@ -23,6 +24,9 @@ static pthread_t bluetooth_thread;
 
 typedef void (*connection_result_callback)(int, const char*);
 static connection_result_callback result_callback = NULL;
+
+typedef void (*command_callback)(const char* command, const char* data);
+static command_callback cmd_callback = NULL;
 
 static FILE* log_file = NULL;
 
@@ -75,7 +79,18 @@ static const gchar service_xml[] =
     "      <property name='UUID' type='s' access='read'/>"
     "      <property name='Primary' type='b' access='read'/>"
     "    </interface>"
-    "    <node name='char0'>"
+    "    <node name='setup_char'>"
+    "      <interface name='org.bluez.GattCharacteristic1'>"
+    "        <property name='UUID' type='s' access='read'/>"
+    "        <property name='Service' type='o' access='read'/>"
+    "        <property name='Flags' type='as' access='read'/>"
+    "        <method name='WriteValue'>"
+    "          <arg name='value' type='ay' direction='in'/>"
+    "          <arg name='options' type='a{sv}' direction='in'/>"
+    "        </method>"
+    "      </interface>"
+    "    </node>"
+    "    <node name='cmd_char'>"
     "      <interface name='org.bluez.GattCharacteristic1'>"
     "        <property name='UUID' type='s' access='read'/>"
     "        <property name='Service' type='o' access='read'/>"
@@ -166,6 +181,32 @@ static void handle_write_value(GDBusConnection *conn,
     // Pass raw bytes to callback
     if (result_callback) {
         result_callback(1, (const char*)data);
+    }
+
+    g_variant_unref(array_variant);
+    if (options_variant) g_variant_unref(options_variant);
+    
+    g_dbus_method_invocation_return_value(invocation, NULL);
+}
+
+static void handle_command_write(GDBusConnection *conn,
+                               const gchar *sender,
+                               const gchar *object_path,
+                               const gchar *interface_name,
+                               const gchar *method_name,
+                               GVariant *parameters,
+                               GDBusMethodInvocation *invocation,
+                               gpointer user_data) {
+    GVariant *array_variant = NULL;
+    GVariant *options_variant = NULL;
+    g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
+
+    gsize n_elements;
+    const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
+    
+    // Pass raw bytes to callback
+    if (cmd_callback) {
+        cmd_callback(1, data);
     }
 
     g_variant_unref(array_variant);

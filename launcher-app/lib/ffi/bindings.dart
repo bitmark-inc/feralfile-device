@@ -14,10 +14,12 @@ typedef BluetoothInitNative = Int32 Function();
 typedef BluetoothInitDart = int Function();
 
 typedef BluetoothStartNative = Int32 Function(
-  Pointer<NativeFunction<ConnectionResultCallbackNative>> callback,
+  Pointer<NativeFunction<ConnectionResultCallbackNative>> setup_callback,
+  Pointer<NativeFunction<CommandCallbackNative>> cmd_callback,
 );
 typedef BluetoothStartDart = int Function(
-  Pointer<NativeFunction<ConnectionResultCallbackNative>> callback,
+  Pointer<NativeFunction<ConnectionResultCallbackNative>> setup_callback,
+  Pointer<NativeFunction<CommandCallbackNative>> cmd_callback,
 );
 
 typedef BluetoothStopNative = Void Function();
@@ -25,6 +27,11 @@ typedef BluetoothStopDart = void Function();
 
 typedef SetLogFileNative = Void Function(Pointer<Utf8> path);
 typedef SetLogFileDart = void Function(Pointer<Utf8> path);
+
+// Add command callback typedef
+typedef CommandCallbackNative = Void Function(
+    Int32 success, Pointer<Uint8> data);
+typedef CommandCallbackDart = void Function(String command, String data);
 
 class BluetoothBindings {
   late DynamicLibrary _lib;

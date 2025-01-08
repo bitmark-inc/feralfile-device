@@ -1,15 +1,15 @@
 // lib/services/bluetooth_service.dart
 import 'dart:ffi';
-import 'dart:typed_data';
-import 'dart:convert';
 import 'package:feralfile/services/logger.dart';
 
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
+import '../services/command_service.dart';
+import '../utils/varint_parser.dart';
 
 class BluetoothService {
   final BluetoothBindings _bindings = BluetoothBindings();
-  // Make callback static
+  final CommandService _commandService = CommandService();
   static void Function(WifiCredentials)? _onCredentialsReceived;
 
   BluetoothService() {
@@ -24,17 +24,24 @@ class BluetoothService {
       return;
     }
 
-    // Set up the callback as a listener for background thread safety
-    late final NativeCallable<ConnectionResultCallbackNative> callback;
-    callback = NativeCallable<ConnectionResultCallbackNative>.listener(
+    late final NativeCallable<ConnectionResultCallbackNative> setupCallback;
+    late final NativeCallable<CommandCallbackNative> cmdCallback;
+
+    setupCallback = NativeCallable<ConnectionResultCallbackNative>.listener(
       _staticConnectionResultCallback,
     );
 
-    // Start the Bluetooth service
-    int startResult = _bindings.bluetooth_start(callback.nativeFunction);
+    cmdCallback = NativeCallable<CommandCallbackNative>.listener(
+      _staticCommandCallback,
+    );
+
+    int startResult = _bindings.bluetooth_start(
+        setupCallback.nativeFunction, cmdCallback.nativeFunction);
+
     if (startResult != 0) {
       logger.warning('Failed to start Bluetooth service.');
-      callback.close();
+      setupCallback.close();
+      cmdCallback.close();
     } else {
       logger.info('Bluetooth service started. Waiting for connections...');
     }
@@ -47,54 +54,20 @@ class BluetoothService {
   static void _staticConnectionResultCallback(
       int success, Pointer<Uint8> data) {
     try {
-      // Convert raw pointer to a Uint8List
       final rawBytes = data.asTypedList(1024);
-      var offset = 0;
-
-      // Read SSID length (varint)
-      var (ssidLength, ssidOffset) = _readVarint(rawBytes, offset);
-      offset = ssidOffset;
-
-      // Read SSID
-      final ssid = ascii.decode(rawBytes.sublist(offset, offset + ssidLength));
-      offset += ssidLength;
-
-      // Read password length (varint)
-      var (passwordLength, passwordOffset) = _readVarint(rawBytes, offset);
-      offset = passwordOffset;
-
-      // Read password
-      final password =
-          ascii.decode(rawBytes.sublist(offset, offset + passwordLength));
+      var (ssid, password, _) = VarintParser.parseDoubleString(rawBytes, 0);
 
       logger
           .info('Received WiFi credentials - SSID: $ssid, password: $password');
 
-      // Create WifiCredentials object
       final credentials = WifiCredentials(ssid: ssid, password: password);
 
-      // Notify the callback if registered
       if (_onCredentialsReceived != null) {
         _onCredentialsReceived!(credentials);
       }
     } catch (e) {
       logger.warning('Error processing WiFi credentials: $e');
     }
-  }
-
-  // Helper method to read varint
-  static (int value, int newOffset) _readVarint(Uint8List bytes, int offset) {
-    var value = 0;
-    var shift = 0;
-
-    while (true) {
-      final byte = bytes[offset++];
-      value |= (byte & 0x7F) << shift;
-      if ((byte & 0x80) == 0) break;
-      shift += 7;
-    }
-
-    return (value, offset);
   }
 
   void startListening(void Function(WifiCredentials) onCredentialsReceived) {
@@ -108,5 +81,19 @@ class BluetoothService {
     _callback?.close();
     _callback = null;
     _onCredentialsReceived = null;
+  }
+
+  Stream<CommandData> get commandStream => _commandService.commandStream;
+
+  // Make callback static
+  static void _staticCommandCallback(int success, Pointer<Uint8> data) {
+    try {
+      final rawBytes = data.asTypedList(1024);
+      var (command, commandData, _) =
+          VarintParser.parseDoubleString(rawBytes, 0);
+      CommandService().handleCommand(command, commandData);
+    } catch (e) {
+      logger.warning('Error processing command: $e');
+    }
   }
 }
