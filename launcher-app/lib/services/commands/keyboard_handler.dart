@@ -16,7 +16,7 @@ class KeyboardHandler implements CommandHandler {
         logger.info('Keyboard event sent: keyCode=$keyCode');
       }
     } catch (e) {
-      logger.warning('Error sending keyboard event: $e');
+      logger.severe('Error sending keyboard event: $e');
     }
   }
 }

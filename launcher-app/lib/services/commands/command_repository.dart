@@ -2,6 +2,7 @@ import 'dart:convert';
 import '../logger.dart';
 import 'screen_rotation_handler.dart';
 import 'keyboard_handler.dart';
+import 'cursor_handler.dart';
 
 abstract class CommandHandler {
   Future<void> execute(Map<String, dynamic> data);
@@ -17,6 +18,7 @@ class CommandRepository {
     // Register handlers
     _handlers['rotate'] = ScreenRotationHandler();
     _handlers['sendKeyboardEvent'] = KeyboardHandler();
+    _handlers['dragGesture'] = CursorHandler();
     // Add more handlers here as needed
   }
 
@@ -30,7 +32,7 @@ class CommandRepository {
         logger.warning('No handler found for command: $command');
       }
     } catch (e) {
-      logger.warning('Error executing command $command: $e');
+      logger.severe('Error executing command $command: $e');
     }
   }
 }
