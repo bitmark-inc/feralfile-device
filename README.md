@@ -22,9 +22,9 @@ cd pi-gen
 ```
 
 #### 2.	Follow the pi-gen folder convention for stages:
-	•	Each stage (e.g., stage1, stage2) contains scripts to configure the image.
-	•	Custom configurations are added in a custom-stage directory, replacing the default stage3.
-	•	Package lists are defined in 00-packages for mandatory packages and 00-packages-nr for recommended (non-essential) ones.
+•	Each stage (e.g., stage1, stage2) contains scripts to configure the image.
+•	Custom configurations are added in a custom-stage directory, replacing the default stage3.
+•	Package lists are defined in 00-packages for mandatory packages and 00-packages-nr for recommended (non-essential) ones.
 #### 3.	Copy the custom-stage folder into pi-gen:
 
 ```bash
@@ -43,17 +43,17 @@ cp -r ../custom-stage pi-gen/stage3
 
 The custom-stage folder customizes the image to support the Feral File launcher app. It includes:
 #### 1.	Package Installation:
-	•	Installs only required UI packages for GTK and Flutter compatibility.
-	•	Package lists are in:
-	•	00-packages - Required packages.
-	•	00-packages-nr - Recommended packages (not mandatory).
+•	Installs only required UI packages for GTK and Flutter compatibility.
+•	Package lists are in:
+•	00-packages - Required packages.
+•	00-packages-nr - Recommended packages (not mandatory).
 #### 2.	Launcher App Installation:
-	•	Installs the Feral File launcher app as a Debian package (.deb).
-	•	Automatically sets the launcher to boot at startup using the script 01-run-chroot.sh.
+•	Installs the Feral File launcher app as a Debian package (.deb).
+•	Automatically sets the launcher to boot at startup using the script 01-run-chroot.sh.
 #### 3.	Boot Configuration Script (01-run-chroot.sh):
-	•	Copies the app to /opt/feralfile.
-	•	Ensures the app launches on boot using systemd service configuration.
-	•	Enables dynamic display resizing and orientation adjustments.
+•	Copies the app to /opt/feralfile.
+•	Ensures the app launches on boot using systemd service configuration.
+•	Enables dynamic display resizing and orientation adjustments.
 
 ### 3. CI/CD Workflow
 
@@ -61,20 +61,20 @@ The Continuous Integration (CI) process automates building and deploying the ima
 
 Steps:
 #### 1.	Build the Launcher App:
-	•	The launcher app (Flutter) is built in the launcher-app folder.
-	•	Runs on an ARM64 instance because Flutter does not support cross-architecture compiling.
+•	The launcher app (Flutter) is built in the launcher-app folder.
+•	Runs on an ARM64 instance because Flutter does not support cross-architecture compiling.
 #### 2.	Create a Debian Package (.deb):
-	•	Packages the compiled app into a .deb file for installation.
-	•	Uses GitHub Actions to automate this step.
+•	Packages the compiled app into a .deb file for installation.
+•	Uses GitHub Actions to automate this step.
 #### 3.	Integrate the App into the Image:
-	•	Copies the .deb file into the custom-stage folder of pi-gen.
-	•	Replaces the default stage3 in pi-gen to include the app and required dependencies.
+•	Copies the .deb file into the custom-stage folder of pi-gen.
+•	Replaces the default stage3 in pi-gen to include the app and required dependencies.
 
 ## Contributing
 
 ### 1. App Development
-	•	Update the launcher app code in the launcher-app folder.
-	•	Build the app and generate the Debian package:
+•	Update the launcher app code in the launcher-app folder.
+•	Build the app and generate the Debian package:
 
 flutter build linux --release --target-platform=linux-arm64
 dpkg-deb --build package feralfile-launcher_<version>_arm64.deb
@@ -86,30 +86,30 @@ scp feralfile-launcher_<version>_arm64.deb pi@<raspberry-pi-ip>:~
 
 
 	•	Install and test:
-
+```bash
 sudo dpkg -i feralfile-launcher_<version>_arm64.deb
 /opt/feralfile/feralfile
+```
 
 ### 2. Image Customization
-	•	Add or Remove Packages:
+•	Add or Remove Packages:
 Update 00-packages or 00-packages-nr in custom-stage.
-	•	Update Boot Script:
+•	Update Boot Script:
 Modify 01-run-chroot.sh in custom-stage to change startup behavior.
-	•	Test the Updated Image:
+•	Test the Updated Image:
 Rebuild the image and test on the Raspberry Pi.
 
-Building and Distributing the Image
-	1.	Use the GitHub Action to build and deploy the image:
-GitHub Action Workflow
-	2.	Fill in the required parameters:
-	•	Branch: Select the GitHub branch to build from.
-	•	Version Number: Specify the app version to include.
-	•	Skip App Building: Optionally, use a pre-built version by filling in the version number.
+### Building and Distributing the Image
+1.	Use the GitHub Action to build and deploy the image: [GitHub Action Workflow](https://github.com/bitmark-inc/feralfile-device/actions/workflows/build-image-to-cf.yml)
+2.	Fill in the required parameters:
+•	Branch: Select the GitHub branch to build from.
+•	Version Number: Specify the app version to include.
+•	Skip App Building: Optionally, use a pre-built version by filling in the version number.
 
 ## Testing Instructions
-	1.	Flash the generated image onto an SD card using Balena Etcher or Raspberry Pi Imager.
-	2.	Boot the Raspberry Pi and verify:
-	•	Dynamic resolution and orientation adjustments work.
-	•	Chromium launches in kiosk mode.
-	•	The launcher app starts automatically.
-	3.	Check logs for errors and confirm connectivity.
+1.	Flash the generated image onto an SD card using Balena Etcher or Raspberry Pi Imager.
+2.	Boot the Raspberry Pi and verify:
+•	Dynamic resolution and orientation adjustments work.
+•	Chromium launches in kiosk mode.
+•	The launcher app starts automatically.
+3.	Check logs for errors and confirm connectivity.
