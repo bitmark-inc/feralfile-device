@@ -18,6 +18,7 @@ class ChromiumLauncher {
       _chromiumProcess = await Process.start('chromium', [
         '--kiosk',
         '--disable-extensions',
+        '--remote-debugging-pipe',
         url,
         '--no-first-run',
         '--disable-translate',

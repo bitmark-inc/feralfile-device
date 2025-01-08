@@ -21,7 +21,7 @@ void main() async {
 
   if (isConnected) {
     logger.info('Already connected to WiFi. Launching Chromium directly...');
-    await ChromiumLauncher.launchAndExit();
+    await ChromiumLauncher.launchAndWait();
   } else {
     logger.info('No WiFi connection. Starting connection UI...');
     runApp(const FeralFileApp());
