@@ -1,140 +1,115 @@
 # Raspberry Pi Custom Image with Dynamic Resize and Kiosk Mode
 
-## **Overview**
-This project provides a custom Raspberry Pi image setup for:
-- **Dynamic resolution and orientation adjustment.**
-- Running **Chromium in kiosk mode** for digital artwork.
-- Ensuring the image is compact, using **PiShrink** to reduce size for distribution.
+## Overview
 
-## **Directory Structure**
-```
-project/
-├── README.md                 # Instructions for the team
-├── scripts/                  # Automation scripts
-│   ├── dynamic_resize.sh     # Dynamic resolution/rotation script
-│   ├── build_image.sh        # Custom image build script
-│   ├── setup_kiosk.sh        # Chromium kiosk setup script
-│   └── shrink_image.sh       # Image shrinking script using PiShrink
-├── configs/                  # Configuration files
-│   ├── kiosk.desktop         # Chromium autostart configuration
-│   ├── config.txt            # Raspberry Pi boot config
-│   └── 99-display-hotplug.rules  # Udev rule for HDMI hotplug
-└── images/                   # Prebuilt images (optional)
-```
+This project builds a custom Raspberry Pi image optimized for displaying digital artwork in kiosk mode. It supports dynamic resolution and orientation adjustment, boots directly into the Feral File launcher app, and includes essential tools for UI management.
 
----
+The image is built using pi-gen, a tool maintained by the Raspberry Pi Foundation, and customized to include only required packages and configurations.
 
-## **Scripts and Methods**
+## Building the Image
 
-### **1. Dynamic Resize Script**
-Handles:
-- Detecting display resolution.
-- Adjusting orientation (landscape/portrait).
-- Resizing Chromium to fullscreen.
+### Prerequisites
 
-File: `scripts/dynamic_resize.sh`
+- A Debian based system
+- A Raspberry Pi 4 or 5
 
-[See the script content above.]
+### 1. Generate the Base Image with pi-gen
+####	1.	Clone the pi-gen repository:
 
----
-
-### **2. Build Image Script**
-Automates unpacking, modifying, and repacking the Raspberry Pi image.
-
-File: `scripts/build_image.sh`
-
-[See the script content above.]
-
----
-
-### **3. Shrink Image Script**
-This script uses **PiShrink** to reduce the size of the Raspberry Pi image for efficient distribution.
-
-File: `scripts/shrink_image.sh`
-
-#### **Installation**
-Ensure PiShrink is installed:
 ```bash
-wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
-chmod +x pishrink.sh
-sudo mv pishrink.sh /usr/local/bin/pishrink
+git clone https://github.com/RPi-Distro/pi-gen.git
+cd pi-gen
 ```
 
-#### **Shrink Script**
+#### 2.	Follow the pi-gen folder convention for stages:
+	•	Each stage (e.g., stage1, stage2) contains scripts to configure the image.
+	•	Custom configurations are added in a custom-stage directory, replacing the default stage3.
+	•	Package lists are defined in 00-packages for mandatory packages and 00-packages-nr for recommended (non-essential) ones.
+#### 3.	Copy the custom-stage folder into pi-gen:
+
 ```bash
-#!/bin/bash
-set -e
-
-INPUT_IMAGE=$1
-if [[ -z "$INPUT_IMAGE" ]]; then
-    echo "Usage: $0 <image-file>"
-    exit 1
-fi
-
-echo "Shrinking image: $INPUT_IMAGE"
-sudo pishrink $INPUT_IMAGE
-echo "Image shrink complete!"
+cp -r ../custom-stage pi-gen/stage3
 ```
 
-Save the file as `scripts/shrink_image.sh` and make it executable:
+#### 4.	Build the image:
+
 ```bash
-chmod +x scripts/shrink_image.sh
+./build-docker.sh
 ```
 
----
+#### 5.	After completion, the generated image will be in the deploy folder.
 
-### **4. Master Setup Script**
-Installs dependencies, applies configurations, and sets up scripts.
+### 2. Custom-Stage Details
 
-File: `setup.sh`
+The custom-stage folder customizes the image to support the Feral File launcher app. It includes:
+#### 1.	Package Installation:
+	•	Installs only required UI packages for GTK and Flutter compatibility.
+	•	Package lists are in:
+	•	00-packages - Required packages.
+	•	00-packages-nr - Recommended packages (not mandatory).
+#### 2.	Launcher App Installation:
+	•	Installs the Feral File launcher app as a Debian package (.deb).
+	•	Automatically sets the launcher to boot at startup using the script 01-run-chroot.sh.
+#### 3.	Boot Configuration Script (01-run-chroot.sh):
+	•	Copies the app to /opt/feralfile.
+	•	Ensures the app launches on boot using systemd service configuration.
+	•	Enables dynamic display resizing and orientation adjustments.
 
-[See the script content above.]
+### 3. CI/CD Workflow
 
----
+The Continuous Integration (CI) process automates building and deploying the image.
 
-## **Workflow**
+Steps:
+#### 1.	Build the Launcher App:
+	•	The launcher app (Flutter) is built in the launcher-app folder.
+	•	Runs on an ARM64 instance because Flutter does not support cross-architecture compiling.
+#### 2.	Create a Debian Package (.deb):
+	•	Packages the compiled app into a .deb file for installation.
+	•	Uses GitHub Actions to automate this step.
+#### 3.	Integrate the App into the Image:
+	•	Copies the .deb file into the custom-stage folder of pi-gen.
+	•	Replaces the default stage3 in pi-gen to include the app and required dependencies.
 
-### **1. Building and Modifying the Image**
-1. Place the base Raspberry Pi OS image (`raspbian.img`) in the `images/` directory.
-2. Run the build script to apply modifications:
-   ```bash
-   ./scripts/build_image.sh
-   ```
+## Contributing
 
-### **2. Shrinking the Image**
-1. Shrink the modified image to reduce its size:
-   ```bash
-   ./scripts/shrink_image.sh images/raspbian.img
-   ```
+### 1. App Development
+	•	Update the launcher app code in the launcher-app folder.
+	•	Build the app and generate the Debian package:
 
-2. The shrunk image will overwrite the original image unless you use the `-k` option with `pishrink`.
+flutter build linux --release --target-platform=linux-arm64
+dpkg-deb --build package feralfile-launcher_<version>_arm64.deb
 
-### **3. Flashing the Image**
-1. Use a tool like **BalenaEtcher** or **Raspberry Pi Imager** to flash the shrunk image to an SD card.
 
-### **4. Auto-Expanding Filesystem on First Boot**
-The Raspberry Pi will automatically expand the filesystem on the first boot to utilize the full SD card space.
+	•	Transfer the .deb file to the Pi:
 
----
+scp feralfile-launcher_<version>_arm64.deb pi@<raspberry-pi-ip>:~
 
-## **Testing Instructions**
-1. Flash the modified, shrunk image to an SD card.
-2. Boot the Raspberry Pi and verify:
-   - Dynamic resolution and orientation.
-   - Chromium launches in kiosk mode.
-   - HDMI hotplug detection works.
 
----
+	•	Install and test:
 
-## **Next Steps**
-1. Host the project in a GitHub repository for collaboration.
-2. Integrate PiShrink into the CI/CD pipeline for automated image shrinking.
-3. Test the complete workflow and document any edge cases.
+sudo dpkg -i feralfile-launcher_<version>_arm64.deb
+/opt/feralfile/feralfile
 
----
+### 2. Image Customization
+	•	Add or Remove Packages:
+Update 00-packages or 00-packages-nr in custom-stage.
+	•	Update Boot Script:
+Modify 01-run-chroot.sh in custom-stage to change startup behavior.
+	•	Test the Updated Image:
+Rebuild the image and test on the Raspberry Pi.
 
-### **Changes Made**
-- Added a dedicated **Shrink Image Script** section to explain PiShrink usage.
-- Updated the workflow to include shrinking after building the image.
-- Highlighted how to install and use PiShrink for team members unfamiliar with it.
-- Retained the original structure for clarity.
+Building and Distributing the Image
+	1.	Use the GitHub Action to build and deploy the image:
+GitHub Action Workflow
+	2.	Fill in the required parameters:
+	•	Branch: Select the GitHub branch to build from.
+	•	Version Number: Specify the app version to include.
+	•	Skip App Building: Optionally, use a pre-built version by filling in the version number.
+
+## Testing Instructions
+	1.	Flash the generated image onto an SD card using Balena Etcher or Raspberry Pi Imager.
+	2.	Boot the Raspberry Pi and verify:
+	•	Dynamic resolution and orientation adjustments work.
+	•	Chromium launches in kiosk mode.
+	•	The launcher app starts automatically.
+	3.	Check logs for errors and confirm connectivity.
