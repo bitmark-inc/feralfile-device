@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../commands/command_repository.dart';
+import 'commands/command_repository.dart';
 
 class CommandService {
   static final CommandService _instance = CommandService._internal();
