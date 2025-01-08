@@ -150,7 +150,11 @@ static GVariant *char_get_property(GDBusConnection *conn,
                                    gpointer user_data) {
     if (g_strcmp0(interface_name, "org.bluez.GattCharacteristic1") == 0) {
         if (g_strcmp0(property_name, "UUID") == 0) {
-            return g_variant_new_string(FERALFILE_WIFI_CHAR_UUID);
+            if (strstr(object_path, "setup_char") != NULL) {
+                return g_variant_new_string(FERALFILE_SETUP_CHAR_UUID);
+            } else if (strstr(object_path, "cmd_char") != NULL) {
+                return g_variant_new_string(FERALFILE_CMD_CHAR_UUID);
+            }
         } else if (g_strcmp0(property_name, "Service") == 0) {
             return g_variant_new_object_path("/org/bluez/example/service0");
         } else if (g_strcmp0(property_name, "Flags") == 0) {
@@ -206,7 +210,7 @@ static void handle_command_write(GDBusConnection *conn,
     
     // Pass raw bytes to callback
     if (cmd_callback) {
-        cmd_callback(1, data);
+        cmd_callback("command", (const char*)data);
     }
 
     g_variant_unref(array_variant);
@@ -269,7 +273,7 @@ static void handle_get_objects(GDBusConnection *conn,
     // Add characteristic object
     GVariantBuilder *char_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sa{sv}}"));
     GVariantBuilder *char_props = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
-    g_variant_builder_add(char_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_WIFI_CHAR_UUID));
+    g_variant_builder_add(char_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_SETUP_CHAR_UUID));
     g_variant_builder_add(char_props, "{sv}", "Service", g_variant_new_object_path("/org/bluez/example/service0"));
     const gchar* flags[] = {"write", NULL};
     g_variant_builder_add(char_props, "{sv}", "Flags", g_variant_new_strv(flags, -1));
