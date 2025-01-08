@@ -5,6 +5,10 @@ dpkg -i feralfile-launcher_arm64.deb
 # Create autostart
 mkdir -p /home/feralfile/.config/openbox
 cat > /home/feralfile/.config/openbox/autostart <<EOF
+xset s off
+xset s noblank
+xset -dpms
+
 /opt/feralfile/feralfile &
 EOF
 
