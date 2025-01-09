@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:puppeteer/puppeteer.dart';
 import 'package:feralfile/services/logger.dart';
 
 class ChromiumLauncher {
-  static Process? _chromiumProcess;
+  static Browser? _browser;
+  static Page? _page;
 
   static Future<void> launchChromium(String url) async {
     try {
@@ -14,22 +16,47 @@ class ChromiumLauncher {
         return;
       }
 
-      // Launch Chromium in kiosk mode (full-screen without UI elements)
-      _chromiumProcess = await Process.start('chromium', [
-        '--kiosk',
-        '--disable-extensions',
-        '--remote-debugging-pipe',
-        url,
-        '--no-first-run',
-        '--disable-translate',
-        '--disable-infobars',
-        '--disable-session-crashed-bubble',
-        '--disable-features=TranslateUI',
-      ]);
+      // Launch browser
+      _browser = await puppeteer.launch(
+        headless: false,
+        args: [
+          '--kiosk',
+          '--disable-extensions',
+          '--disable-translate',
+          '--disable-infobars',
+          '--disable-session-crashed-bubble',
+          '--disable-features=TranslateUI',
+        ],
+        executablePath: whichResult.stdout.toString().trim(),
+      );
+
+      if (_browser == null) {
+        logger.severe('Failed to launch Chromium');
+        return;
+      }
+
+      // Create new page and navigate
+      _page = await _browser!.newPage();
+      await _page!.goto(url);
 
       logger.info('Chromium launched in kiosk mode.');
     } catch (e) {
       logger.severe('Error launching Chromium: $e');
+    }
+  }
+
+  static Future<String?> evaluateJavaScript(String expression) async {
+    try {
+      if (_page == null) {
+        logger.warning('No active page to evaluate JavaScript');
+        return null;
+      }
+
+      final result = await _page?.evaluate(expression);
+      return result?.toString();
+    } catch (e) {
+      logger.severe('Error evaluating JavaScript: $e');
+      return null;
     }
   }
 
@@ -38,7 +65,8 @@ class ChromiumLauncher {
   }
 
   static void dispose() {
-    _chromiumProcess?.kill();
-    _chromiumProcess = null;
+    _browser?.close();
+    _browser = null;
+    _page = null;
   }
 }

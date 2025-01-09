@@ -1,5 +1,4 @@
 import '../logger.dart';
-import '../cdp_client.dart';
 import 'command_repository.dart';
 
 class JavaScriptHandler implements CommandHandler {
@@ -8,7 +7,7 @@ class JavaScriptHandler implements CommandHandler {
     try {
       final jsCode = "local_command('${data['command']}', '${data['data']}')";
 
-      final result = await CDPClient.evaluateJavaScript(jsCode);
+      final result = await ChromiumLauncher.evaluateJavaScript(jsCode);
 
       if (result != null) {
         logger.info(
