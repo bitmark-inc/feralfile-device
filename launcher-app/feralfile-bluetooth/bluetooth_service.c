@@ -316,6 +316,7 @@ static void* bluetooth_handler(void* arg) {
 int bluetooth_init() {
     log_debug("[%s] Initializing Bluetooth\n", LOG_TAG);
     GError *error = NULL;
+    guint objects_reg_id, service_reg_id, setup_char_reg_id, cmd_char_reg_id;
 
     connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
     if (!connection) {
@@ -347,11 +348,11 @@ int bluetooth_init() {
     }
 
     // Register ObjectManager interface FIRST
-    guint objects_reg_id = g_dbus_connection_register_object(connection,
-                                                           "/com/feralfile/display",
-                                                           g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
-                                                           &objects_vtable,
-                                                           NULL, NULL, &error);
+    objects_reg_id = g_dbus_connection_register_object(connection,
+                                                     "/com/feralfile/display",
+                                                     g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
+                                                     &objects_vtable,
+                                                     NULL, NULL, &error);
     if (error || !objects_reg_id) {
         log_debug("[%s] Failed to register ObjectManager interface: %s\n", LOG_TAG, error ? error->message : "Unknown error");
         if (error) g_error_free(error);
@@ -359,11 +360,11 @@ int bluetooth_init() {
     }
 
     // Register the service object
-    guint service_reg_id = g_dbus_connection_register_object(connection,
-                                                             "/com/feralfile/display/service0",
-                                                             service_node->interfaces[0],
-                                                             &service_vtable,
-                                                             NULL, NULL, &error);
+    service_reg_id = g_dbus_connection_register_object(connection,
+                                                     "/com/feralfile/display/service0",
+                                                     service_node->interfaces[0],
+                                                     &service_vtable,
+                                                     NULL, NULL, &error);
     if (error || !service_reg_id) {
         log_debug("[%s] Failed to register service object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
         if (error) g_error_free(error);
@@ -371,65 +372,34 @@ int bluetooth_init() {
     }
 
     // Register both characteristic objects
-    guint setup_char_reg_id = g_dbus_connection_register_object(connection,
-                                                          "/com/feralfile/display/service0/setup_char",
-                                                          setup_char_node->interfaces[0],
-                                                          &char_vtable,
-                                                          NULL, NULL, &error);
+    setup_char_reg_id = g_dbus_connection_register_object(connection,
+                                                        "/com/feralfile/display/service0/setup_char",
+                                                        setup_char_node->interfaces[0],
+                                                        &char_vtable,
+                                                        NULL, NULL, &error);
     if (error || !setup_char_reg_id) {
         log_debug("[%s] Failed to register setup characteristic object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
         if (error) g_error_free(error);
         return -1;
     }
 
-    guint cmd_char_reg_id = g_dbus_connection_register_object(connection,
-                                                          "/com/feralfile/display/service0/cmd_char",
-                                                          cmd_char_node->interfaces[0],
-                                                          &char_vtable,
-                                                          NULL, NULL, &error);
+    cmd_char_reg_id = g_dbus_connection_register_object(connection,
+                                                      "/com/feralfile/display/service0/cmd_char",
+                                                      cmd_char_node->interfaces[0],
+                                                      &char_vtable,
+                                                      NULL, NULL, &error);
     if (error || !cmd_char_reg_id) {
         log_debug("[%s] Failed to register command characteristic object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
         if (error) g_error_free(error);
         return -1;
     }
 
-    // Register advertisement
-    advertisement_introspection_data = g_dbus_node_info_new_for_xml(advertisement_introspection_xml, &error);
-    if (!advertisement_introspection_data || error) {
-        log_debug("[%s] Failed to parse advertisement XML: %s\n", LOG_TAG, error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        return -1;
-    }
-
-    guint ad_reg_id = g_dbus_connection_register_object(connection,
-                                                        "/com/feralfile/display/advertisement0",
-                                                        advertisement_introspection_data->interfaces[0],
-                                                        &advertisement_vtable,
-                                                        NULL, NULL, &error);
-    if (error || !ad_reg_id) {
-        log_debug("[%s] Failed to register advertisement object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        return -1;
-    }
-
-    // Register ObjectManager interface FIRST
-    guint objects_reg_id = g_dbus_connection_register_object(connection,
-                                                           "/com/feralfile/display",
-                                                           g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
-                                                           &objects_vtable,
-                                                           NULL, NULL, &error);
-    if (error || !objects_reg_id) {
-        log_debug("[%s] Failed to register ObjectManager interface: %s\n", LOG_TAG, error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        return -1;
-    }
-
-    // Then register the application
+    // Register application
     GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(connection,
                                                      G_DBUS_PROXY_FLAGS_NONE,
                                                      NULL,
                                                      "org.bluez",
-                                                     "/com/feralfile/hci0",
+                                                     "/org/bluez/hci0",
                                                      "org.bluez.GattManager1",
                                                      NULL,
                                                      &error);
@@ -457,7 +427,7 @@ int bluetooth_init() {
                                                             G_DBUS_PROXY_FLAGS_NONE,
                                                             NULL,
                                                             "org.bluez",
-                                                            "/com/feralfile/hci0",
+                                                            "/org/bluez/hci0",
                                                             "org.bluez.LEAdvertisingManager1",
                                                             NULL,
                                                             &error);
