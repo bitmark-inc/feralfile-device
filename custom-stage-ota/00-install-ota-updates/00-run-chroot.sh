@@ -5,7 +5,7 @@ apt-get update
 apt-get install -y jq curl
 
 # Make the update checker executable
-chmod +x /opt/feralfile/update-checker.sh
+mkdir -p /opt/feralfile
 
 # Create systemd service
 cat > /etc/systemd/system/feralfile-updater.service <<EOF
