@@ -80,7 +80,7 @@ jobs:
         uses: usimd/pi-gen-action@v1
         with:
           image-name: feralfile-device-${{ github.event.inputs.version }}
-          stage-list: stage0 stage1 stage2 ./custom-stage ./custom-stage-ota
+          stage-list: stage0 stage1 stage2 ./custom-stage
           compression: zip
           compression-level: 6
           username: feralfile
