@@ -316,18 +316,23 @@ static void* bluetooth_handler(void* arg) {
 int bluetooth_init() {
     log_debug("[%s] Initializing Bluetooth\n", LOG_TAG);
     GError *error = NULL;
-    guint objects_reg_id, service_reg_id, setup_char_reg_id, cmd_char_reg_id;
 
+    // Step 1. Connect to the system bus
     connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
     if (!connection) {
-        log_debug("[%s] Failed to connect to D-Bus: %s\n", LOG_TAG, error->message);
+        log_debug("[%s] Failed to connect to D-Bus: %s\n",
+                  LOG_TAG,
+                  error->message);
         g_error_free(error);
         return -1;
     }
 
+    // Step 2. Parse our service XML
     root_node = g_dbus_node_info_new_for_xml(service_xml, &error);
     if (!root_node || error) {
-        log_debug("[%s] Failed to parse service XML: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        log_debug("[%s] Failed to parse service XML: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
         if (error) g_error_free(error);
         return -1;
     }
@@ -339,114 +344,190 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Find both characteristic nodes
+    // Find the characteristic nodes under service0 (e.g., 'setup_char', 'cmd_char', etc.)
+    // (Adjust these names as appropriate in your code.)
     GDBusNodeInfo *setup_char_node = find_node_by_name(service_node, "setup_char");
-    GDBusNodeInfo *cmd_char_node = find_node_by_name(service_node, "cmd_char");
+    GDBusNodeInfo *cmd_char_node   = find_node_by_name(service_node, "cmd_char");
     if (!setup_char_node || !cmd_char_node) {
         log_debug("[%s] Characteristic nodes not found\n", LOG_TAG);
         return -1;
     }
 
-    // Register ObjectManager interface FIRST
-    objects_reg_id = g_dbus_connection_register_object(connection,
-                                                     "/com/feralfile/display",
-                                                     g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
-                                                     &objects_vtable,
-                                                     NULL, NULL, &error);
+    // Step 3. Register ObjectManager interface FIRST
+    guint objects_reg_id = g_dbus_connection_register_object(
+        connection,
+        "/com/feralfile/display",
+        g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
+        &objects_vtable,
+        NULL,  // user_data
+        NULL,  // user_data_free_func
+        &error
+    );
     if (error || !objects_reg_id) {
-        log_debug("[%s] Failed to register ObjectManager interface: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        log_debug("[%s] Failed to register ObjectManager interface: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
         if (error) g_error_free(error);
         return -1;
     }
 
-    // Register the service object
-    service_reg_id = g_dbus_connection_register_object(connection,
-                                                     "/com/feralfile/display/service0",
-                                                     service_node->interfaces[0],
-                                                     &service_vtable,
-                                                     NULL, NULL, &error);
+    // Step 4. Register the service object
+    guint service_reg_id = g_dbus_connection_register_object(
+        connection,
+        "/com/feralfile/display/service0",
+        service_node->interfaces[0],  // org.bluez.GattService1
+        &service_vtable,
+        NULL,  // user_data
+        NULL,  // user_data_free_func
+        &error
+    );
     if (error || !service_reg_id) {
-        log_debug("[%s] Failed to register service object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        log_debug("[%s] Failed to register service object: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
         if (error) g_error_free(error);
         return -1;
     }
 
-    // Register both characteristic objects
-    setup_char_reg_id = g_dbus_connection_register_object(connection,
-                                                        "/com/feralfile/display/service0/setup_char",
-                                                        setup_char_node->interfaces[0],
-                                                        &char_vtable,
-                                                        NULL, NULL, &error);
+    // Step 5. Register your characteristic objects
+    guint setup_char_reg_id = g_dbus_connection_register_object(
+        connection,
+        "/com/feralfile/display/service0/setup_char",
+        setup_char_node->interfaces[0],  // org.bluez.GattCharacteristic1
+        &char_vtable,
+        NULL,  // user_data
+        NULL,  // user_data_free_func
+        &error
+    );
     if (error || !setup_char_reg_id) {
-        log_debug("[%s] Failed to register setup characteristic object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        log_debug("[%s] Failed to register setup characteristic object: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
         if (error) g_error_free(error);
         return -1;
     }
 
-    cmd_char_reg_id = g_dbus_connection_register_object(connection,
-                                                      "/com/feralfile/display/service0/cmd_char",
-                                                      cmd_char_node->interfaces[0],
-                                                      &char_vtable,
-                                                      NULL, NULL, &error);
+    guint cmd_char_reg_id = g_dbus_connection_register_object(
+        connection,
+        "/com/feralfile/display/service0/cmd_char",
+        cmd_char_node->interfaces[0],
+        &char_vtable,
+        NULL,  // user_data
+        NULL,  // user_data_free_func
+        &error
+    );
     if (error || !cmd_char_reg_id) {
-        log_debug("[%s] Failed to register command characteristic object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        log_debug("[%s] Failed to register command characteristic object: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
         if (error) g_error_free(error);
         return -1;
     }
 
-    // Register application
-    GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(connection,
-                                                     G_DBUS_PROXY_FLAGS_NONE,
-                                                     NULL,
-                                                     "org.bluez",
-                                                     "/org/bluez/hci0",
-                                                     "org.bluez.GattManager1",
-                                                     NULL,
-                                                     &error);
+    // Step 6. Get the GattManager1 interface so we can register our GATT application
+    GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(
+        connection,
+        G_DBUS_PROXY_FLAGS_NONE,
+        NULL,
+        "org.bluez",
+        "/org/bluez/hci0",
+        "org.bluez.GattManager1",
+        NULL,
+        &error
+    );
     if (!gatt_manager || error) {
-        log_debug("[%s] Failed to get GattManager1: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        log_debug("[%s] Failed to get GattManager1: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
         if (error) g_error_free(error);
         return -1;
     }
 
-    g_dbus_proxy_call_sync(gatt_manager,
-                           "RegisterApplication",
-                           g_variant_new("(oa{sv})", "/com/feralfile/display", NULL),
-                           G_DBUS_CALL_FLAGS_NONE,
-                           -1,
-                           NULL,
-                           &error);
+    // Register the application ("/com/feralfile/display" is our root path)
+    g_dbus_proxy_call_sync(
+        gatt_manager,
+        "RegisterApplication",
+        g_variant_new("(oa{sv})", "/com/feralfile/display", NULL),
+        G_DBUS_CALL_FLAGS_NONE,
+        -1,
+        NULL,
+        &error
+    );
     if (error) {
-        log_debug("[%s] RegisterApplication failed: %s\n", LOG_TAG, error->message);
+        log_debug("[%s] RegisterApplication failed: %s\n",
+                  LOG_TAG,
+                  error->message);
         g_error_free(error);
         return -1;
     }
+    
+    // Step 7. Parse your advertisement XML
+    advertisement_introspection_data =
+        g_dbus_node_info_new_for_xml(advertisement_introspection_xml, &error);
+    if (!advertisement_introspection_data || error) {
+        log_debug("[%s] Failed to parse advertisement XML: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return -1;
+    }
 
-    // Register advertisement
-    GDBusProxy *advertising_manager = g_dbus_proxy_new_sync(connection,
-                                                            G_DBUS_PROXY_FLAGS_NONE,
-                                                            NULL,
-                                                            "org.bluez",
-                                                            "/org/bluez/hci0",
-                                                            "org.bluez.LEAdvertisingManager1",
-                                                            NULL,
-                                                            &error);
+    // Step 8. Register the advertisement object on the system bus
+    guint ad_reg_id = g_dbus_connection_register_object(
+        connection,
+        "/com/feralfile/display/advertisement0",
+        advertisement_introspection_data->interfaces[0],  // org.bluez.LEAdvertisement1
+        &advertisement_vtable,
+        NULL,  // user_data
+        NULL,  // user_data_free_func
+        &error
+    );
+    if (error || !ad_reg_id) {
+        log_debug("[%s] Failed to register advertisement object: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return -1;
+    }
+
+    // Step 9. Get the LEAdvertisingManager1 interface
+    GDBusProxy *advertising_manager = g_dbus_proxy_new_sync(
+        connection,
+        G_DBUS_PROXY_FLAGS_NONE,
+        NULL,
+        "org.bluez",
+        "/org/bluez/hci0",
+        "org.bluez.LEAdvertisingManager1",
+        NULL,
+        &error
+    );
     if (!advertising_manager || error) {
-        log_debug("[%s] Failed to get LEAdvertisingManager1: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        log_debug("[%s] Failed to get LEAdvertisingManager1: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
         if (error) g_error_free(error);
         return -1;
     }
 
-    g_dbus_proxy_call_sync(advertising_manager,
-                           "RegisterAdvertisement",
-                           g_variant_new("(oa{sv})", "/com/feralfile/display/advertisement0", NULL),
-                           G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
+    // Step 10. Finally, register the advertisement
+    g_dbus_proxy_call_sync(
+        advertising_manager,
+        "RegisterAdvertisement",
+        g_variant_new("(oa{sv})", "/com/feralfile/display/advertisement0", NULL),
+        G_DBUS_CALL_FLAGS_NONE,
+        -1,
+        NULL,
+        &error
+    );
     if (error) {
-        log_debug("[%s] Advertisement registration failed: %s\n", LOG_TAG, error->message);
+        log_debug("[%s] Advertisement registration failed: %s\n",
+                  LOG_TAG,
+                  error->message);
         g_error_free(error);
         return -1;
     }
 
+    // If we made it here, all is good.
     log_debug("[%s] Bluetooth initialized successfully\n", LOG_TAG);
     return 0;
 }
