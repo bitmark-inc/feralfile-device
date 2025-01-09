@@ -1,3 +1,4 @@
+import '../chromium_launcher.dart';
 import '../logger.dart';
 import 'command_repository.dart';
 
