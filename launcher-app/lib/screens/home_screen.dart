@@ -39,6 +39,7 @@ class HomeScreen extends StatelessWidget {
                   BlocBuilder<BLEConnectionCubit, BLEConnectionState>(
                     builder: (context, state) {
                       String instructionText = '';
+                      bool showLogInfo = false;
 
                       switch (state.status) {
                         case BLEConnectionStatus.initial:
@@ -54,6 +55,7 @@ class HomeScreen extends StatelessWidget {
                         case BLEConnectionStatus.connected:
                           instructionText = 'Connected successfully!\n'
                               'Launching display interface...';
+                          showLogInfo = true;
                       }
 
                       return Column(
@@ -87,6 +89,28 @@ class HomeScreen extends StatelessWidget {
                               ),
                             ),
                           ),
+                          const Spacer(),
+                          if (showLogInfo) ...[
+                            const Divider(color: Colors.grey),
+                            const SizedBox(height: 20),
+                            Text(
+                              'To access device logs, visit:',
+                              style: TextStyle(
+                                fontFamily: 'PPMori',
+                                fontSize: 16,
+                                color: Colors.grey[400],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'http://${state.localIp}:8080/logs.html',
+                              style: const TextStyle(
+                                fontFamily: 'PPMori',
+                                fontSize: 20,
+                                color: Colors.blue,
+                              ),
+                            ),
+                          ],
                         ],
                       );
                     },

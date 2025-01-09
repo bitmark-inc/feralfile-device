@@ -80,4 +80,20 @@ class WifiService {
       return false;
     }
   }
+
+  static Future<String> getLocalIpAddress() async {
+    try {
+      final result = await Process.run('hostname', ['-I']);
+      if (result.exitCode == 0) {
+        final ips = result.stdout.toString().trim().split(' ');
+        if (ips.isNotEmpty) {
+          return ips.first;
+        }
+      }
+      return 'localhost';
+    } catch (e) {
+      logger.warning('Error getting local IP: $e');
+      return 'localhost';
+    }
+  }
 }

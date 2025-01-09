@@ -33,10 +33,19 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
     logger.info('[BLEConnectionCubit] WiFi connection result: $connected');
 
     if (connected) {
+      // Get local IP address
+      final localIp = await WifiService.getLocalIpAddress();
+
       logger.info(
           '[BLEConnectionCubit] Successfully connected to ${credentials.ssid}');
+
+      // Start log server after successful WiFi connection
+      await startLogServer();
+      logger.info('[BLEConnectionCubit] Log server started');
+
       emit(state.copyWith(
         status: BLEConnectionStatus.connected,
+        localIp: localIp,
       ));
 
       logger.info('[BLEConnectionCubit] Disposing Bluetooth service');
@@ -58,6 +67,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
     logger.info(
         '[BLEConnectionCubit] Closing cubit and disposing Bluetooth service');
     _bluetoothService.dispose();
+    stopLogServer();
     return super.close();
   }
 }
