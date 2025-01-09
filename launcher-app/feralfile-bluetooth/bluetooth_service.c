@@ -156,7 +156,7 @@ static GVariant *char_get_property(GDBusConnection *conn,
                 return g_variant_new_string(FERALFILE_CMD_CHAR_UUID);
             }
         } else if (g_strcmp0(property_name, "Service") == 0) {
-            return g_variant_new_object_path("/org/bluez/example/service0");
+            return g_variant_new_object_path("/com/feralfile/display/service0");
         } else if (g_strcmp0(property_name, "Flags") == 0) {
             const gchar* flags[] = {"write", NULL};
             return g_variant_new_strv(flags, -1);
@@ -268,25 +268,37 @@ static void handle_get_objects(GDBusConnection *conn,
     g_variant_builder_add(service_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_SERVICE_UUID));
     g_variant_builder_add(service_props, "{sv}", "Primary", g_variant_new_boolean(TRUE));
     g_variant_builder_add(service_builder, "{sa{sv}}", "org.bluez.GattService1", service_props);
-    g_variant_builder_add(builder, "{oa{sa{sv}}}", "/org/bluez/example/service0", service_builder);
+    g_variant_builder_add(builder, "{oa{sa{sv}}}", "/com/feralfile/display/service0", service_builder);
     
-    // Add characteristic object
-    GVariantBuilder *char_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sa{sv}}"));
-    GVariantBuilder *char_props = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
-    g_variant_builder_add(char_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_SETUP_CHAR_UUID));
-    g_variant_builder_add(char_props, "{sv}", "Service", g_variant_new_object_path("/org/bluez/example/service0"));
-    const gchar* flags[] = {"write", NULL};
-    g_variant_builder_add(char_props, "{sv}", "Flags", g_variant_new_strv(flags, -1));
-    g_variant_builder_add(char_builder, "{sa{sv}}", "org.bluez.GattCharacteristic1", char_props);
-    g_variant_builder_add(builder, "{oa{sa{sv}}}", "/org/bluez/example/service0/char0", char_builder);
+    // Add setup characteristic object
+    GVariantBuilder *setup_char_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sa{sv}}"));
+    GVariantBuilder *setup_char_props = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(setup_char_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_SETUP_CHAR_UUID));
+    g_variant_builder_add(setup_char_props, "{sv}", "Service", g_variant_new_object_path("/com/feralfile/display/service0"));
+    const gchar* setup_flags[] = {"write", NULL};
+    g_variant_builder_add(setup_char_props, "{sv}", "Flags", g_variant_new_strv(setup_flags, -1));
+    g_variant_builder_add(setup_char_builder, "{sa{sv}}", "org.bluez.GattCharacteristic1", setup_char_props);
+    g_variant_builder_add(builder, "{oa{sa{sv}}}", "/com/feralfile/display/service0/setup_char", setup_char_builder);
+    
+    // Add command characteristic object
+    GVariantBuilder *cmd_char_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sa{sv}}"));
+    GVariantBuilder *cmd_char_props = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(cmd_char_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_CMD_CHAR_UUID));
+    g_variant_builder_add(cmd_char_props, "{sv}", "Service", g_variant_new_object_path("/com/feralfile/display/service0"));
+    const gchar* cmd_flags[] = {"write", NULL};
+    g_variant_builder_add(cmd_char_props, "{sv}", "Flags", g_variant_new_strv(cmd_flags, -1));
+    g_variant_builder_add(cmd_char_builder, "{sa{sv}}", "org.bluez.GattCharacteristic1", cmd_char_props);
+    g_variant_builder_add(builder, "{oa{sa{sv}}}", "/com/feralfile/display/service0/cmd_char", cmd_char_builder);
     
     g_dbus_method_invocation_return_value(invocation, g_variant_new("(a{oa{sa{sv}}})", builder));
     
     g_variant_builder_unref(builder);
     g_variant_builder_unref(service_builder);
-    g_variant_builder_unref(char_builder);
+    g_variant_builder_unref(setup_char_builder);
+    g_variant_builder_unref(cmd_char_builder);
     g_variant_builder_unref(service_props);
-    g_variant_builder_unref(char_props);
+    g_variant_builder_unref(setup_char_props);
+    g_variant_builder_unref(cmd_char_props);
 }
 
 static const GDBusInterfaceVTable objects_vtable = {
@@ -326,16 +338,29 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Find the char0 node
-    char_node = find_node_by_name(service_node, "char0");
-    if (!char_node) {
-        log_debug("[%s] char0 node not found\n", LOG_TAG);
+    // Find both characteristic nodes
+    GDBusNodeInfo *setup_char_node = find_node_by_name(service_node, "setup_char");
+    GDBusNodeInfo *cmd_char_node = find_node_by_name(service_node, "cmd_char");
+    if (!setup_char_node || !cmd_char_node) {
+        log_debug("[%s] Characteristic nodes not found\n", LOG_TAG);
+        return -1;
+    }
+
+    // Register ObjectManager interface FIRST
+    guint objects_reg_id = g_dbus_connection_register_object(connection,
+                                                           "/com/feralfile/display",
+                                                           g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
+                                                           &objects_vtable,
+                                                           NULL, NULL, &error);
+    if (error || !objects_reg_id) {
+        log_debug("[%s] Failed to register ObjectManager interface: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
         return -1;
     }
 
     // Register the service object
     guint service_reg_id = g_dbus_connection_register_object(connection,
-                                                             "/org/bluez/example/service0",
+                                                             "/com/feralfile/display/service0",
                                                              service_node->interfaces[0],
                                                              &service_vtable,
                                                              NULL, NULL, &error);
@@ -345,14 +370,25 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Register the characteristic object
-    guint char_reg_id = g_dbus_connection_register_object(connection,
-                                                          "/org/bluez/example/service0/char0",
-                                                          char_node->interfaces[0],
+    // Register both characteristic objects
+    guint setup_char_reg_id = g_dbus_connection_register_object(connection,
+                                                          "/com/feralfile/display/service0/setup_char",
+                                                          setup_char_node->interfaces[0],
                                                           &char_vtable,
                                                           NULL, NULL, &error);
-    if (error || !char_reg_id) {
-        log_debug("[%s] Failed to register characteristic object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+    if (error || !setup_char_reg_id) {
+        log_debug("[%s] Failed to register setup characteristic object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return -1;
+    }
+
+    guint cmd_char_reg_id = g_dbus_connection_register_object(connection,
+                                                          "/com/feralfile/display/service0/cmd_char",
+                                                          cmd_char_node->interfaces[0],
+                                                          &char_vtable,
+                                                          NULL, NULL, &error);
+    if (error || !cmd_char_reg_id) {
+        log_debug("[%s] Failed to register command characteristic object: %s\n", LOG_TAG, error ? error->message : "Unknown error");
         if (error) g_error_free(error);
         return -1;
     }
@@ -366,7 +402,7 @@ int bluetooth_init() {
     }
 
     guint ad_reg_id = g_dbus_connection_register_object(connection,
-                                                        "/org/bluez/example/advertisement0",
+                                                        "/com/feralfile/display/advertisement0",
                                                         advertisement_introspection_data->interfaces[0],
                                                         &advertisement_vtable,
                                                         NULL, NULL, &error);
@@ -378,7 +414,7 @@ int bluetooth_init() {
 
     // Register ObjectManager interface FIRST
     guint objects_reg_id = g_dbus_connection_register_object(connection,
-                                                           "/org/bluez/example",
+                                                           "/com/feralfile/display",
                                                            g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
                                                            &objects_vtable,
                                                            NULL, NULL, &error);
@@ -393,7 +429,7 @@ int bluetooth_init() {
                                                      G_DBUS_PROXY_FLAGS_NONE,
                                                      NULL,
                                                      "org.bluez",
-                                                     "/org/bluez/hci0",
+                                                     "/com/feralfile/hci0",
                                                      "org.bluez.GattManager1",
                                                      NULL,
                                                      &error);
@@ -405,7 +441,7 @@ int bluetooth_init() {
 
     g_dbus_proxy_call_sync(gatt_manager,
                            "RegisterApplication",
-                           g_variant_new("(oa{sv})", "/org/bluez/example", NULL),
+                           g_variant_new("(oa{sv})", "/com/feralfile/display", NULL),
                            G_DBUS_CALL_FLAGS_NONE,
                            -1,
                            NULL,
@@ -421,7 +457,7 @@ int bluetooth_init() {
                                                             G_DBUS_PROXY_FLAGS_NONE,
                                                             NULL,
                                                             "org.bluez",
-                                                            "/org/bluez/hci0",
+                                                            "/com/feralfile/hci0",
                                                             "org.bluez.LEAdvertisingManager1",
                                                             NULL,
                                                             &error);
@@ -433,7 +469,7 @@ int bluetooth_init() {
 
     g_dbus_proxy_call_sync(advertising_manager,
                            "RegisterAdvertisement",
-                           g_variant_new("(oa{sv})", "/org/bluez/example/advertisement0", NULL),
+                           g_variant_new("(oa{sv})", "/com/feralfile/display/advertisement0", NULL),
                            G_DBUS_CALL_FLAGS_NONE, -1, NULL, &error);
     if (error) {
         log_debug("[%s] Advertisement registration failed: %s\n", LOG_TAG, error->message);
