@@ -1,6 +1,7 @@
 // lib/services/bluetooth_service.dart
 import 'dart:ffi';
 import 'dart:isolate';
+import 'dart:typed_data';
 import 'package:feralfile/services/logger.dart';
 
 import '../ffi/bindings.dart';

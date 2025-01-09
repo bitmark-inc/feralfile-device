@@ -1,6 +1,5 @@
 import 'package:feralfile/services/logger.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:process_run/stdio.dart';
 import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
@@ -44,7 +43,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       _bluetoothService.dispose();
 
       logger.info('[BLEConnectionCubit] Launching Chromium browser');
-      await ChromiumLauncher.launchAndExit();
+      await ChromiumLauncher.launchAndWait();
     } else {
       logger.info('[BLEConnectionCubit] Failed to connect to WiFi network');
       emit(state.copyWith(
