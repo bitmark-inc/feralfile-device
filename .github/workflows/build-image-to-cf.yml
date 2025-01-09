@@ -68,11 +68,19 @@ jobs:
             --verbose \
             --stats=1s
 
+      - name: Generate Version Info
+        run: |
+          echo "{
+            \"branch\": \"${{ github.ref_name }}\",
+            \"commit\": \"${{ github.sha }}\",
+            \"app_fingerprint\": \"$(md5sum custom-stage/01-install-app/feralfile-launcher_arm64.deb | cut -d' ' -f1)\"
+          }" > custom-stage-ota/00-install-ota-updates/version.json
+
       - name: Build Pi OS Image with pi-gen-action
         uses: usimd/pi-gen-action@v1
         with:
           image-name: feralfile-device-${{ github.event.inputs.version }}
-          stage-list: stage0 stage1 stage2 ./custom-stage
+          stage-list: stage0 stage1 stage2 ./custom-stage ./custom-stage-ota
           compression: zip
           compression-level: 6
           username: feralfile
