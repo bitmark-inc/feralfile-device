@@ -12,6 +12,8 @@ final int _maxBufferSize = 1000; // Keep last 1000 log entries
 
 String get logFilePath => _logFile.path;
 
+List<String> get logBuffer => List.unmodifiable(_logBuffer);
+
 Future<void> setupLogging() async {
   // Initialize log file
   final Directory appDir = await getApplicationDocumentsDirectory();
