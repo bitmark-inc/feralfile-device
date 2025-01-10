@@ -17,8 +17,8 @@ void main() async {
   setupLogging();
 
   // Check if already connected to WiFi
-  bool isConnected = await WifiService.isConnectedToWifi();
-
+  // bool isConnected = await WifiService.isConnectedToWifi();
+  bool isConnected = false;
   if (isConnected) {
     logger.info('Already connected to WiFi. Launching Chromium directly...');
     await ChromiumLauncher.launchAndWait();
