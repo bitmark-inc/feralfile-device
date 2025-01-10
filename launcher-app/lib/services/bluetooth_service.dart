@@ -116,11 +116,20 @@ class BluetoothService {
     logger.info('Received command data (hex): $hexString');
 
     try {
-      var (command, commandData, _) = VarintParser.parseDoubleString(bytes, 0);
+      // Log the first few bytes to understand the length parsing
+      logger.info('First byte (length1): 0x${bytes[0].toRadixString(16)}');
+      logger.info(
+          'Following bytes: ${bytes.sublist(1, 7).map((b) => String.fromCharCode(b)).join()}');
+
+      var (command, commandData, bytesRead) =
+          VarintParser.parseDoubleString(bytes, 0);
       logger.info('Parsed command: "$command" with data: "$commandData"');
+      logger.info('Bytes read: $bytesRead');
+
       CommandService().handleCommand(command, commandData);
-    } catch (e) {
+    } catch (e, stackTrace) {
       logger.severe('Error parsing command data: $e');
+      logger.severe('Stack trace: $stackTrace');
     }
   }
 }
