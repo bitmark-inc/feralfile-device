@@ -61,15 +61,21 @@ class BluetoothService {
 
   // Static callback that can be used with FFI
   static void _staticConnectionResultCallback(
-      int success, Pointer<Uint8> data) {
+    int success,
+    Pointer<Uint8> data,
+    int length,
+  ) {
     try {
-      final rawBytes = data.asTypedList(1024);
-      // Print hex encoded value of rawBytes
+      // Use 'length' instead of hardcoding 1024
+      final rawBytes = data.asTypedList(length);
+
+      // Print hex-encoded rawBytes
       final hexString =
           rawBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
       logger.info('Raw bytes (hex): $hexString');
-      var (ssid, password, _) = VarintParser.parseDoubleString(rawBytes, 0);
 
+      // Now safely parse varint-encoded strings out of rawBytes
+      var (ssid, password, _) = VarintParser.parseDoubleString(rawBytes, 0);
       logger
           .info('Received WiFi credentials - SSID: $ssid, password: $password');
 
@@ -99,11 +105,12 @@ class BluetoothService {
   Stream<CommandData> get commandStream => _commandService.commandStream;
 
   // Make callback static
-  static void _staticCommandCallback(int success, Pointer<Uint8> data) {
-    // Copy data to prevent memory issues
-    final bytes = data.asTypedList(1024).sublist(0);
+  static void _staticCommandCallback(
+      int success, Pointer<Uint8> data, int length) {
+    // Safely copy only the valid bytes using the provided length
+    final bytes = data.asTypedList(length);
 
-    // Create hex string for logging
+    // Create a hex string for logging
     final hexString =
         bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     logger.info('Received command data (hex): $hexString');

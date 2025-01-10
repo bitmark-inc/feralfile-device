@@ -6,8 +6,8 @@
 extern "C" {
 #endif
 
-typedef void (*connection_result_callback)(int success, const unsigned char* data);
-typedef void (*command_callback)(int success, const unsigned char* data);
+typedef void (*connection_result_callback)(int success, const unsigned char* data, int length);
+typedef void (*command_callback)(int success, const unsigned char* data, int length);
 
 int bluetooth_init();
 int bluetooth_start(connection_result_callback setup_callback, command_callback cmd_callback);

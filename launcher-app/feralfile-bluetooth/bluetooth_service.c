@@ -21,10 +21,10 @@ static GDBusNodeInfo *service_node = NULL;
 static GDBusNodeInfo *advertisement_introspection_data = NULL;
 static pthread_t bluetooth_thread;
 
-typedef void (*connection_result_callback)(int, const char*);
+typedef void (*connection_result_callback)(int success, const unsigned char* data, int length);
 static connection_result_callback result_callback = NULL;
 
-typedef void (*command_callback)(const char* command, const char* data);
+typedef void (*command_callback)(int success, const unsigned char* data, int length);
 static command_callback cmd_callback = NULL;
 
 static FILE* log_file = NULL;
@@ -224,7 +224,7 @@ static void handle_command_write(GDBusConnection *conn,
 
     // Use cmd_callback for command data
     if (cmd_callback) {
-        cmd_callback("command", (const char*)data);
+        cmd_callback(1, data, (int)n_elements);
     }
 
     g_variant_unref(array_variant);
@@ -565,8 +565,9 @@ int bluetooth_init() {
     return 0;
 }
 
-int bluetooth_start(connection_result_callback callback) {
-    result_callback = callback;
+int bluetooth_start(connection_result_callback scb, command_callback ccb) {
+    result_callback = scb;
+    cmd_callback = ccb;
     if (pthread_create(&bluetooth_thread, NULL, bluetooth_handler, NULL) != 0) {
         log_debug("[%s] Failed to start Bluetooth thread\n", LOG_TAG);
         return -1;
