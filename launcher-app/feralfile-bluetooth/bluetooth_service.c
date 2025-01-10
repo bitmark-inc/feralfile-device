@@ -193,7 +193,7 @@ static void handle_write_value(GDBusConnection *conn,
 
     // If you want to pass these bytes to your existing 'result_callback'
     if (result_callback) {
-        result_callback(1, (const char*)data);
+        result_callback(1, (const char*)data, (int)n_elements);
     }
 
     g_variant_unref(array_variant);
