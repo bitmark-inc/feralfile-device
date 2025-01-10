@@ -37,17 +37,13 @@ class VarintParser {
   static (int value, int newOffset) _readVarint(Uint8List bytes, int offset) {
     var value = 0;
     var shift = 0;
-    var currentByte;
 
-    do {
-      if (offset >= bytes.length) {
-        throw Exception('Malformed varint');
-      }
-
-      currentByte = bytes[offset++];
-      value |= (currentByte & 0x7F) << shift;
+    while (true) {
+      final byte = bytes[offset++];
+      value |= (byte & 0x7F) << shift;
+      if ((byte & 0x80) == 0) break;
       shift += 7;
-    } while ((currentByte & 0x80) != 0);
+    }
 
     return (value, offset);
   }
