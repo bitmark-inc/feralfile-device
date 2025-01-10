@@ -64,6 +64,10 @@ class BluetoothService {
       int success, Pointer<Uint8> data) {
     try {
       final rawBytes = data.asTypedList(1024);
+      // Print hex encoded value of rawBytes
+      final hexString =
+          rawBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      logger.info('Raw bytes (hex): $hexString');
       var (ssid, password, _) = VarintParser.parseDoubleString(rawBytes, 0);
 
       logger
@@ -98,6 +102,12 @@ class BluetoothService {
   static void _staticCommandCallback(int success, Pointer<Uint8> data) {
     // Copy data to prevent memory issues
     final bytes = data.asTypedList(1024).sublist(0);
+
+    // Create hex string for logging
+    final hexString =
+        bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    logger.info('Received command data (hex): $hexString');
+
     // Fire and forget - no waiting
     Isolate.spawn(_parseCommandInIsolate, [_commandPort.sendPort, bytes]);
   }
@@ -108,9 +118,10 @@ class BluetoothService {
 
     try {
       var (command, commandData, _) = VarintParser.parseDoubleString(bytes, 0);
+      logger.info('Parsed command: "$command" with data: "$commandData"');
       sendPort.send([command, commandData]);
     } catch (e) {
-      // Handle error
+      logger.severe('Error parsing command data: $e');
     }
   }
 }

@@ -16,10 +16,19 @@ class CommandService {
   }
 
   void _processCommand(CommandData cmdData) async {
-    await _commandRepository.executeCommand(cmdData.command, cmdData.data);
+    logger.info('Processing command: "${cmdData.command}"');
+    logger.info('Command data: "${cmdData.data}"');
+
+    try {
+      await _commandRepository.executeCommand(cmdData.command, cmdData.data);
+      logger.info('Command processed successfully: ${cmdData.command}');
+    } catch (e) {
+      logger.severe('Error processing command ${cmdData.command}: $e');
+    }
   }
 
   void handleCommand(String command, String data) {
+    logger.info('Handling new command: "$command"');
     _commandController.add(CommandData(command, data));
   }
 
