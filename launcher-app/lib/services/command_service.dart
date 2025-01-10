@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:feralfile/services/logger.dart';
+
 import 'commands/command_repository.dart';
 
 class CommandService {
