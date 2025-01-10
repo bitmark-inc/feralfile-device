@@ -18,7 +18,6 @@ static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
 static GDBusNodeInfo *root_node = NULL;
 static GDBusNodeInfo *service_node = NULL;
-static GDBusNodeInfo *char_node = NULL;
 static GDBusNodeInfo *advertisement_introspection_data = NULL;
 static pthread_t bluetooth_thread;
 
@@ -125,6 +124,9 @@ static GDBusNodeInfo* find_node_by_name(GDBusNodeInfo *parent, const gchar *name
     return NULL;
 }
 
+// ----------------------------------------------------------------------------
+// Service property getter
+// ----------------------------------------------------------------------------
 static GVariant *service_get_property(GDBusConnection *conn,
                                       const gchar *sender,
                                       const gchar *object_path,
@@ -141,6 +143,9 @@ static GVariant *service_get_property(GDBusConnection *conn,
     return NULL;
 }
 
+// ----------------------------------------------------------------------------
+// Characteristic property getter
+// ----------------------------------------------------------------------------
 static GVariant *char_get_property(GDBusConnection *conn,
                                    const gchar *sender,
                                    const gchar *object_path,
@@ -158,6 +163,7 @@ static GVariant *char_get_property(GDBusConnection *conn,
         } else if (g_strcmp0(property_name, "Service") == 0) {
             return g_variant_new_object_path("/com/feralfile/display/service0");
         } else if (g_strcmp0(property_name, "Flags") == 0) {
+            // If you want "write" only:
             const gchar* flags[] = {"write", NULL};
             return g_variant_new_strv(flags, -1);
         }
@@ -165,6 +171,9 @@ static GVariant *char_get_property(GDBusConnection *conn,
     return NULL;
 }
 
+// ----------------------------------------------------------------------------
+// Handler for setup_char writes
+// ----------------------------------------------------------------------------
 static void handle_write_value(GDBusConnection *conn,
                              const gchar *sender,
                              const gchar *object_path,
@@ -179,10 +188,10 @@ static void handle_write_value(GDBusConnection *conn,
 
     gsize n_elements;
     const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
-    
-    log_debug("[%s] Received %zu bytes of data", LOG_TAG, n_elements);
 
-    // Pass raw bytes to callback
+    log_debug("[%s] (setup_char) Received %zu bytes of data", LOG_TAG, n_elements);
+
+    // If you want to pass these bytes to your existing 'result_callback'
     if (result_callback) {
         result_callback(1, (const char*)data);
     }
@@ -193,6 +202,9 @@ static void handle_write_value(GDBusConnection *conn,
     g_dbus_method_invocation_return_value(invocation, NULL);
 }
 
+// ----------------------------------------------------------------------------
+// Handler for cmd_char writes
+// ----------------------------------------------------------------------------
 static void handle_command_write(GDBusConnection *conn,
                                const gchar *sender,
                                const gchar *object_path,
@@ -207,8 +219,10 @@ static void handle_command_write(GDBusConnection *conn,
 
     gsize n_elements;
     const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
-    
-    // Pass raw bytes to callback
+
+    log_debug("[%s] (cmd_char) Received %zu bytes of data", LOG_TAG, n_elements);
+
+    // Use cmd_callback for command data
     if (cmd_callback) {
         cmd_callback("command", (const char*)data);
     }
@@ -219,18 +233,32 @@ static void handle_command_write(GDBusConnection *conn,
     g_dbus_method_invocation_return_value(invocation, NULL);
 }
 
+// ----------------------------------------------------------------------------
+// VTables
+// ----------------------------------------------------------------------------
 static const GDBusInterfaceVTable service_vtable = {
     .method_call = NULL,
     .get_property = service_get_property,
     .set_property = NULL
 };
 
-static const GDBusInterfaceVTable char_vtable = {
+// Separate vtable for setup characteristic
+static const GDBusInterfaceVTable setup_char_vtable = {
     .method_call = handle_write_value,
     .get_property = char_get_property,
     .set_property = NULL
 };
 
+// Separate vtable for command characteristic
+static const GDBusInterfaceVTable cmd_char_vtable = {
+    .method_call = handle_command_write,
+    .get_property = char_get_property,
+    .set_property = NULL
+};
+
+// ----------------------------------------------------------------------------
+// Advertisement interface property getter
+// ----------------------------------------------------------------------------
 static GVariant* advertisement_get_property(GDBusConnection *connection,
                                             const gchar *sender,
                                             const gchar *object_path,
@@ -238,11 +266,13 @@ static GVariant* advertisement_get_property(GDBusConnection *connection,
                                             const gchar *property_name,
                                             GError **error,
                                             gpointer user_data) {
-    if (g_strcmp0(property_name, "Type") == 0) return g_variant_new_string("peripheral");
-    if (g_strcmp0(property_name, "ServiceUUIDs") == 0) {
+    if (g_strcmp0(property_name, "Type") == 0) {
+        return g_variant_new_string("peripheral");
+    } else if (g_strcmp0(property_name, "ServiceUUIDs") == 0) {
         return g_variant_new_strv((const gchar*[]){FERALFILE_SERVICE_UUID, NULL}, -1);
+    } else if (g_strcmp0(property_name, "LocalName") == 0) {
+        return g_variant_new_string(FERALFILE_SERVICE_NAME);
     }
-    if (g_strcmp0(property_name, "LocalName") == 0) return g_variant_new_string(FERALFILE_SERVICE_NAME);
     return NULL;
 }
 
@@ -252,14 +282,17 @@ static const GDBusInterfaceVTable advertisement_vtable = {
     .set_property = NULL,
 };
 
+// ----------------------------------------------------------------------------
+// ObjectManager "GetManagedObjects" handling
+// ----------------------------------------------------------------------------
 static void handle_get_objects(GDBusConnection *conn,
-                             const gchar *sender,
-                             const gchar *object_path,
-                             const gchar *interface_name,
-                             const gchar *method_name,
-                             GVariant *parameters,
-                             GDBusMethodInvocation *invocation,
-                             gpointer user_data) {
+                               const gchar *sender,
+                               const gchar *object_path,
+                               const gchar *interface_name,
+                               const gchar *method_name,
+                               GVariant *parameters,
+                               GDBusMethodInvocation *invocation,
+                               gpointer user_data) {
     GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE("a{oa{sa{sv}}}"));
     
     // Add service object
@@ -290,6 +323,7 @@ static void handle_get_objects(GDBusConnection *conn,
     g_variant_builder_add(cmd_char_builder, "{sa{sv}}", "org.bluez.GattCharacteristic1", cmd_char_props);
     g_variant_builder_add(builder, "{oa{sa{sv}}}", "/com/feralfile/display/service0/cmd_char", cmd_char_builder);
     
+    // Return everything
     g_dbus_method_invocation_return_value(invocation, g_variant_new("(a{oa{sa{sv}}})", builder));
     
     g_variant_builder_unref(builder);
@@ -317,7 +351,7 @@ int bluetooth_init() {
     log_debug("[%s] Initializing Bluetooth\n", LOG_TAG);
     GError *error = NULL;
 
-    // Step 1. Connect to the system bus
+    // Step 1: Connect to the system bus
     connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
     if (!connection) {
         log_debug("[%s] Failed to connect to D-Bus: %s\n",
@@ -327,7 +361,7 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Step 2. Parse our service XML
+    // Step 2: Parse our service XML
     root_node = g_dbus_node_info_new_for_xml(service_xml, &error);
     if (!root_node || error) {
         log_debug("[%s] Failed to parse service XML: %s\n",
@@ -344,8 +378,7 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Find the characteristic nodes under service0 (e.g., 'setup_char', 'cmd_char', etc.)
-    // (Adjust these names as appropriate in your code.)
+    // Find characteristic nodes
     GDBusNodeInfo *setup_char_node = find_node_by_name(service_node, "setup_char");
     GDBusNodeInfo *cmd_char_node   = find_node_by_name(service_node, "cmd_char");
     if (!setup_char_node || !cmd_char_node) {
@@ -353,14 +386,14 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Step 3. Register ObjectManager interface FIRST
+    // Step 3: Register ObjectManager interface
     guint objects_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display",
         g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
         &objects_vtable,
-        NULL,  // user_data
-        NULL,  // user_data_free_func
+        NULL,
+        NULL,
         &error
     );
     if (error || !objects_reg_id) {
@@ -371,14 +404,14 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Step 4. Register the service object
+    // Step 4: Register the service object
     guint service_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display/service0",
         service_node->interfaces[0],  // org.bluez.GattService1
         &service_vtable,
-        NULL,  // user_data
-        NULL,  // user_data_free_func
+        NULL,
+        NULL,
         &error
     );
     if (error || !service_reg_id) {
@@ -389,14 +422,14 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Step 5. Register your characteristic objects
+    // Step 5: Register your setup characteristic
     guint setup_char_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display/service0/setup_char",
         setup_char_node->interfaces[0],  // org.bluez.GattCharacteristic1
-        &char_vtable,
-        NULL,  // user_data
-        NULL,  // user_data_free_func
+        &setup_char_vtable,             // <--- use setup_char_vtable
+        NULL,
+        NULL,
         &error
     );
     if (error || !setup_char_reg_id) {
@@ -407,13 +440,14 @@ int bluetooth_init() {
         return -1;
     }
 
+    // Step 6: Register your command characteristic
     guint cmd_char_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display/service0/cmd_char",
-        cmd_char_node->interfaces[0],
-        &char_vtable,
-        NULL,  // user_data
-        NULL,  // user_data_free_func
+        cmd_char_node->interfaces[0],   // org.bluez.GattCharacteristic1
+        &cmd_char_vtable,              // <--- use cmd_char_vtable
+        NULL,
+        NULL,
         &error
     );
     if (error || !cmd_char_reg_id) {
@@ -424,7 +458,7 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Step 6. Get the GattManager1 interface so we can register our GATT application
+    // Step 7: Get the GattManager1 interface
     GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(
         connection,
         G_DBUS_PROXY_FLAGS_NONE,
@@ -443,7 +477,7 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Register the application ("/com/feralfile/display" is our root path)
+    // Step 8: Register the application
     g_dbus_proxy_call_sync(
         gatt_manager,
         "RegisterApplication",
@@ -460,8 +494,8 @@ int bluetooth_init() {
         g_error_free(error);
         return -1;
     }
-    
-    // Step 7. Parse your advertisement XML
+
+    // Step 9: Parse advertisement XML
     advertisement_introspection_data =
         g_dbus_node_info_new_for_xml(advertisement_introspection_xml, &error);
     if (!advertisement_introspection_data || error) {
@@ -472,14 +506,14 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Step 8. Register the advertisement object on the system bus
+    // Step 10: Register advertisement object
     guint ad_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display/advertisement0",
         advertisement_introspection_data->interfaces[0],  // org.bluez.LEAdvertisement1
         &advertisement_vtable,
-        NULL,  // user_data
-        NULL,  // user_data_free_func
+        NULL,
+        NULL,
         &error
     );
     if (error || !ad_reg_id) {
@@ -490,7 +524,7 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Step 9. Get the LEAdvertisingManager1 interface
+    // Step 11: Get LEAdvertisingManager1
     GDBusProxy *advertising_manager = g_dbus_proxy_new_sync(
         connection,
         G_DBUS_PROXY_FLAGS_NONE,
@@ -509,7 +543,7 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Step 10. Finally, register the advertisement
+    // Step 12: Register the advertisement
     g_dbus_proxy_call_sync(
         advertising_manager,
         "RegisterAdvertisement",
@@ -527,7 +561,6 @@ int bluetooth_init() {
         return -1;
     }
 
-    // If we made it here, all is good.
     log_debug("[%s] Bluetooth initialized successfully\n", LOG_TAG);
     return 0;
 }
