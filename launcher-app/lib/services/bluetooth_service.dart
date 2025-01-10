@@ -115,18 +115,10 @@ class BluetoothService {
         bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     logger.info('Received command data (hex): $hexString');
 
-    // Fire and forget - no waiting
-    Isolate.spawn(_parseCommandInIsolate, [_commandPort.sendPort, bytes]);
-  }
-
-  static void _parseCommandInIsolate(List<dynamic> args) {
-    final SendPort sendPort = args[0];
-    final Uint8List bytes = args[1];
-
     try {
       var (command, commandData, _) = VarintParser.parseDoubleString(bytes, 0);
       logger.info('Parsed command: "$command" with data: "$commandData"');
-      sendPort.send([command, commandData]);
+      CommandService().handleCommand(command, commandData);
     } catch (e) {
       logger.severe('Error parsing command data: $e');
     }
