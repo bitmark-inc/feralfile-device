@@ -130,8 +130,8 @@ class HomeScreen extends StatelessWidget {
             left: 0,
             bottom: 0,
             child: Container(
-              width: 400,
-              height: 200,
+              width: 600,
+              height: 400,
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.8),
                 border: Border(
