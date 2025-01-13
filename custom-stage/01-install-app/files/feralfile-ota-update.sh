@@ -10,12 +10,10 @@
 exec > /tmp/ota-update.log 2>&1
 
 API_BASE_URL="https://feralfile-device-distribution.bitmark-development.workers.dev"
-LOCAL_DEB_PATH="./home/feralfile/feralfile/feralfile-launcher_arm64.deb"
-LOCAL_CONFIG_PATH="./home/feralfile/feralfile/feralfile-launcher.conf"
-BACKUP_DEB_PATH="./home/feralfile/feralfile/feralfile-launcher_arm64.bak.deb"
-BACKUP_CONFIG_PATH="./home/feralfile/feralfile/feralfile-launcher.bak.conf"
-
-REBOOT_DELAY_SECONDS=5
+LOCAL_DEB_PATH="/home/feralfile/feralfile/feralfile-launcher_arm64.deb"
+LOCAL_CONFIG_PATH="/home/feralfile/feralfile/feralfile-launcher.conf"
+BACKUP_DEB_PATH="/home/feralfile/feralfile/feralfile-launcher_arm64.bak.deb"
+BACKUP_CONFIG_PATH="/home/feralfile/feralfile/feralfile-launcher.bak.conf"
 
 ########################################
 # FUNCTION: show_info
@@ -87,13 +85,6 @@ echo "Remote .deb URL: $REMOTE_APP_URL"
 if [[ "$REMOTE_VERSION" != "$LOCAL_VERSION" ]]; then
   show_info "New version detected..."
 
-  if pgrep -f "/opt/feralfile/feralfile" > /dev/null; then
-    show_info "Stopping the running application for update..."
-    pkill -TERM -f "/opt/feralfile/feralfile"
-  fi
-
-  show_info "Downloading new version..."
-
   # Back up the current .deb and config file
   cp "$LOCAL_DEB_PATH" "$BACKUP_DEB_PATH"
   echo "Backed up current .deb to $BACKUP_DEB_PATH"
@@ -115,8 +106,7 @@ if [[ "$REMOTE_VERSION" != "$LOCAL_VERSION" ]]; then
     # Update the config file with the new version
     sed -i "s/^app_version = .*/app_version = $REMOTE_VERSION/" "$LOCAL_CONFIG_PATH"
 
-    show_info "Update complete. Rebooting in $REBOOT_DELAY_SECONDS seconds..."
-    sleep "$REBOOT_DELAY_SECONDS"
+    show_info "Update complete. Rebooting..."
     reboot
   else
     echo "Installation failed! Rolling back..."
@@ -124,8 +114,6 @@ if [[ "$REMOTE_VERSION" != "$LOCAL_VERSION" ]]; then
 
     cp "$BACKUP_DEB_PATH" "$LOCAL_DEB_PATH"
     cp "$BACKUP_CONFIG_PATH" "$LOCAL_CONFIG_PATH"
-    dpkg -i "$LOCAL_DEB_PATH"
     show_info "Rollback complete. System remains on the old version."
-    /opt/feralfile/feralfile &
   fi
 fi

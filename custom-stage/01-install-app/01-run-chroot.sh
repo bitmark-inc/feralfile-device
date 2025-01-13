@@ -14,6 +14,9 @@ xset -dpms
 /opt/feralfile/feralfile &
 EOF
 
+# Set correct ownership
+chown -R feralfile:feralfile /home/feralfile/.config
+
 # Configure auto-login for feralfile user
 mkdir -p /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm.conf.d/12-autologin.conf <<EOF
@@ -26,11 +29,8 @@ EOF
 touch /boot/firmware/btautopair
 
 # Add OTA cronjob update script
-CRON_CMD="0 3 * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority ./usr/local/bin/feralfile-ota-update.sh"
+CRON_CMD="0 3 * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"
 crontab -u feralfile -l 2>/dev/null || true > /tmp/feralfile_cron
 grep -F "$CRON_CMD" /tmp/feralfile_cron >/dev/null 2>&1 || echo "$CRON_CMD" >> /tmp/feralfile_cron
 crontab -u feralfile /tmp/feralfile_cron
 rm /tmp/feralfile_cron
-
-# Set correct ownership
-chown -R feralfile:feralfile /home/feralfile/.config
