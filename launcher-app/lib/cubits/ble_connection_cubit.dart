@@ -48,9 +48,6 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
         localIp: localIp,
       ));
 
-      logger.info('[BLEConnectionCubit] Disposing Bluetooth service');
-      _bluetoothService.dispose();
-
       logger.info('[BLEConnectionCubit] Launching Chromium browser');
       await ChromiumLauncher.launchAndWait();
     } else {
