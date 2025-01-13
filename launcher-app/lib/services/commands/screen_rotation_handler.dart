@@ -1,8 +1,7 @@
 import 'dart:io';
-import 'dart:convert';
-import 'package:path_provider/path_provider.dart';
 import '../logger.dart';
 import 'command_repository.dart';
+import '../config_service.dart';
 
 enum ScreenRotation {
   normal, // 0°
@@ -13,32 +12,14 @@ enum ScreenRotation {
 
 class ScreenRotationHandler implements CommandHandler {
   static ScreenRotation _currentRotation = ScreenRotation.normal;
-  static const String _settingsFileName = 'screen_rotation.json';
 
   Future<void> _saveRotation(String rotation) async {
-    try {
-      final directory = await getApplicationSupportDirectory();
-      final file = File('${directory.path}/$_settingsFileName');
-      await file.writeAsString(jsonEncode({'rotation': rotation}));
-      logger.info('Saved rotation setting: $rotation');
-    } catch (e) {
-      logger.severe('Error saving rotation setting: $e');
-    }
+    await ConfigService.updateScreenRotation(rotation);
   }
 
   Future<String?> _loadSavedRotation() async {
-    try {
-      final directory = await getApplicationSupportDirectory();
-      final file = File('${directory.path}/$_settingsFileName');
-      if (await file.exists()) {
-        final contents = await file.readAsString();
-        final data = jsonDecode(contents) as Map<String, dynamic>;
-        return data['rotation'] as String?;
-      }
-    } catch (e) {
-      logger.severe('Error loading rotation setting: $e');
-    }
-    return null;
+    final config = await ConfigService.loadConfig();
+    return config?.screenRotation;
   }
 
   Future<void> initializeRotation() async {

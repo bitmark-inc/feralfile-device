@@ -4,7 +4,6 @@ import 'screen_rotation_handler.dart';
 import 'keyboard_handler.dart';
 import 'cursor_handler.dart';
 import 'javascript_handler.dart';
-import 'dart:io';
 
 abstract class CommandHandler {
   Future<void> execute(Map<String, dynamic> data);

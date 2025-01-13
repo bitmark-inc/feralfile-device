@@ -20,8 +20,8 @@ void main() async {
   await ScreenRotationHandler().initializeRotation();
 
   // Check if already connected to WiFi
-  // bool isConnected = await WifiService.isConnectedToWifi();
-  bool isConnected = false;
+  bool isConnected = await WifiService.isConnectedToWifi();
+
   if (isConnected) {
     logger.info('Already connected to WiFi. Launching Chromium directly...');
     await ChromiumLauncher.launchAndWait();
