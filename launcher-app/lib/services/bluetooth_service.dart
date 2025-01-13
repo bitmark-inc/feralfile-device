@@ -107,10 +107,11 @@ class BluetoothService {
   // Make callback static
   static void _staticCommandCallback(
       int success, Pointer<Uint8> data, int length) {
-    // Create an immediate copy of the data to prevent issues with mutable buffer
-    final List<int> dataCopy = List<int>.from(data.asTypedList(length));
-
+    List<int>? dataCopy;
     try {
+      // Create an immediate copy of the data
+      dataCopy = List<int>.unmodifiable(data.asTypedList(length));
+
       var (command, commandData, bytesRead) =
           VarintParser.parseDoubleString(dataCopy, 0);
       logger.info('Parsed command: "$command" with data: "$commandData"');
@@ -120,6 +121,9 @@ class BluetoothService {
     } catch (e, stackTrace) {
       logger.severe('Error parsing command data: $e');
       logger.severe('Stack trace: $stackTrace');
+    } finally {
+      // Release the FFI data
+      calloc.free(data);
     }
   }
 }

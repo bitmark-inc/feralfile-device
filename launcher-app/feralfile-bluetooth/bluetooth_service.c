@@ -228,19 +228,23 @@ static void handle_command_write(GDBusConnection *conn,
     gsize n_elements;
     const guchar * const data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
 
+    // Create a copy of the data
+    guchar *data_copy = (guchar *)malloc(n_elements);
+    memcpy(data_copy, data, n_elements);
+
     log_debug("[%s] (cmd_char) Received %zu bytes of data", LOG_TAG, n_elements);
 
     // Add hex string logging
-    char hex_string[n_elements * 3 + 1];  // Each byte needs 2 chars + 1 space, plus null terminator
+    char hex_string[n_elements * 3 + 1];
     for (size_t i = 0; i < n_elements; i++) {
-        sprintf(hex_string + (i * 3), "%02x ", data[i]);
+        sprintf(hex_string + (i * 3), "%02x ", data_copy[i]);
     }
-    hex_string[n_elements * 3 - 1] = '\0';  // Replace last space with null terminator
+    hex_string[n_elements * 3 - 1] = '\0';
     log_debug("[%s] (cmd_char) Data: %s", LOG_TAG, hex_string);
 
-    // Use cmd_callback for command data
+    // Use cmd_callback with the copied data
     if (cmd_callback) {
-        cmd_callback(1, data, (int)n_elements);
+        cmd_callback(1, data_copy, (int)n_elements);
     }
 
     g_variant_unref(array_variant);
