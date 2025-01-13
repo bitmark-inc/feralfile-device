@@ -18,13 +18,13 @@ class ChromiumLauncher {
       _chromiumProcess = await Process.start('chromium', [
         '--kiosk',
         '--disable-extensions',
-        '--remote-debugging-pipe',
-        url,
+        '--remote-debugging-port=9222',
         '--no-first-run',
         '--disable-translate',
         '--disable-infobars',
         '--disable-session-crashed-bubble',
         '--disable-features=TranslateUI',
+        url,
       ]);
 
       logger.info('Chromium launched in kiosk mode.');

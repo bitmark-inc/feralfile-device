@@ -1,35 +1,45 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:http/http.dart' as http;
 import 'logger.dart';
 
 class CDPClient {
-  static Socket? _socket;
+  static WebSocketChannel? _channel;
   static int _messageId = 0;
   static final _responseCompleters = <int, Completer<String>>{};
-  static StreamSubscription? _subscription;
 
   static Future<void> connect() async {
     try {
-      // Connect to Chromium's debug socket
-      _socket = await Socket.connect(InternetAddress('localhost'), 9222);
+      // First get the WebSocket debugger URL from Chrome's HTTP endpoint
+      final response =
+          await http.get(Uri.parse('http://localhost:9222/json/version'));
+      if (response.statusCode != 200) {
+        throw Exception('Failed to get debugger URL: ${response.statusCode}');
+      }
+
+      final Map<String, dynamic> data = jsonDecode(response.body);
+      final String webSocketDebuggerUrl = data['webSocketDebuggerUrl'];
+
+      // Connect to Chrome's WebSocket endpoint
+      _channel = WebSocketChannel.connect(Uri.parse(webSocketDebuggerUrl));
 
       // Listen for responses
-      _subscription = _socket?.listen(
+      _channel?.stream.listen(
         (data) {
-          final String message = utf8.decode(data);
+          final String message = data.toString();
           _handleMessage(message);
         },
         onError: (error) {
-          logger.severe('CDP socket error: $error');
+          logger.severe('CDP WebSocket error: $error');
         },
         onDone: () {
-          logger.info('CDP socket closed');
+          logger.info('CDP WebSocket closed');
           dispose();
         },
       );
 
-      logger.info('Connected to Chrome DevTools Protocol via Unix socket');
+      logger.info('Connected to Chrome DevTools Protocol via WebSocket');
     } catch (e) {
       logger.severe('Failed to connect to CDP: $e');
     }
@@ -50,7 +60,7 @@ class CDPClient {
   }
 
   static Future<String?> evaluateJavaScript(String expression) async {
-    if (_socket == null) {
+    if (_channel == null) {
       await connect();
     }
 
@@ -65,7 +75,7 @@ class CDPClient {
       final completer = Completer<String>();
       _responseCompleters[id] = completer;
 
-      _socket?.add(utf8.encode(jsonEncode(message)));
+      _channel?.sink.add(jsonEncode(message));
 
       final response = await completer.future.timeout(
         const Duration(seconds: 5),
@@ -85,9 +95,8 @@ class CDPClient {
   }
 
   static void dispose() {
-    _subscription?.cancel();
-    _socket?.close();
-    _socket = null;
+    _channel?.sink.close();
+    _channel = null;
     _responseCompleters.clear();
   }
 }
