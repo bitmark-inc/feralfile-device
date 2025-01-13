@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:feralfile/services/logger.dart';
+import 'package:ffi/ffi.dart';
 
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
