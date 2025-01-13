@@ -7,6 +7,7 @@ import 'services/logger.dart';
 import 'services/wifi_service.dart';
 import 'services/chromium_launcher.dart';
 import 'package:window_manager/window_manager.dart';
+import 'services/commands/screen_rotation_handler.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +16,8 @@ void main() async {
   await windowManager.setFullScreen(true);
 
   setupLogging();
+
+  await ScreenRotationHandler().initializeRotation();
 
   // Check if already connected to WiFi
   // bool isConnected = await WifiService.isConnectedToWifi();
