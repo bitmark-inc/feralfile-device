@@ -112,14 +112,14 @@ class BluetoothService {
 
     // Create a hex string for logging
     final hexString =
-        bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+        bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
     logger.info('Received command data (hex): $hexString');
 
     try {
       // Log the first few bytes to understand the length parsing
-      logger.info('First byte (length1): 0x${bytes[0].toRadixString(16)}');
-      logger.info(
-          'Following bytes: ${bytes.sublist(1, 7).map((b) => String.fromCharCode(b)).join()}');
+      // logger.info('First byte (length1): 0x${bytes[0].toRadixString(16)}');
+      // logger.info(
+      //     'Following bytes: ${bytes.sublist(1, 7).map((b) => String.fromCharCode(b)).join()}');
 
       var (command, commandData, bytesRead) =
           VarintParser.parseDoubleString(bytes, 0);
