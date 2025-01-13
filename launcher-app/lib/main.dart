@@ -22,12 +22,11 @@ void main() async {
   // Check if already connected to WiFi
   bool isConnected = await WifiService.isConnectedToWifi();
 
+  runApp(const FeralFileApp());
+
   if (isConnected) {
     logger.info('Already connected to WiFi. Launching Chromium directly...');
     await ChromiumLauncher.launchAndWait();
-  } else {
-    logger.info('No WiFi connection. Starting connection UI...');
-    runApp(const FeralFileApp());
   }
 }
 
