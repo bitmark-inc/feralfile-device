@@ -26,6 +26,7 @@ void main() async {
 
   if (isConnected) {
     logger.info('Already connected to WiFi. Launching Chromium directly...');
+    await Future.delayed(const Duration(seconds: 1));
     await ChromiumLauncher.launchAndWait();
   }
 }
