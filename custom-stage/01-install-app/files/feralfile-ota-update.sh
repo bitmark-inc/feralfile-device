@@ -10,10 +10,10 @@
 exec > /tmp/ota-update.log 2>&1
 
 API_BASE_URL="https://feralfile-device-distribution.bitmark-development.workers.dev"
-LOCAL_DEB_PATH="./feralfile-launcher_arm64.deb"
-LOCAL_CONFIG_PATH="./feralfile-launcher.conf"
-BACKUP_DEB_PATH="./feralfile-launcher_arm64.bak.deb"
-BACKUP_CONFIG_PATH="./feralfile-launcher.bak.conf"
+LOCAL_DEB_PATH="./home/feralfile/feralfile/feralfile-launcher_arm64.deb"
+LOCAL_CONFIG_PATH="./home/feralfile/feralfile/feralfile-launcher.conf"
+BACKUP_DEB_PATH="./home/feralfile/feralfile/feralfile-launcher_arm64.bak.deb"
+BACKUP_CONFIG_PATH="./home/feralfile/feralfile/feralfile-launcher.bak.conf"
 
 REBOOT_DELAY_SECONDS=5
 
@@ -42,8 +42,22 @@ function get_config_value() {
 }
 
 ########################################
+# FUNCTION: check_internet
+#   Check if the system has an active internet connection
+########################################
+function check_internet() {
+  if ! ping -q -c 1 -W 2 8.8.8.8 >/dev/null; then
+    show_info "No internet connection detected. Please check your connection and try again."
+    exit 1
+  fi
+}
+
+########################################
 # MAIN SCRIPT LOGIC
 ########################################
+
+# Check for internet connection
+check_internet
 
 # Read local version from the config file if present
 if [[ -f "$LOCAL_CONFIG_PATH" ]]; then

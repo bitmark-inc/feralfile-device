@@ -1,6 +1,8 @@
 #!/bin/bash
 
-dpkg -i feralfile-launcher_arm64.deb
+chown -R feralfile:feralfile /home/feralfile/feralfile/
+
+dpkg -i /home/feralfile/feralfile/feralfile-launcher_arm64.deb
 
 # Create autostart
 mkdir -p /home/feralfile/.config/openbox
@@ -11,9 +13,6 @@ xset -dpms
 
 /opt/feralfile/feralfile &
 EOF
-
-# Set correct ownership
-chown -R feralfile:feralfile /home/feralfile/.config
 
 # Configure auto-login for feralfile user
 mkdir -p /etc/lightdm/lightdm.conf.d
@@ -32,3 +31,6 @@ crontab -u feralfile -l 2>/dev/null || true > /tmp/feralfile_cron
 grep -F "$CRON_CMD" /tmp/feralfile_cron >/dev/null 2>&1 || echo "$CRON_CMD" >> /tmp/feralfile_cron
 crontab -u feralfile /tmp/feralfile_cron
 rm /tmp/feralfile_cron
+
+# Set correct ownership
+chown -R feralfile:feralfile /home/feralfile/.config
