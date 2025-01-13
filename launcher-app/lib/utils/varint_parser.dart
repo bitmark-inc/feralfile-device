@@ -6,7 +6,7 @@ class VarintParser {
   static (String, String, int) parseDoubleString(Uint8List bytes, int offset) {
     // Log incoming bytes
     final hexString =
-        bytes.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ');
+        bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
     logger.info('Parsing bytes: $hexString');
 
     // Read first string length
