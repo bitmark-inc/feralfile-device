@@ -67,6 +67,12 @@ jobs:
             --transfers=32 \
             --verbose \
             --stats=1s
+          cat > custom-stage/01-install-app/feralfile-launcher.conf << EOF
+          app_version = ${APP_VERSION}
+          app_branch = ${{ github.ref_name }}
+          distribution_auth_user = ${{ secrets.DISTRIBUTION_AUTH_USER }}
+          distribution_auth_password = ${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}
+          EOF
 
       - name: Build Pi OS Image with pi-gen-action
         uses: usimd/pi-gen-action@v1
