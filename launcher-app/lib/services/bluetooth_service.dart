@@ -108,19 +108,19 @@ class BluetoothService {
   static void _staticCommandCallback(
       int success, Pointer<Uint8> data, int length) {
     // Print hex representation of raw data
-    final hexStringData = data
-        .asTypedList(length)
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join(' ');
-    logger.info('Raw command data (hex): $hexStringData');
+    // final hexStringData = data
+    //     .asTypedList(length)
+    //     .map((b) => b.toRadixString(16).padLeft(2, '0'))
+    //     .join(' ');
+    // logger.info('Raw command data (hex): $hexStringData');
 
     // Safely copy only the valid bytes using the provided length
     final bytes = data.asTypedList(length);
 
     // Create a hex string for logging
-    final hexString =
-        bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
-    logger.info('Received command after trimming data (hex): $hexString');
+    // final hexString =
+    //     bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+    // logger.info('Received command after trimming data (hex): $hexString');
 
     try {
       // Log the first few bytes to understand the length parsing
