@@ -107,29 +107,12 @@ class BluetoothService {
   // Make callback static
   static void _staticCommandCallback(
       int success, Pointer<Uint8> data, int length) {
-    // Print hex representation of raw data
-    // final hexStringData = data
-    //     .asTypedList(length)
-    //     .map((b) => b.toRadixString(16).padLeft(2, '0'))
-    //     .join(' ');
-    // logger.info('Raw command data (hex): $hexStringData');
-
-    // Safely copy only the valid bytes using the provided length
-    final bytes = data.asTypedList(length);
-
-    // Create a hex string for logging
-    // final hexString =
-    //     bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
-    // logger.info('Received command after trimming data (hex): $hexString');
+    // Create an immediate copy of the data to prevent issues with mutable buffer
+    final List<int> dataCopy = List<int>.from(data.asTypedList(length));
 
     try {
-      // Log the first few bytes to understand the length parsing
-      // logger.info('First byte (length1): 0x${bytes[0].toRadixString(16)}');
-      // logger.info(
-      //     'Following bytes: ${bytes.sublist(1, 7).map((b) => String.fromCharCode(b)).join()}');
-
       var (command, commandData, bytesRead) =
-          VarintParser.parseDoubleString(bytes, 0);
+          VarintParser.parseDoubleString(dataCopy, 0);
       logger.info('Parsed command: "$command" with data: "$commandData"');
       logger.info('Bytes read: $bytesRead');
 
