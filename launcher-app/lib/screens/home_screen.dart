@@ -47,7 +47,7 @@ class HomeScreen extends StatelessWidget {
                               'and select Wi-Fi. Wait until it finds a\n'
                               'Feral File Display device and tap to connect.\n\n'
                               'Make sure your phone is connected to the Wi-Fi\n'
-                              'network you want to use for the display.';
+                              'network you want to use for the display.(TESTv1)';
                         case BLEConnectionStatus.connecting:
                           instructionText = 'Received Wi-Fi credentials.\n'
                               'Connecting to network "${state.ssid}"...';
