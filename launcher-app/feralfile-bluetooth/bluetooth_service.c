@@ -226,7 +226,7 @@ static void handle_command_write(GDBusConnection *conn,
     g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
 
     gsize n_elements;
-    const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
+    const guchar * const data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
 
     log_debug("[%s] (cmd_char) Received %zu bytes of data", LOG_TAG, n_elements);
 
