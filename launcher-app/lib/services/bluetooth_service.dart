@@ -66,9 +66,10 @@ class BluetoothService {
     Pointer<Uint8> data,
     int length,
   ) {
+    List<int>? rawBytes;
     try {
-      // Use 'length' instead of hardcoding 1024
-      final rawBytes = data.asTypedList(length);
+      // Create an immediate immutable copy of the data
+      rawBytes = List<int>.unmodifiable(data.asTypedList(length));
 
       // Print hex-encoded rawBytes
       final hexString =
@@ -87,6 +88,9 @@ class BluetoothService {
       }
     } catch (e) {
       logger.warning('Error processing WiFi credentials: $e');
+    } finally {
+      // Release the FFI data
+      calloc.free(data);
     }
   }
 
