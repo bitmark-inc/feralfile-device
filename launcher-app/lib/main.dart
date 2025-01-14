@@ -1,13 +1,10 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'screens/home_screen.dart';
+import 'screens/launch_screen.dart';
 import 'cubits/ble_connection_cubit.dart';
 import 'services/logger.dart';
-import 'services/wifi_service.dart';
-import 'services/chromium_launcher.dart';
 import 'package:window_manager/window_manager.dart';
-import 'services/commands/screen_rotation_handler.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,20 +12,9 @@ void main() async {
   await windowManager.ensureInitialized();
   await windowManager.setFullScreen(true);
 
-  setupLogging();
-
-  await ScreenRotationHandler().initializeRotation();
-
-  // Check if already connected to WiFi
-  bool isConnected = await WifiService.isConnectedToWifi();
+  await setupLogging();
 
   runApp(const FeralFileApp());
-
-  if (isConnected) {
-    logger.info('Already connected to WiFi. Launching Chromium directly...');
-    await Future.delayed(const Duration(seconds: 1));
-    await ChromiumLauncher.launchAndWait();
-  }
 }
 
 class FeralFileApp extends StatelessWidget {
@@ -45,7 +31,7 @@ class FeralFileApp extends StatelessWidget {
       ),
       home: BlocProvider(
         create: (context) => BLEConnectionCubit()..startListening(),
-        child: const HomeScreen(),
+        child: const LaunchScreen(),
       ),
     );
   }

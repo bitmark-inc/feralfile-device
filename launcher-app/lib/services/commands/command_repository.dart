@@ -21,6 +21,7 @@ class CommandRepository {
     _handlers['rotate'] = ScreenRotationHandler();
     _handlers['sendKeyboardEvent'] = KeyboardHandler();
     _handlers['dragGesture'] = CursorHandler();
+    _handlers['tapGesture'] = CursorHandler();
   }
 
   Future<void> executeCommand(String command, String data) async {
