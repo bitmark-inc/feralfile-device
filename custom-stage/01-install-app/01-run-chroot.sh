@@ -1,6 +1,8 @@
 #!/bin/bash
 
-dpkg -i feralfile-launcher_arm64.deb
+chown -R feralfile:feralfile /home/feralfile/feralfile/
+
+dpkg -i /home/feralfile/feralfile/feralfile-launcher_arm64.deb
 
 # Create autostart
 mkdir -p /home/feralfile/.config/openbox
@@ -10,6 +12,17 @@ xset s noblank
 xset -dpms
 
 /opt/feralfile/feralfile &
+sleep 5
+if ! pgrep -x "feralfile" > /dev/null; then
+    zenity --info \
+        --title="Feral File Launcher" \
+        --text="Can't start launcher normally, reinstalling backup..." \
+        --timeout=5 \
+        --width=400 \
+        --height=100
+    sudo dpkg -i /home/feralfile/feralfile/feralfile-launcher_arm64.deb
+    /opt/feralfile/feralfile &
+fi
 EOF
 
 # Set correct ownership
@@ -25,3 +38,11 @@ EOF
 
 # Create btautopair file to enable Bluetooth HID auto-pairing
 touch /boot/firmware/btautopair
+
+# Add OTA cronjob update script
+chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
+CRON_CMD="*/30 * * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"
+crontab -u feralfile -l 2>/dev/null || true > /tmp/feralfile_cron
+grep -F "$CRON_CMD" /tmp/feralfile_cron >/dev/null 2>&1 || echo "$CRON_CMD" >> /tmp/feralfile_cron
+crontab -u feralfile /tmp/feralfile_cron
+rm /tmp/feralfile_cron

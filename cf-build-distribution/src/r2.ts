@@ -5,12 +5,16 @@ interface FileInfo {
   zipUrl: string;
   debSize?: string;
   zipSize?: string;
+  debEtag?: string;
+  zipEtag?: string;
 }
 
 interface VersionInfo {
   latest_version: string;
   image_url: string;
   app_url: string;
+  image_fingerprint?: string;
+  app_fingerprint?: string;
 }
 
 function formatFileSize(bytes: number): string {
@@ -43,14 +47,17 @@ export async function listFiles(bucket: R2Bucket): Promise<FileInfo[]> {
         if (existing) {
           existing.debUrl = obj.key;
           existing.debSize = formatFileSize(obj.size);
+          existing.debEtag = obj.etag?.replace(/['"]/g, '');
         } else {
           files.push({
             branch,
             version,
             debUrl: obj.key,
             debSize: formatFileSize(obj.size),
+            debEtag: obj.etag?.replace(/['"]/g, ''),
             zipUrl: '',
-            zipSize: undefined
+            zipSize: undefined,
+            zipEtag: undefined
           });
         }
       }
@@ -61,14 +68,17 @@ export async function listFiles(bucket: R2Bucket): Promise<FileInfo[]> {
         if (existing) {
           existing.zipUrl = obj.key;
           existing.zipSize = formatFileSize(obj.size);
+          existing.zipEtag = obj.etag?.replace(/['"]/g, '');
         } else {
           files.push({
             branch,
             version,
             debUrl: '',
             debSize: undefined,
+            debEtag: undefined,
             zipUrl: obj.key,
-            zipSize: formatFileSize(obj.size)
+            zipSize: formatFileSize(obj.size),
+            zipEtag: obj.etag?.replace(/['"]/g, '')
           });
         }
       }
@@ -124,6 +134,8 @@ export async function getLatestVersion(bucket: R2Bucket, branch: string): Promis
   return {
     latest_version: latest.version,
     image_url: latest.zipUrl ? `/download/${latest.zipUrl}` : '',
-    app_url: latest.debUrl ? `/download/${latest.debUrl}` : ''
+    app_url: latest.debUrl ? `/download/${latest.debUrl}` : '',
+    image_fingerprint: latest.zipEtag,
+    app_fingerprint: latest.debEtag
   };
 } 
