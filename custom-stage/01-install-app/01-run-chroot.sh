@@ -12,6 +12,17 @@ xset s noblank
 xset -dpms
 
 /opt/feralfile/feralfile &
+sleep 5
+if ! pgrep -x "feralfile" > /dev/null; then
+    zenity --info \
+        --title="Feral File Launcher" \
+        --text="Can't start launcher normally, reinstalling backup..." \
+        --timeout=5 \
+        --width=400 \
+        --height=100
+    sudo dpkg -i /home/feralfile/feralfile/feralfile-launcher_arm64.deb
+    /opt/feralfile/feralfile &
+fi
 EOF
 
 # Set correct ownership
