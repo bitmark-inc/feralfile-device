@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after_layout/after_layout.dart';
+import '../services/commands/cursor_handler.dart';
 import '../services/logger.dart';
 import '../services/wifi_service.dart';
 import '../services/chromium_launcher.dart';
@@ -26,6 +27,7 @@ class _LaunchScreenState extends State<LaunchScreen>
       // Initialize screen rotation
       logger.info('Initializing screen rotation...');
       await ScreenRotationHandler().initializeRotation();
+      await CursorHandler.initializeScreenDimensions();
 
       // Check WiFi connection
       logger.info('Checking WiFi connection...');
