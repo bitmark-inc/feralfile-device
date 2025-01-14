@@ -11,7 +11,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => BLEConnectionCubit(),
+      create: (context) => BLEConnectionCubit()..startListening(),
       child: Scaffold(
         body: Stack(
           children: [

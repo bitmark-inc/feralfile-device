@@ -29,10 +29,7 @@ class FeralFileApp extends StatelessWidget {
         primaryColor: Colors.black,
         scaffoldBackgroundColor: Colors.black,
       ),
-      home: BlocProvider(
-        create: (context) => BLEConnectionCubit()..startListening(),
-        child: const LaunchScreen(),
-      ),
+      home: const LaunchScreen(),
     );
   }
 }
