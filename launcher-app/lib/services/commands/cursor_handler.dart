@@ -18,7 +18,7 @@ class CursorHandler implements CommandHandler {
         logger.info('Tap gesture executed');
       } else {
         // Handle drag gesture (existing code)
-        final List<dynamic> movements = data['movements'] as List<dynamic>;
+        final List<dynamic> movements = data['cursorOffsets'] as List<dynamic>;
 
         for (var movement in movements) {
           final dx = (movement['dx'] as num).toDouble();
