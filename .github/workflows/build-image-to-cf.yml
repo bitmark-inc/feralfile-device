@@ -68,14 +68,6 @@ jobs:
             --verbose \
             --stats=1s
 
-      - name: Generate Version Info
-        run: |
-          echo "{
-            \"branch\": \"${{ github.ref_name }}\",
-            \"commit\": \"${{ github.sha }}\",
-            \"app_fingerprint\": \"$(md5sum custom-stage/01-install-app/feralfile-launcher_arm64.deb | cut -d' ' -f1)\"
-          }" > custom-stage-ota/00-install-ota-updates/version.json
-
       - name: Build Pi OS Image with pi-gen-action
         uses: usimd/pi-gen-action@v1
         with:
