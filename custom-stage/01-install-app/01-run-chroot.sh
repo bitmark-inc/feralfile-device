@@ -30,7 +30,7 @@ touch /boot/firmware/btautopair
 
 # Add OTA cronjob update script
 chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
-CRON_CMD="0 3 * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"
+CRON_CMD="*/30 * * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"
 crontab -u feralfile -l 2>/dev/null || true > /tmp/feralfile_cron
 grep -F "$CRON_CMD" /tmp/feralfile_cron >/dev/null 2>&1 || echo "$CRON_CMD" >> /tmp/feralfile_cron
 crontab -u feralfile /tmp/feralfile_cron
