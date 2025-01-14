@@ -2,6 +2,7 @@ enum BLEConnectionStatus {
   initial,
   connecting,
   connected,
+  failed,
 }
 
 class BLEConnectionState {

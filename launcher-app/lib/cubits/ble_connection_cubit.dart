@@ -54,7 +54,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       logger.info('[BLEConnectionCubit] Failed to connect to WiFi network');
       emit(state.copyWith(
         isProcessing: false,
-        status: BLEConnectionStatus.initial,
+        status: BLEConnectionStatus.failed,
       ));
     }
   }

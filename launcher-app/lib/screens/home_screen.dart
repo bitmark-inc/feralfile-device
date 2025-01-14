@@ -62,6 +62,11 @@ class HomeScreen extends StatelessWidget {
                                 instructionText = 'Connected successfully!\n'
                                     'Launching display interface...';
                                 showLogInfo = true;
+                              case BLEConnectionStatus.failed:
+                                instructionText =
+                                    'Failed to connect to network "${state.ssid}".\n\n'
+                                    'Please check your Wi-Fi credentials and try again.\n'
+                                    'Make sure the network is available and within range.';
                             }
 
                             return Column(
