@@ -13,19 +13,6 @@ xset -dpms
 
 nmcli device wifi rescan
 sleep 3
-
-/opt/feralfile/feralfile &
-sleep 5
-if ! pgrep -x "feralfile" > /dev/null; then
-    zenity --info \
-        --title="Feral File Launcher" \
-        --text="Can't start launcher normally, reinstalling backup..." \
-        --timeout=5 \
-        --width=400 \
-        --height=100
-    sudo dpkg -i /home/feralfile/feralfile/feralfile-launcher_arm64.deb
-    /opt/feralfile/feralfile &
-fi
 EOF
 
 # Set correct ownership
@@ -42,6 +29,25 @@ EOF
 # Create btautopair file to enable Bluetooth HID auto-pairing
 touch /boot/firmware/btautopair
 
+# Create feralfile service 
+mkdir -p /etc/systemd/system
+cat > /etc/systemd/system/feralfile.service << EOF
+[Unit]
+Description=FeralFile Application
+After=network.target
+
+[Service]
+ExecStart=/opt/feralfile/feralfile
+Restart=always
+RestartSec=5
+User=feralfile
+Environment=DISPLAY=:0
+Environment=XDG_RUNTIME_DIR=/run/user/$(id -u feralfile)
+
+[Install]
+WantedBy=graphical.target
+EOF
+
 # Add OTA cronjob update script
 chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
 CRON_CMD="*/30 * * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"
@@ -52,10 +58,10 @@ rm /tmp/feralfile_cron
 
 # Create a custom configuration for unattended-upgrades
 mkdir -p /etc/apt/apt.conf.d
-sudo cat > /etc/apt/apt.conf.d/50unattended-upgrades << EOF
+cat > /etc/apt/apt.conf.d/50unattended-upgrades << EOF
 Unattended-Upgrade::Origins-Pattern {
-    "origin=Raspbian,codename=${distro_codename},label=Raspbian";
-    "origin=Raspberry Pi Foundation,codename=${distro_codename},label=Raspberry Pi Foundation";
+    "origin=Raspbian,codename=bookworm,label=Raspbian";
+    "origin=Raspberry Pi Foundation,codename=bookworm,label=Raspberry Pi Foundation";
 };
 Unattended-Upgrade::Automatic-Reboot "true";
 Unattended-Upgrade::Automatic-Reboot-Time "02:00";
@@ -63,8 +69,7 @@ Unattended-Upgrade::Remove-Unused-Dependencies "true";
 Unattended-Upgrade::Allow-downgrade "true";
 Unattended-Upgrade::Keep-Debs-After-Install "true";
 EOF
-
-sudo cat > /etc/apt/apt.conf.d/20auto-upgrades << EOF
+cat > /etc/apt/apt.conf.d/20auto-upgrades << EOF
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
