@@ -45,7 +45,7 @@ function get_config_value() {
 ########################################
 function check_internet() {
   if ! ping -q -c 1 -W 2 8.8.8.8 >/dev/null; then
-    show_info "No internet connection detected. Please check your connection and try again."
+    echo "[INFO] No internet connection detected."
     exit 1
   fi
 }
@@ -64,10 +64,8 @@ if [[ -f "$LOCAL_CONFIG_PATH" ]]; then
   BASIC_AUTH_USER="$(get_config_value "distribution_auth_user")"
   BASIC_AUTH_PASS="$(get_config_value "distribution_auth_password")"
 else
-  LOCAL_VERSION=""
-  LOCAL_BRANCH=""
-  BASIC_AUTH_USER=""
-  BASIC_AUTH_PASS=""
+  echo "[ERROR] Can't parse OTA information."
+  exit 1
 fi
 
 echo "Currently installed version: $LOCAL_VERSION"
