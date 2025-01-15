@@ -2,3 +2,5 @@ gldriver-test
 chromium rpi-chromium-mods
 fonts-droid-fallback
 fonts-liberation2
+x11-xserver-utils
+xdotool

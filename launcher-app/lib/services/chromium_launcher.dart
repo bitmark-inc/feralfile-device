@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:feralfile/services/logger.dart';
 
 class ChromiumLauncher {
-  // Launch Chromium in full-screen mode with the specified URL
+  static Process? _chromiumProcess;
+
   static Future<void> launchChromium(String url) async {
     try {
       // Check if Chromium is installed
@@ -14,25 +15,30 @@ class ChromiumLauncher {
       }
 
       // Launch Chromium in kiosk mode (full-screen without UI elements)
-      await Process.start('chromium', [
+      _chromiumProcess = await Process.start('chromium', [
         '--kiosk',
         '--disable-extensions',
-        url,
+        '--remote-debugging-port=9222',
         '--no-first-run',
         '--disable-translate',
         '--disable-infobars',
         '--disable-session-crashed-bubble',
         '--disable-features=TranslateUI',
+        url,
       ]);
 
       logger.info('Chromium launched in kiosk mode.');
     } catch (e) {
-      logger.info('Error launching Chromium: $e');
+      logger.severe('Error launching Chromium: $e');
     }
   }
 
-  static Future<void> launchAndExit() async {
+  static Future<void> launchAndWait() async {
     await launchChromium('https://display.feralfile.com');
-    exit(0);
+  }
+
+  static void dispose() {
+    _chromiumProcess?.kill();
+    _chromiumProcess = null;
   }
 }
