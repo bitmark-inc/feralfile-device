@@ -70,10 +70,11 @@ class HomeScreen extends StatelessWidget {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             QrImageView(
-                                              data: state.deviceId!,
+                                              data:
+                                                  'feralfile://device_connect/${state.deviceId!}',
                                               version: QrVersions.auto,
-                                              size: 600.0,
-                                              backgroundColor: Colors.white,
+                                              size: 800.0,
+                                              backgroundColor: Colors.black,
                                             ),
                                             const SizedBox(height: 20),
                                             Text(
