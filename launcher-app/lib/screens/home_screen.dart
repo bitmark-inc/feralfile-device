@@ -74,7 +74,7 @@ class HomeScreen extends StatelessWidget {
                                                   'feralfile://device_connect/${state.deviceId!}',
                                               version: QrVersions.auto,
                                               size: 800.0,
-                                              backgroundColor: Colors.black,
+                                              backgroundColor: Colors.white,
                                             ),
                                             const SizedBox(height: 20),
                                             Text(
