@@ -11,6 +11,9 @@ xset s off
 xset s noblank
 xset -dpms
 
+nmcli device wifi rescan
+sleep 3
+
 /opt/feralfile/feralfile &
 sleep 5
 if ! pgrep -x "feralfile" > /dev/null; then
