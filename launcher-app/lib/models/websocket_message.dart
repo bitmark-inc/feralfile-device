@@ -5,20 +5,31 @@ import 'package:uuid/uuid.dart';
 
 class RequestMessageData {
   final Command command;
-  final String? request;
+  final Map<String, dynamic>? request;
 
   RequestMessageData({required this.command, this.request});
 
   factory RequestMessageData.fromJson(Map<String, dynamic> json) {
+    var requestData = json['request'];
+    Map<String, dynamic>? requestMap;
+    if (requestData is String) {
+      try {
+        requestMap = jsonDecode(requestData);
+      } catch (e) {
+        requestMap = {};
+      }
+    } else if (requestData is Map<String, dynamic>) {
+      requestMap = requestData;
+    }
     return RequestMessageData(
       command: Command.fromString(json['command']),
-      request: json['request'],
+      request: requestMap,
     );
   }
 
-  Map<String, String> toJson() => {
+  Map<String, dynamic> toJson() => {
         'command': command.name,
-        'request': request ?? '',
+        'request': request ?? {},
       };
 }
 

@@ -68,21 +68,19 @@ class WebSocketService {
               WebSocketRequestMessage(
                 message: RequestMessageData(
                   command: Command.castListArtwork,
-                  request: jsonEncode(
-                    {
-                      'artworks': [
-                        {
-                          'token': {
-                            'id':
-                                'eth-0x90e951F1BC16A0ECe75844D12371B81512718DA7-72359935895858646181951013458866965984551984693877025456801350144502744957515',
-                          },
-                          'artwork': null,
-                          'duration': 0,
+                  request: {
+                    'artworks': [
+                      {
+                        'token': {
+                          'id':
+                              'eth-0x90e951F1BC16A0ECe75844D12371B81512718DA7-72359935895858646181951013458866965984551984693877025456801350144502744957515',
                         },
-                      ],
-                      'startTime': null,
-                    },
-                  ),
+                        'artwork': null,
+                        'duration': 0,
+                      },
+                    ],
+                    'startTime': null,
+                  },
                 ),
               ),
             );
@@ -96,7 +94,7 @@ class WebSocketService {
               WebSocketRequestMessage(
                 message: RequestMessageData(
                   command: Command.disconnect,
-                  request: jsonEncode({}),
+                  request: {},
                 ),
               ),
             );
