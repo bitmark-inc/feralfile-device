@@ -240,7 +240,7 @@ static GVariant *char_get_property(GDBusConnection *conn,
             return g_variant_new_object_path("/com/feralfile/display/service0");
         } else if (g_strcmp0(property_name, "Flags") == 0) {
             // Only "write". Could add "write-without-response" or "notify" if needed.
-            const gchar* flags[] = {"write", NULL};
+            const gchar* flags[] = {"write", "write-without-response", NULL};
             return g_variant_new_strv(flags, -1);
         }
     }
@@ -451,7 +451,7 @@ static void handle_get_objects(GDBusConnection *conn,
     GVariantBuilder *cmd_char_props = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_add(cmd_char_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_CMD_CHAR_UUID));
     g_variant_builder_add(cmd_char_props, "{sv}", "Service", g_variant_new_object_path("/com/feralfile/display/service0"));
-    const gchar* cmd_flags[] = {"write", NULL};
+    const gchar* cmd_flags[] = {"write", "write-without-response", NULL};
     g_variant_builder_add(cmd_char_props, "{sv}", "Flags", g_variant_new_strv(cmd_flags, -1));
     g_variant_builder_add(cmd_char_builder, "{sa{sv}}", "org.bluez.GattCharacteristic1", cmd_char_props);
     g_variant_builder_add(builder, "{oa{sa{sv}}}", "/com/feralfile/display/service0/cmd_char", cmd_char_builder);
