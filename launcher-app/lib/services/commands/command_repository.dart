@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import '../logger.dart';
 import 'screen_rotation_handler.dart';
 import 'keyboard_handler.dart';
@@ -33,7 +34,7 @@ class CommandRepository {
         await handler.execute(jsonData);
       } else {
         // Pass through unhandled commands to Chromium via JavaScript
-        await _jsHandler.execute({'command': command, 'data': data});
+        await _jsHandler.execute({'command': command, 'request': data});
       }
     } catch (e) {
       logger.severe('Error executing command $command: $e');

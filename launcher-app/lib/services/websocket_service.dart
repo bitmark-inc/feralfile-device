@@ -1,18 +1,8 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:feralfile/models/command.dart';
+import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/logger.dart';
-
-class WebSocketMessage {
-  String messageID;
-  Object? message;
-
-  WebSocketMessage({required this.messageID, this.message});
-
-  Map<String, String> toJson() => {
-        'messageID': messageID,
-        'message': jsonEncode(message ?? {}),
-      };
-}
 
 class WebSocketService {
   static WebSocketService? _instance;
@@ -58,48 +48,42 @@ class WebSocketService {
     }
   }
 
-  // Send message to website
-  void sendMessage(WebSocketMessage message) {
-    if (_socket != null) {
-      _socket!.add(jsonEncode(message.toJson()));
-    }
-  }
-
   // Handle messages received from website
   void _handleMessage(dynamic message) {
     try {
-      final data = jsonDecode(message);
-      logger.info('Received message: $data');
+      logger.info('Received message: $message');
 
-      final messageID = jsonDecode(message)['messageID'];
-      if (messageID == 'ping') {
-        sendMessage(WebSocketMessage(
-          messageID: messageID,
-          message: {},
-        ));
+      final data = WebSocketResponseMessage.fromJson(jsonDecode(message));
+      if (data.messageID == 'ping') {
+        sendMessage(
+          WebSocketRequestMessage(
+            messageID: data.messageID,
+          ),
+        );
 
         Future.delayed(
           const Duration(seconds: 10),
           () {
             sendMessage(
-              WebSocketMessage(
-                messageID: '9bd42631-a992-4207-b1f7-ff1d63d65777',
-                message: {
-                  'command': 'castListArtwork',
-                  'request': {
-                    'artworks': [
-                      {
-                        'token': {
-                          'id':
-                              'eth-0x90e951F1BC16A0ECe75844D12371B81512718DA7-72359935895858646181951013458866965984551984693877025456801350144502744957515',
+              WebSocketRequestMessage(
+                message: RequestMessageData(
+                  command: Command.castListArtwork,
+                  request: jsonEncode(
+                    {
+                      'artworks': [
+                        {
+                          'token': {
+                            'id':
+                                'eth-0x90e951F1BC16A0ECe75844D12371B81512718DA7-72359935895858646181951013458866965984551984693877025456801350144502744957515',
+                          },
+                          'artwork': null,
+                          'duration': 0,
                         },
-                        'artwork': null,
-                        'duration': 0,
-                      },
-                    ],
-                    'startTime': null,
-                  }
-                },
+                      ],
+                      'startTime': null,
+                    },
+                  ),
+                ),
               ),
             );
           },
@@ -109,12 +93,11 @@ class WebSocketService {
           const Duration(seconds: 30),
           () {
             sendMessage(
-              WebSocketMessage(
-                messageID: '377189a7-95e0-4a18-b9db-9bea9c26c4e3',
-                message: {
-                  'command': 'disconnect',
-                  'request': {},
-                },
+              WebSocketRequestMessage(
+                message: RequestMessageData(
+                  command: Command.disconnect,
+                  request: jsonEncode({}),
+                ),
               ),
             );
           },
@@ -127,6 +110,14 @@ class WebSocketService {
       }
     } catch (e) {
       logger.warning('Error handling message: $e');
+    }
+  }
+
+  // Send message to website
+  void sendMessage(WebSocketRequestMessage message) {
+    if (_socket != null) {
+      logger.info('Sending message: ${jsonEncode(message.toJson())}');
+      _socket!.add(jsonEncode(message.toJson()));
     }
   }
 
