@@ -46,3 +46,24 @@ crontab -u feralfile -l 2>/dev/null || true > /tmp/feralfile_cron
 grep -F "$CRON_CMD" /tmp/feralfile_cron >/dev/null 2>&1 || echo "$CRON_CMD" >> /tmp/feralfile_cron
 crontab -u feralfile /tmp/feralfile_cron
 rm /tmp/feralfile_cron
+
+# Create a custom configuration for unattended-upgrades
+mkdir -p /etc/apt/apt.conf.d
+sudo cat > /etc/apt/apt.conf.d/50unattended-upgrades << EOF
+Unattended-Upgrade::Origins-Pattern {
+    "origin=Raspbian,codename=${distro_codename},label=Raspbian";
+    "origin=Raspberry Pi Foundation,codename=${distro_codename},label=Raspberry Pi Foundation";
+};
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "02:00";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Allow-downgrade "true";
+Unattended-Upgrade::Keep-Debs-After-Install "true";
+EOF
+
+sudo cat > /etc/apt/apt.conf.d/20auto-upgrades << EOF
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+APT::Periodic::Verbose "1";
+EOF
