@@ -11,6 +11,17 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
 
   BLEConnectionCubit() : super(BLEConnectionState()) {
     logger.info('[BLEConnectionCubit] Initialized');
+    _initializeDeviceId();
+  }
+
+  void _initializeDeviceId() {
+    final deviceId = _bluetoothService.getDeviceId();
+    if (deviceId != null) {
+      logger.info('[BLEConnectionCubit] Device ID: $deviceId');
+      emit(state.copyWith(deviceId: deviceId));
+    } else {
+      logger.warning('[BLEConnectionCubit] Failed to get device ID');
+    }
   }
 
   void startListening() {

@@ -14,6 +14,44 @@
 #define FERALFILE_SETUP_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define FERALFILE_CMD_CHAR_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 
+const char* bluetooth_get_device_id() {
+    static char device_id[18];  // MAC addresses are 17 chars + null terminator
+    GError *error = NULL;
+    
+    // Get the default adapter
+    GDBusProxy *adapter = g_dbus_proxy_new_for_bus_sync(
+        G_BUS_TYPE_SYSTEM,
+        G_DBUS_PROXY_FLAGS_NONE,
+        NULL,
+        "org.bluez",
+        "/org/bluez/hci0",
+        "org.bluez.Adapter1",
+        NULL,
+        &error
+    );
+
+    if (error != NULL) {
+        log_debug("[%s] Failed to get adapter: %s\n", LOG_TAG, error->message);
+        g_error_free(error);
+        return NULL;
+    }
+
+    // Get the adapter's address property
+    GVariant *address = g_dbus_proxy_get_cached_property(adapter, "Address");
+    if (address != NULL) {
+        const char *addr_str = g_variant_get_string(address, NULL);
+        strncpy(device_id, addr_str, sizeof(device_id) - 1);
+        device_id[sizeof(device_id) - 1] = '\0';
+        g_variant_unref(address);
+    } else {
+        log_debug("[%s] Failed to get adapter address\n", LOG_TAG);
+        return NULL;
+    }
+
+    g_object_unref(adapter);
+    return device_id;
+}
+
 static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
 static GDBusNodeInfo *root_node = NULL;

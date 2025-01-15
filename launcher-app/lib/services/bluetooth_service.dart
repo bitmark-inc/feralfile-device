@@ -131,4 +131,13 @@ class BluetoothService {
       calloc.free(data);
     }
   }
+
+  String? getDeviceId() {
+    final deviceIdPtr = _bindings.bluetooth_get_device_id();
+    if (deviceIdPtr == nullptr) {
+      return null;
+    }
+    final deviceId = deviceIdPtr.toDartString();
+    return deviceId;
+  }
 }

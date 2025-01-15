@@ -13,6 +13,7 @@ int bluetooth_init();
 int bluetooth_start(connection_result_callback setup_callback, command_callback cmd_callback);
 void bluetooth_stop();
 void bluetooth_set_logfile(const char* path);
+const char* bluetooth_get_device_id();
 
 #ifdef __cplusplus
 }

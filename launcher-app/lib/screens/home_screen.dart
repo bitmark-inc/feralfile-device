@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../cubits/ble_connection_cubit.dart';
 import '../cubits/ble_connection_state.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -48,12 +49,52 @@ class HomeScreen extends StatelessWidget {
 
                             switch (state.status) {
                               case BLEConnectionStatus.initial:
-                                instructionText =
-                                    'Open the Feral File app, go to the Profile tab,\n'
-                                    'and select Wi-Fi. Wait until it finds a\n'
-                                    'Feral File Display device and tap to connect.\n\n'
-                                    'Make sure your phone is connected to the Wi-Fi\n'
-                                    'network you want to use for the display.';
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Open the Feral File app, go to the Profile tab,\n'
+                                      'and select Wi-Fi. Scan the QR code below\n'
+                                      'to connect to this display.\n',
+                                      style: TextStyle(
+                                        fontFamily: 'PPMori',
+                                        fontSize: 42,
+                                        color: Colors.grey[300],
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    if (state.deviceId != null)
+                                      Center(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            QrImageView(
+                                              data: state.deviceId!,
+                                              version: QrVersions.auto,
+                                              size: 600.0,
+                                              backgroundColor: Colors.white,
+                                            ),
+                                            const SizedBox(height: 20),
+                                            Text(
+                                              'Scan this QR code from the\nFeral File mobile app to connect',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontFamily: 'PPMori',
+                                                fontSize: 16,
+                                                color: Colors.grey[400],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    else
+                                      const Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    const Spacer(),
+                                  ],
+                                );
                               case BLEConnectionStatus.connecting:
                                 instructionText =
                                     'Received Wi-Fi credentials.\n'
