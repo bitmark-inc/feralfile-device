@@ -1,23 +1,14 @@
 // lib/services/wifi_service.dart
 import 'dart:io';
 import 'package:feralfile/services/logger.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../models/wifi_credentials.dart';
+import '../services/config_service.dart';
 
 class WifiService {
   // Connect to Wi-Fi using nmcli
   static Future<bool> _saveCredentials(WifiCredentials credentials) async {
-    try {
-      final appDir = await getApplicationSupportDirectory();
-      final file = File('${appDir.path}/wifi_credentials.json');
-      await file.writeAsString(credentials.toJson());
-      logger.info('Saved Wi-Fi credentials to file: ${file.path}');
-      return true;
-    } catch (e) {
-      logger.warning('Failed to save Wi-Fi credentials: $e');
-      return false;
-    }
+    return ConfigService.updateWifiCredentials(credentials);
   }
 
   static Future<bool> connect(WifiCredentials credentials) async {
@@ -78,6 +69,22 @@ class WifiService {
     } catch (e) {
       logger.warning('Error checking WiFi status: $e');
       return false;
+    }
+  }
+
+  static Future<String> getLocalIpAddress() async {
+    try {
+      final result = await Process.run('hostname', ['-I']);
+      if (result.exitCode == 0) {
+        final ips = result.stdout.toString().trim().split(' ');
+        if (ips.isNotEmpty) {
+          return ips.first;
+        }
+      }
+      return 'localhost';
+    } catch (e) {
+      logger.warning('Error getting local IP: $e');
+      return 'localhost';
     }
   }
 }

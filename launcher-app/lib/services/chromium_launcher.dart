@@ -4,9 +4,9 @@ import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/websocket_service.dart';
 
 class ChromiumLauncher {
+  static Process? _chromiumProcess;
   static WebSocketService? _wsService;
 
-  // Launch Chromium in full-screen mode with the specified URL
   static Future<void> launchChromium(String url) async {
     try {
       // Init WebSocket server
@@ -21,15 +21,16 @@ class ChromiumLauncher {
       }
 
       // Launch Chromium in kiosk mode (full-screen without UI elements)
-      await Process.start('chromium', [
+      _chromiumProcess = await Process.start('chromium', [
         '--kiosk',
         '--disable-extensions',
-        url,
+        '--remote-debugging-port=9222',
         '--no-first-run',
         '--disable-translate',
         '--disable-infobars',
         '--disable-session-crashed-bubble',
         '--disable-features=TranslateUI',
+        url,
       ]);
 
       logger.info('Chromium launched in kiosk mode.');
@@ -39,17 +40,19 @@ class ChromiumLauncher {
         logger.info('Chromium received message: $message');
       });
     } catch (e) {
-      logger.info('Error launching Chromium: $e');
+      logger.severe('Error launching Chromium: $e');
     }
   }
 
-  static Future<void> launchAndExit() async {
+  static Future<void> launchAndWait() async {
+    // await launchChromium('https://display.feralfile.com');
     await launchChromium(
         'https://support-feralfile-device.feralfile-display.pages.dev/');
-    exit(0);
   }
 
   static void dispose() {
+    _chromiumProcess?.kill();
+    _chromiumProcess = null;
     _wsService?.dispose();
   }
 }
