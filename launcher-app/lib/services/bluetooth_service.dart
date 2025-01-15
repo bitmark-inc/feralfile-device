@@ -1,9 +1,7 @@
 // lib/services/bluetooth_service.dart
 import 'dart:ffi';
 import 'dart:isolate';
-import 'dart:typed_data';
 import 'package:feralfile/services/logger.dart';
-import 'package:ffi/ffi.dart';
 
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
@@ -15,6 +13,10 @@ class BluetoothService {
   final CommandService _commandService = CommandService();
   static void Function(WifiCredentials)? _onCredentialsReceived;
   static final _commandPort = ReceivePort();
+
+  // Store both callbacks
+  late final NativeCallable<ConnectionResultCallbackNative> _setupCallback;
+  late final NativeCallable<CommandCallbackNative> _cmdCallback;
 
   BluetoothService() {
     _initialize();
@@ -28,24 +30,21 @@ class BluetoothService {
       return;
     }
 
-    late final NativeCallable<ConnectionResultCallbackNative> setupCallback;
-    late final NativeCallable<CommandCallbackNative> cmdCallback;
-
-    setupCallback = NativeCallable<ConnectionResultCallbackNative>.listener(
+    _setupCallback = NativeCallable<ConnectionResultCallbackNative>.listener(
       _staticConnectionResultCallback,
     );
 
-    cmdCallback = NativeCallable<CommandCallbackNative>.listener(
+    _cmdCallback = NativeCallable<CommandCallbackNative>.listener(
       _staticCommandCallback,
     );
 
     int startResult = _bindings.bluetooth_start(
-        setupCallback.nativeFunction, cmdCallback.nativeFunction);
+        _setupCallback.nativeFunction, _cmdCallback.nativeFunction);
 
     if (startResult != 0) {
       logger.warning('Failed to start Bluetooth service.');
-      setupCallback.close();
-      cmdCallback.close();
+      _setupCallback.close();
+      _cmdCallback.close();
     } else {
       logger.info('Bluetooth service started. Waiting for connections...');
     }
@@ -57,8 +56,40 @@ class BluetoothService {
     });
   }
 
-  // Store the callback reference for cleanup
-  NativeCallable<ConnectionResultCallbackNative>? _callback;
+  void startListening(void Function(WifiCredentials) onCredentialsReceived) {
+    logger.info('Starting to listen for Bluetooth connections...');
+    _onCredentialsReceived = onCredentialsReceived;
+  }
+
+  void dispose() {
+    logger.info('Disposing Bluetooth service...');
+    _bindings.bluetooth_stop();
+    _setupCallback.close();
+    _cmdCallback.close();
+    _onCredentialsReceived = null;
+  }
+
+  Stream<CommandData> get commandStream => _commandService.commandStream;
+
+  // Make callback static
+  static void _staticCommandCallback(
+      int success, Pointer<Uint8> data, int length) {
+    List<int>? dataCopy;
+    try {
+      // Create an immediate copy of the data
+      dataCopy = List<int>.unmodifiable(data.asTypedList(length));
+
+      var (command, commandData, bytesRead) =
+          VarintParser.parseDoubleString(dataCopy, 0);
+      logger.info('Parsed command: "$command" with data: "$commandData"');
+      logger.info('Bytes read: $bytesRead');
+
+      CommandService().handleCommand(command, commandData);
+    } catch (e, stackTrace) {
+      logger.severe('Error parsing command data: $e');
+      logger.severe('Stack trace: $stackTrace');
+    }
+  }
 
   // Static callback that can be used with FFI
   static void _staticConnectionResultCallback(
@@ -88,47 +119,6 @@ class BluetoothService {
       }
     } catch (e) {
       logger.warning('Error processing WiFi credentials: $e');
-    } finally {
-      // Release the FFI data
-      calloc.free(data);
-    }
-  }
-
-  void startListening(void Function(WifiCredentials) onCredentialsReceived) {
-    logger.info('Starting to listen for Bluetooth connections...');
-    _onCredentialsReceived = onCredentialsReceived;
-  }
-
-  void dispose() {
-    logger.info('Disposing Bluetooth service...');
-    _bindings.bluetooth_stop();
-    _callback?.close();
-    _callback = null;
-    _onCredentialsReceived = null;
-  }
-
-  Stream<CommandData> get commandStream => _commandService.commandStream;
-
-  // Make callback static
-  static void _staticCommandCallback(
-      int success, Pointer<Uint8> data, int length) {
-    List<int>? dataCopy;
-    try {
-      // Create an immediate copy of the data
-      dataCopy = List<int>.unmodifiable(data.asTypedList(length));
-
-      var (command, commandData, bytesRead) =
-          VarintParser.parseDoubleString(dataCopy, 0);
-      logger.info('Parsed command: "$command" with data: "$commandData"');
-      logger.info('Bytes read: $bytesRead');
-
-      CommandService().handleCommand(command, commandData);
-    } catch (e, stackTrace) {
-      logger.severe('Error parsing command data: $e');
-      logger.severe('Stack trace: $stackTrace');
-    } finally {
-      // Release the FFI data
-      calloc.free(data);
     }
   }
 }
