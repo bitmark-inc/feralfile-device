@@ -2,6 +2,7 @@
 import 'dart:ffi';
 import 'dart:isolate';
 import 'package:feralfile/services/logger.dart';
+import 'package:ffi/ffi.dart';
 
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
@@ -78,6 +79,8 @@ class BluetoothService {
     try {
       // Create an immediate copy of the data
       dataCopy = List<int>.unmodifiable(data.asTypedList(length));
+      // Release the FFI data
+      calloc.free(data);
 
       var (command, commandData, bytesRead) =
           VarintParser.parseDoubleString(dataCopy, 0);
@@ -101,6 +104,8 @@ class BluetoothService {
     try {
       // Create an immediate immutable copy of the data
       rawBytes = List<int>.unmodifiable(data.asTypedList(length));
+      // Release the FFI data
+      calloc.free(data);
 
       // Print hex-encoded rawBytes
       final hexString =
