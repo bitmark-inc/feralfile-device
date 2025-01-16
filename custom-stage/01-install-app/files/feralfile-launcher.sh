@@ -10,7 +10,6 @@ export XAUTHORITY=/home/feralfile/.Xauthority
 
 # Function to start Chromium in kiosk mode
 start_chromium() {
-    sleep 5
     # Start Chromium if not already running
     if ! pgrep -f "$CHROMIUM" > /dev/null; then
         echo "Starting Chromium..."
