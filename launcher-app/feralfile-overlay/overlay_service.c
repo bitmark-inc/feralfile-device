@@ -31,6 +31,11 @@ static int should_show_arrow = 0;
 static pthread_mutex_t draw_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void draw_cursor(cairo_t *cr, int x, int y) {
+    // Only proceed if we should show the cursor
+    if (!should_show_cursor) {
+        return;
+    }
+
     cairo_set_source_rgba(cr, 1, 1, 1, 0.8);
     cairo_set_line_width(cr, 2);
     
@@ -46,27 +51,22 @@ static void draw_cursor(cairo_t *cr, int x, int y) {
 }
 
 static void draw_ground_arrow(cairo_t *cr, int rotation) {
+    if (!should_show_arrow) {
+        return;
+    }
+
     int center_x = screen_width / 2;
     int center_y = screen_height / 2;
-    int indicator_size = screen_height / 3; // Make the indicator 1/3 of screen height
+    int indicator_size = screen_height / 3;
     
-    // Draw semi-transparent background overlay
-    cairo_set_source_rgba(cr, 0.2, 0.2, 0.2, 0.5); // Dark gray with 50% transparency
-    cairo_rectangle(cr, 0, 0, screen_width, screen_height);
-    cairo_fill(cr);
-    
+    // Save current state
     cairo_save(cr);
     cairo_translate(cr, center_x, center_y);
     cairo_rotate(cr, rotation * M_PI / 180);
     
-    // Draw circular background
-    cairo_set_source_rgba(cr, 0.3, 0.3, 0.3, 0.7); // Slightly darker gray for the circle
-    cairo_arc(cr, 0, 0, indicator_size / 2, 0, 2 * M_PI);
-    cairo_fill(cr);
-    
-    // Draw arrow
-    cairo_set_source_rgba(cr, 1, 1, 1, 0.9); // White arrow with 90% opacity
-    cairo_set_line_width(cr, indicator_size / 20); // Thicker lines
+    // Draw arrow with 50% transparency
+    cairo_set_source_rgba(cr, 1, 1, 1, 0.5);
+    cairo_set_line_width(cr, indicator_size / 20);
     
     // Draw main arrow shaft
     cairo_move_to(cr, 0, -indicator_size/3);
@@ -80,7 +80,6 @@ static void draw_ground_arrow(cairo_t *cr, int rotation) {
     cairo_move_to(cr, 0, indicator_size/3);
     cairo_line_to(cr, arrow_width, indicator_size/3 - arrow_height);
     
-    // Draw with rounded line caps for better appearance
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
     cairo_stroke(cr);
@@ -89,7 +88,6 @@ static void draw_ground_arrow(cairo_t *cr, int rotation) {
     cairo_set_font_size(cr, indicator_size / 10);
     cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     
-    // Center the text
     cairo_text_extents_t extents;
     const char *text = "BOTTOM";
     cairo_text_extents(cr, text, &extents);
@@ -190,11 +188,10 @@ void overlay_move_cursor(int x, int y) {
     should_show_cursor = 1;
     
     clear_surface();
-    draw_cursor(cr, x, y);
-    
     if (should_show_arrow) {
         draw_ground_arrow(cr, current_rotation);
     }
+    draw_cursor(cr, x, y);
     
     cairo_surface_flush(surface);
     XFlush(display);
