@@ -54,7 +54,7 @@ class _LaunchScreenState extends State<LaunchScreen>
         await startLogServer();
 
         logger.info('WiFi connected. Launching Chromium...');
-        await ChromiumLauncher.launchAndWait();
+        // await ChromiumLauncher.launchAndWait();
       } else {
         logger.info('WiFi not connected. Proceeding to home screen...');
       }

@@ -13,7 +13,14 @@ class WifiService {
 
   static Future<bool> connect(WifiCredentials credentials) async {
     try {
-      // First, try to delete any existing connection with this SSID
+      // Scan current wifi and sleep for 3s first
+      await Process.run(
+        'nmcli',
+        ['device', 'wifi', 'rescan'],
+      );
+      await Future.delayed(Duration(seconds: 3));
+
+      // Try to delete any existing connection with this SSID
       await Process.run(
         'nmcli',
         ['connection', 'delete', credentials.ssid],

@@ -49,7 +49,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       ));
 
       logger.info('[BLEConnectionCubit] Launching Chromium browser');
-      await ChromiumLauncher.launchAndWait();
+      // await ChromiumLauncher.launchAndWait();
     } else {
       logger.info('[BLEConnectionCubit] Failed to connect to WiFi network');
       emit(state.copyWith(
