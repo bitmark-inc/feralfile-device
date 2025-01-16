@@ -77,6 +77,9 @@ add_executable(${BINARY_NAME}
 apply_standard_settings(${BINARY_NAME})
 
 # Add dependency libraries. Add any application-specific dependencies here.
+set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v")
+
 target_link_libraries(${BINARY_NAME} PRIVATE
   flutter
   PkgConfig::GTK
@@ -88,6 +91,10 @@ target_link_libraries(${BINARY_NAME} PRIVATE
   bluetooth
   overlay
 )
+
+# Add after target_link_libraries to help with debugging
+get_target_property(LINKED_LIBS ${BINARY_NAME} LINK_LIBRARIES)
+message(STATUS "Linked libraries: ${LINKED_LIBS}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
