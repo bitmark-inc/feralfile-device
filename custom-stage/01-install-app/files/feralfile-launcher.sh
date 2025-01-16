@@ -21,7 +21,7 @@ start_chromium() {
             --disable-infobars \
             --disable-session-crashed-bubble \
             --disable-features=TranslateUI \
-            https://display.feralfile.com >/dev/null 2>&1 &
+            https://support-feralfile-device.feralfile-display-prod.pages.dev >/dev/null 2>&1 &
         sleep 2
     fi
 }
