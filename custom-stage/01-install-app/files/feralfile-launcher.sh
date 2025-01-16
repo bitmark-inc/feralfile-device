@@ -16,7 +16,6 @@ start_chromium() {
         "$CHROMIUM" \
             --kiosk \
             --disable-extensions \
-            --remote-debugging-port=9222 \
             --no-first-run \
             --disable-translate \
             --disable-infobars \
