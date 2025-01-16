@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after_layout/after_layout.dart';
@@ -53,7 +52,6 @@ class _LaunchScreenState extends State<LaunchScreen>
       if (isConnected) {
         logger.info('WiFi connected. Launching Chromium...');
         // await ChromiumLauncher.launchAndWait();
-        exit(0);
       } else {
         logger.info('WiFi not connected. Proceeding to home screen...');
       }
