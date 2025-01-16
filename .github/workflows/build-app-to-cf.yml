@@ -95,6 +95,7 @@ jobs:
           cd feralfile-overlay
           make clean
           make
+          sudo cp liboverlay_service.so /usr/lib/
           cp liboverlay_service.so ../build/linux/arm64/release/bundle/lib/
           cd ..
 
