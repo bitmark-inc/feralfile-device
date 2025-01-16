@@ -12,6 +12,10 @@ cp "feralfile-launcher.conf" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
     exit 1
 } 
 cp "files/feralfile-ota-update.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
-    echo "Error: Failed to copy feralfile-launcher.conf"
+    echo "Error: Failed to copy files/feralfile-ota-update.sh"
+    exit 1
+}
+cp "files/feralfile-launcher.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
+    echo "Error: Failed to copy files/feralfile-launcher.sh"
     exit 1
 }

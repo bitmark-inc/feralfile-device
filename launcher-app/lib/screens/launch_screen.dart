@@ -48,10 +48,13 @@ class _LaunchScreenState extends State<LaunchScreen>
 
       if (!mounted) return;
 
-      // Launch Chromium if connected to WiFi
+      // Start log server if connected to WiFi
       if (isConnected) {
+        logger.info('Starting log server...');
+        await startLogServer();
+
         logger.info('WiFi connected. Launching Chromium...');
-        await ChromiumLauncher.launchAndWait();
+        // await ChromiumLauncher.launchAndWait();
       } else {
         logger.info('WiFi not connected. Proceeding to home screen...');
       }

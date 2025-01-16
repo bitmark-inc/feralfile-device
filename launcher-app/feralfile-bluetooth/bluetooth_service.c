@@ -164,7 +164,7 @@ static GVariant *char_get_property(GDBusConnection *conn,
             return g_variant_new_object_path("/com/feralfile/display/service0");
         } else if (g_strcmp0(property_name, "Flags") == 0) {
             // If you want "write" only:
-            const gchar* flags[] = {"write", NULL};
+            const gchar* flags[] = {"write", "write-without-response", NULL};
             return g_variant_new_strv(flags, -1);
         }
     }
@@ -175,49 +175,6 @@ static GVariant *char_get_property(GDBusConnection *conn,
 // Handler for setup_char writes
 // ----------------------------------------------------------------------------
 static void handle_write_value(GDBusConnection *conn,
-                             const gchar *sender,
-                             const gchar *object_path,
-                             const gchar *interface_name,
-                             const gchar *method_name,
-                             GVariant *parameters,
-                             GDBusMethodInvocation *invocation,
-                             gpointer user_data) {
-    GVariant *array_variant = NULL;
-    GVariant *options_variant = NULL;
-    g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
-
-    gsize n_elements;
-    const guchar * const data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
-
-    // Create a copy of the data
-    guchar *data_copy = (guchar *)malloc(n_elements);
-    memcpy(data_copy, data, n_elements);
-
-    log_debug("[%s] (setup_char) Received %zu bytes of data", LOG_TAG, n_elements);
-    
-    // Add hex string logging
-    char hex_string[n_elements * 3 + 1];
-    for (size_t i = 0; i < n_elements; i++) {
-        sprintf(hex_string + (i * 3), "%02x ", data_copy[i]);
-    }
-    hex_string[n_elements * 3 - 1] = '\0';
-    log_debug("[%s] (setup_char) Data: %s", LOG_TAG, hex_string);
-
-    // If you want to pass these bytes to your existing 'result_callback'
-    if (result_callback) {
-        result_callback(1, (const char*)data_copy, (int)n_elements);
-    }
-
-    g_variant_unref(array_variant);
-    if (options_variant) g_variant_unref(options_variant);
-    
-    g_dbus_method_invocation_return_value(invocation, NULL);
-}
-
-// ----------------------------------------------------------------------------
-// Handler for cmd_char writes
-// ----------------------------------------------------------------------------
-static void handle_command_write(GDBusConnection *conn,
                                const gchar *sender,
                                const gchar *object_path,
                                const gchar *interface_name,
@@ -230,7 +187,53 @@ static void handle_command_write(GDBusConnection *conn,
     g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
 
     gsize n_elements;
-    const guchar * const data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
+    const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
+
+    // Create a copy of the data
+    guchar *data_copy = (guchar *)malloc(n_elements);
+    memcpy(data_copy, data, n_elements);
+
+    log_debug("[%s] (setup_char) Received %zu bytes of data", LOG_TAG, n_elements);
+    
+    // Optional hex string logging
+    char hex_string[n_elements * 3 + 1];
+    for (size_t i = 0; i < n_elements; i++) {
+        sprintf(hex_string + (i * 3), "%02x ", data_copy[i]);
+    }
+    hex_string[n_elements * 3 - 1] = '\0';
+    log_debug("[%s] (setup_char) Data: %s", LOG_TAG, hex_string);
+
+    // If you want to pass these bytes to your existing 'result_callback'
+    if (result_callback) {
+        result_callback(1, data_copy, (int)n_elements);
+    }
+
+
+    g_variant_unref(array_variant);
+    if (options_variant) {
+        g_variant_unref(options_variant);
+    }
+    
+    g_dbus_method_invocation_return_value(invocation, NULL);
+}
+
+// ----------------------------------------------------------------------------
+// Handler for cmd_char writes
+// ----------------------------------------------------------------------------
+static void handle_command_write(GDBusConnection *conn,
+                                 const gchar *sender,
+                                 const gchar *object_path,
+                                 const gchar *interface_name,
+                                 const gchar *method_name,
+                                 GVariant *parameters,
+                                 GDBusMethodInvocation *invocation,
+                                 gpointer user_data) {
+    GVariant *array_variant = NULL;
+    GVariant *options_variant = NULL;
+    g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
+
+    gsize n_elements;
+    const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
 
     // Create a copy of the data
     guchar *data_copy = (guchar *)malloc(n_elements);
@@ -238,7 +241,7 @@ static void handle_command_write(GDBusConnection *conn,
 
     log_debug("[%s] (cmd_char) Received %zu bytes of data", LOG_TAG, n_elements);
 
-    // Add hex string logging
+    // Optional hex string logging
     char hex_string[n_elements * 3 + 1];
     for (size_t i = 0; i < n_elements; i++) {
         sprintf(hex_string + (i * 3), "%02x ", data_copy[i]);
@@ -252,7 +255,9 @@ static void handle_command_write(GDBusConnection *conn,
     }
 
     g_variant_unref(array_variant);
-    if (options_variant) g_variant_unref(options_variant);
+    if (options_variant) {
+        g_variant_unref(options_variant);
+    }
     
     g_dbus_method_invocation_return_value(invocation, NULL);
 }
@@ -342,7 +347,7 @@ static void handle_get_objects(GDBusConnection *conn,
     GVariantBuilder *cmd_char_props = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_add(cmd_char_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_CMD_CHAR_UUID));
     g_variant_builder_add(cmd_char_props, "{sv}", "Service", g_variant_new_object_path("/com/feralfile/display/service0"));
-    const gchar* cmd_flags[] = {"write", NULL};
+    const gchar* cmd_flags[] = {"write", "write-without-response", NULL};
     g_variant_builder_add(cmd_char_props, "{sv}", "Flags", g_variant_new_strv(cmd_flags, -1));
     g_variant_builder_add(cmd_char_builder, "{sa{sv}}", "org.bluez.GattCharacteristic1", cmd_char_props);
     g_variant_builder_add(builder, "{oa{sa{sv}}}", "/com/feralfile/display/service0/cmd_char", cmd_char_builder);
@@ -516,6 +521,7 @@ int bluetooth_init() {
                   LOG_TAG,
                   error->message);
         g_error_free(error);
+        g_object_unref(gatt_manager);
         return -1;
     }
 
@@ -527,6 +533,7 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
+        g_object_unref(gatt_manager);
         return -1;
     }
 
@@ -545,6 +552,7 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
+        g_object_unref(gatt_manager);
         return -1;
     }
 
@@ -564,6 +572,7 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
+        g_object_unref(gatt_manager);
         return -1;
     }
 
@@ -582,8 +591,14 @@ int bluetooth_init() {
                   LOG_TAG,
                   error->message);
         g_error_free(error);
+        g_object_unref(gatt_manager);
+        g_object_unref(advertising_manager);
         return -1;
     }
+
+    // **FIX**: unref proxies once finished
+    g_object_unref(gatt_manager);
+    g_object_unref(advertising_manager);
 
     log_debug("[%s] Bluetooth initialized successfully\n", LOG_TAG);
     return 0;
@@ -606,5 +621,16 @@ void bluetooth_stop() {
     }
     pthread_cancel(bluetooth_thread);
     pthread_join(bluetooth_thread, NULL);
+
+    // **FIX**: Clean up node infos
+    if (root_node) {
+        g_dbus_node_info_unref(root_node);
+        root_node = NULL;
+    }
+    if (advertisement_introspection_data) {
+        g_dbus_node_info_unref(advertisement_introspection_data);
+        advertisement_introspection_data = NULL;
+    }
+
     log_debug("[%s] Bluetooth service stopped\n", LOG_TAG);
 }

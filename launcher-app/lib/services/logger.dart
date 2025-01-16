@@ -39,6 +39,12 @@ Future<void> setupLogging() async {
 }
 
 Future<void> startLogServer() async {
+  // Don't create a new server if one already exists
+  if (_logServer != null) {
+    logger.info('Log server is already running');
+    return;
+  }
+
   try {
     _logServer = await HttpServer.bind(InternetAddress.anyIPv4, 8080);
     logger.info('Log server listening on port 8080');
@@ -135,6 +141,10 @@ String _formatLogsHtml(String logs) {
 }
 
 void stopLogServer() {
-  _logServer?.close();
-  _logServer = null;
+  if (_logServer != null) {
+    logger.info('Stopping log server');
+    _logServer?.close(
+        force: true); // Force close to ensure resources are released
+    _logServer = null;
+  }
 }
