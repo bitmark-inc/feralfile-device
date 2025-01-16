@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Paths to applications
-CHROMIUM="/usr/bin/chromium"
+CHROMIUM="chromium"
 FERALFILE="/opt/feralfile/feralfile"
 
 # Environment setup

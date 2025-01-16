@@ -13,7 +13,6 @@ xset s off
 xset s noblank
 xset -dpms
 EOF
-chown -R feralfile:feralfile /home/feralfile/.config/openbox
 
 # Configure auto-login for feralfile user
 mkdir -p /etc/lightdm/lightdm.conf.d
@@ -41,7 +40,8 @@ RestartSec=5
 [Install]
 WantedBy=default.target
 EOF
-chown -R feralfile:feralfile /home/feralfile/.config/systemd
+
+chown -R feralfile:feralfile /home/feralfile/.config
 
 # Ensure feralfile service is up
 cat > /home/feralfile/.bash_profile <<EOF
