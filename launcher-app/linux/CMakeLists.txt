@@ -83,6 +83,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE
   PkgConfig::GLIB
   PkgConfig::GIO
   PkgConfig::DBUS
+  PkgConfig::X11
+  PkgConfig::XFIXES
   bluetooth
   overlay
 )
