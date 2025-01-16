@@ -102,5 +102,6 @@ class WebSocketService {
     _socket?.close();
     _server?.close();
     _messageListeners.clear();
+    _messageCallbacks.clear();
   }
 }

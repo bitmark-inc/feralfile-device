@@ -1,4 +1,5 @@
 import 'package:feralfile/services/logger.dart';
+import 'package:feralfile/services/websocket_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
@@ -43,6 +44,10 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       await startLogServer();
       logger.info('[BLEConnectionCubit] Log server started');
 
+      // Start WebSocket server
+      await WebSocketService().initServer();
+      logger.info('[BLEConnectionCubit] WebSocket server started');
+
       emit(state.copyWith(
         status: BLEConnectionStatus.connected,
         localIp: localIp,
@@ -65,6 +70,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
         '[BLEConnectionCubit] Closing cubit and disposing Bluetooth service');
     _bluetoothService.dispose();
     stopLogServer();
+    WebSocketService().dispose();
     return super.close();
   }
 }

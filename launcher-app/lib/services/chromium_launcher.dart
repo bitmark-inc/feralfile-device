@@ -33,11 +33,6 @@ class ChromiumLauncher {
       ]);
 
       logger.info('Chromium launched in kiosk mode.');
-
-      _wsService!.addMessageListener((message) {
-        // Handle system-level messages
-        logger.info('Chromium received message: $message');
-      });
     } catch (e) {
       logger.severe('Error launching Chromium: $e');
     }
