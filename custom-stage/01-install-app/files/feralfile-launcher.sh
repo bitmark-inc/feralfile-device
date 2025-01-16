@@ -25,7 +25,6 @@ start_chromium() {
             https://display.feralfile.com >/dev/null 2>&1 &
         sleep 2
     fi
-    focus_chromium
 }
 
 # Function to start the FeralFile application
@@ -36,7 +35,6 @@ start_feralfile() {
         "$FERALFILE" &
         sleep 2
     fi
-    focus_feralfile
 }
 
 # Function to check internet connectivity
@@ -64,20 +62,14 @@ focus_feralfile() {
 }
 
 # Main loop to switch applications based on internet connectivity
-CURRENT_MODE=""
 while true; do
+    # Ensure the FeralFile application is running
+    start_feralfile
     if check_internet; then
-        if [ "$CURRENT_MODE" != "online" ]; then
-            start_chromium
-            CURRENT_MODE="online"
-        fi
+        start_chromium
+        focus_chromium
     else
-        if [ "$CURRENT_MODE" != "offline" ]; then
-            # give it some time to re-connect automatically
-            sleep 10
-            start_feralfile
-            CURRENT_MODE="offline"
-        fi
+        focus_feralfile
     fi
     sleep 5
 done
