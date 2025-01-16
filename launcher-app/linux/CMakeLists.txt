@@ -56,9 +56,6 @@ pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 pkg_check_modules(DBUS REQUIRED IMPORTED_TARGET dbus-1)
-pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
-pkg_check_modules(CAIRO REQUIRED IMPORTED_TARGET cairo)
-pkg_check_modules(XFIXES REQUIRED IMPORTED_TARGET xfixes)
 
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
@@ -77,24 +74,14 @@ add_executable(${BINARY_NAME}
 apply_standard_settings(${BINARY_NAME})
 
 # Add dependency libraries. Add any application-specific dependencies here.
-set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v")
-
 target_link_libraries(${BINARY_NAME} PRIVATE
   flutter
   PkgConfig::GTK
   PkgConfig::GLIB
   PkgConfig::GIO
   PkgConfig::DBUS
-  PkgConfig::X11
-  PkgConfig::XFIXES
   bluetooth
-  overlay
 )
-
-# Add after target_link_libraries to help with debugging
-get_target_property(LINKED_LIBS ${BINARY_NAME} LINK_LIBRARIES)
-message(STATUS "Linked libraries: ${LINKED_LIBS}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
