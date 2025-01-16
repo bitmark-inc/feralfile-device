@@ -113,6 +113,11 @@ class ScreenRotationHandler implements CommandHandler {
       logger.severe('Error rotating screen: $e');
     }
   }
+
+  Future<void> triggerRotation() async {
+    logger.info('Manually triggering rotation');
+    await execute({'clockwise': false}); // Rotate counter-clockwise
+  }
 }
 
 // Add more handlers here

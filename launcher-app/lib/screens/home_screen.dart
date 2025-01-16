@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../cubits/ble_connection_cubit.dart';
 import '../cubits/ble_connection_state.dart';
+import '../services/commands/screen_rotation_handler.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -13,6 +14,22 @@ class HomeScreen extends StatelessWidget {
     return BlocProvider(
       create: (context) => BLEConnectionCubit()..startListening(),
       child: Scaffold(
+        backgroundColor: Colors.black,
+        floatingActionButton: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: FloatingActionButton(
+            backgroundColor: Colors.grey[800],
+            onPressed: () async {
+              final rotationHandler = ScreenRotationHandler();
+              await rotationHandler.triggerRotation();
+            },
+            child: const Icon(
+              Icons.screen_rotation,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         body: Stack(
           children: [
             Row(
