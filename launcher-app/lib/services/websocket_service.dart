@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:convert';
-import 'package:feralfile/models/command.dart';
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/logger.dart';
 
@@ -61,54 +60,6 @@ class WebSocketService {
         _messageCallbacks[data.messageID]?.call(data);
         _messageCallbacks
             .remove(data.messageID); // Remove the callback after use
-      }
-
-      if (data.messageID == 'ping') {
-        sendMessage(
-          WebSocketRequestMessage(
-            messageID: data.messageID,
-          ),
-        );
-
-        Future.delayed(
-          const Duration(seconds: 10),
-          () {
-            sendMessage(
-              WebSocketRequestMessage(
-                message: RequestMessageData(
-                  command: Command.castListArtwork,
-                  request: {
-                    'artworks': [
-                      {
-                        'token': {
-                          'id':
-                              'eth-0x90e951F1BC16A0ECe75844D12371B81512718DA7-72359935895858646181951013458866965984551984693877025456801350144502744957515',
-                        },
-                        'artwork': null,
-                        'duration': 0,
-                      },
-                    ],
-                    'startTime': null,
-                  },
-                ),
-              ),
-            );
-          },
-        );
-
-        Future.delayed(
-          const Duration(seconds: 30),
-          () {
-            sendMessage(
-              WebSocketRequestMessage(
-                message: RequestMessageData(
-                  command: Command.disconnect,
-                  request: {},
-                ),
-              ),
-            );
-          },
-        );
       }
 
       // Notify to all listeners
