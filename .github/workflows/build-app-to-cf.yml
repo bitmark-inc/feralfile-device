@@ -61,7 +61,9 @@ jobs:
             libdbus-glib-1-dev \
             bluetooth \
             bluez \
-            bluez-tools
+            bluez-tools \
+            libx11-dev \
+            libxfixes-dev
           
           # Set pkg-config path
           export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
