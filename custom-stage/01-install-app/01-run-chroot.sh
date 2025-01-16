@@ -12,6 +12,11 @@ cat > /home/feralfile/.config/openbox/autostart <<EOF
 xset s off
 xset s noblank
 xset -dpms
+
+if ! systemctl --user is-enabled feralfile.service >/dev/null 2>&1; then
+    systemctl --user enable feralfile.service
+    systemctl --user start feralfile.service
+fi
 EOF
 
 # Configure auto-login for feralfile user
@@ -42,16 +47,6 @@ WantedBy=default.target
 EOF
 
 chown -R feralfile:feralfile /home/feralfile/.config
-
-# Ensure feralfile service is up
-cat > /home/feralfile/.bash_profile <<EOF
-if ! systemctl --user is-enabled feralfile.service >/dev/null 2>&1; then
-    systemctl --user enable feralfile.service
-    systemctl --user start feralfile.service
-fi
-EOF
-chown feralfile:feralfile /home/feralfile/.bash_profile
-chmod 644 /home/feralfile/.bash_profile
 
 # Add OTA cronjob update script
 CRON_CMD="*/30 * * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"
