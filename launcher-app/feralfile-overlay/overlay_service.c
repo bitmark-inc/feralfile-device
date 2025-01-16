@@ -1,5 +1,8 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/Xatom.h>
+#include <X11/extensions/Xfixes.h>
+#include <X11/extensions/shape.h>
 #include <X11/extensions/Xrender.h>
 #include <cairo/cairo.h>
 #include <cairo/cairo-xlib.h>
@@ -122,6 +125,12 @@ static void *fade_timer(void *arg) {
 int overlay_init() {
     display = XOpenDisplay(NULL);
     if (!display) return -1;
+
+    int event_base, error_base;
+    if (!XFixesQueryExtension(display, &event_base, &error_base)) {
+        fprintf(stderr, "X Server does not support XFixes extension\n");
+        return -1;
+    }
 
     int screen = DefaultScreen(display);
     Window root = DefaultRootWindow(display);
