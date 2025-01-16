@@ -112,7 +112,7 @@ jobs:
         run: |
           export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
           flutter config --enable-linux-desktop
-          flutter build linux --release --target-platform=linux-arm64 -v --verbose-system-logs
+          flutter build linux --release --target-platform=linux-arm64 -v
 
       - name: Package as Debian .deb
         env:
