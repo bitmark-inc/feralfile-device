@@ -9,6 +9,7 @@ class WebSocketService {
   WebSocket? _socket;
   HttpServer? _server;
   final Set<Function(dynamic)> _messageListeners = {};
+  final Map<String, Function(WebSocketResponseMessage)> _messageCallbacks = {};
 
   // Singleton pattern
   factory WebSocketService() {
@@ -54,6 +55,14 @@ class WebSocketService {
       logger.info('Received message: $message');
 
       final data = WebSocketResponseMessage.fromJson(jsonDecode(message));
+
+      // Check if there's a callback registered for this messageID
+      if (_messageCallbacks.containsKey(data.messageID)) {
+        _messageCallbacks[data.messageID]?.call(data);
+        _messageCallbacks
+            .remove(data.messageID); // Remove the callback after use
+      }
+
       if (data.messageID == 'ping') {
         sendMessage(
           WebSocketRequestMessage(
@@ -112,11 +121,21 @@ class WebSocketService {
   }
 
   // Send message to website
-  void sendMessage(WebSocketRequestMessage message) {
+  void sendMessage(WebSocketRequestMessage message,
+      {Function(WebSocketResponseMessage)? callback}) {
     if (_socket != null) {
+      if (callback != null) {
+        _messageCallbacks[message.messageID!] = callback;
+      }
+
       logger.info('Sending message: ${jsonEncode(message.toJson())}');
       _socket!.add(jsonEncode(message.toJson()));
     }
+  }
+
+  void sendMessageWithCallback(WebSocketRequestMessage message,
+      Function(WebSocketResponseMessage) callback) {
+    sendMessage(message, callback: callback);
   }
 
   // Add/remove listener

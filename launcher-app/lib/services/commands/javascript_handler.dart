@@ -9,11 +9,24 @@ class JavaScriptHandler implements CommandHandler {
   Future<void> execute(Map<String, dynamic> data) async {
     try {
       final requestMessageData = RequestMessageData.fromJson(data);
-      WebSocketService().sendMessage(
-        WebSocketRequestMessage(
-          message: requestMessageData,
-        ),
-      );
+      final messageID = requestMessageData.messageID;
+      if (messageID == null) {
+        WebSocketService().sendMessage(
+          WebSocketRequestMessage(
+            message: requestMessageData,
+          ),
+        );
+      } else {
+        WebSocketService().sendMessageWithCallback(
+          WebSocketRequestMessage(
+            messageID: messageID,
+            message: requestMessageData,
+          ),
+          (response) {
+            logger.info('Received response: $response');
+          },
+        );
+      }
     } catch (e) {
       logger.severe('Error executing command ${data['command']}: $e');
     }

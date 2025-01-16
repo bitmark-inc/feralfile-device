@@ -4,10 +4,11 @@ import 'package:feralfile/models/command.dart';
 import 'package:uuid/uuid.dart';
 
 class RequestMessageData {
+  final String? messageID;
   final Command command;
   final Map<String, dynamic>? request;
 
-  RequestMessageData({required this.command, this.request});
+  RequestMessageData({required this.command, this.messageID, this.request});
 
   factory RequestMessageData.fromJson(Map<String, dynamic> json) {
     var requestData = json['request'];
@@ -23,6 +24,7 @@ class RequestMessageData {
     }
     return RequestMessageData(
       command: Command.fromString(json['command']),
+      messageID: json['messageID'],
       request: requestMap,
     );
   }
