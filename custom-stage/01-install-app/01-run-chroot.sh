@@ -1,6 +1,8 @@
 #!/bin/bash
 
 chown -R feralfile:feralfile /home/feralfile/feralfile/
+chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
+chmod 755 /home/feralfile/feralfile/feralfile-launcher.sh
 
 dpkg -i /home/feralfile/feralfile/feralfile-launcher_arm64.deb
 
@@ -10,13 +12,8 @@ cat > /home/feralfile/.config/openbox/autostart <<EOF
 xset s off
 xset s noblank
 xset -dpms
-
-nmcli device wifi rescan
-sleep 3
 EOF
-
-# Set correct ownership
-chown -R feralfile:feralfile /home/feralfile/.config
+chown -R feralfile:feralfile /home/feralfile/.config/openbox
 
 # Configure auto-login for feralfile user
 mkdir -p /etc/lightdm/lightdm.conf.d
@@ -30,26 +27,33 @@ EOF
 touch /boot/firmware/btautopair
 
 # Create feralfile service 
-mkdir -p /etc/systemd/system
-cat > /etc/systemd/system/feralfile.service << EOF
+mkdir -p /home/feralfile/.config/systemd/user
+cat > /home/feralfile/.config/systemd/user/feralfile.service << EOF
 [Unit]
 Description=FeralFile Application
-After=network.target
+After=bluetooth.service
 
 [Service]
-ExecStart=/opt/feralfile/feralfile
+ExecStart=/home/feralfile/feralfile/feralfile-launcher.sh
 Restart=always
 RestartSec=5
-User=feralfile
-Environment=DISPLAY=:0
-Environment=XDG_RUNTIME_DIR=/run/user/$(id -u feralfile)
 
 [Install]
-WantedBy=graphical.target
+WantedBy=default.target
 EOF
+chown -R feralfile:feralfile /home/feralfile/.config/systemd
+
+# Ensure feralfile service is up
+cat > /home/feralfile/.bash_profile <<EOF
+if ! systemctl --user is-enabled feralfile.service >/dev/null 2>&1; then
+    systemctl --user enable feralfile.service
+    systemctl --user start feralfile.service
+fi
+EOF
+chown feralfile:feralfile /home/feralfile/.bash_profile
+chmod 644 /home/feralfile/.bash_profile
 
 # Add OTA cronjob update script
-chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
 CRON_CMD="*/30 * * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"
 crontab -u feralfile -l 2>/dev/null || true > /tmp/feralfile_cron
 grep -F "$CRON_CMD" /tmp/feralfile_cron >/dev/null 2>&1 || echo "$CRON_CMD" >> /tmp/feralfile_cron
