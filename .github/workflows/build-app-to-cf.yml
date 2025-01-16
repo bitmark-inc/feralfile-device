@@ -88,6 +88,14 @@ jobs:
           cp libbluetooth_service.so ../build/linux/arm64/release/bundle/lib/
           cd ..
 
+      - name: Build Overlay library
+        run: |
+          cd feralfile-overlay
+          make clean
+          make
+          cp liboverlay_service.so ../build/linux/arm64/release/bundle/lib/
+          cd ..
+
       - name: Configure ATK
         run: |
           # Ensure AT-SPI is running
@@ -117,7 +125,7 @@ jobs:
           mkdir -p package$INSTALL_DIR/lib
           cp -r build/linux/arm64/release/bundle/* package$INSTALL_DIR/
           cp feralfile-bluetooth/libbluetooth_service.so package$INSTALL_DIR/lib/
-          
+          cp feralfile-overlay/liboverlay_service.so package$INSTALL_DIR/lib/
           cat <<EOF > package/DEBIAN/control
           Package: $APP_NAME
           Version: $VERSION

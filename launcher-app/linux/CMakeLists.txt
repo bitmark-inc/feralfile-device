@@ -56,6 +56,9 @@ pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 pkg_check_modules(DBUS REQUIRED IMPORTED_TARGET dbus-1)
+pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
+pkg_check_modules(CAIRO REQUIRED IMPORTED_TARGET cairo)
+pkg_check_modules(XFIXES REQUIRED IMPORTED_TARGET xfixes)
 
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
@@ -81,6 +84,7 @@ target_link_libraries(${BINARY_NAME} PRIVATE
   PkgConfig::GIO
   PkgConfig::DBUS
   bluetooth
+  overlay
 )
 
 # Run the Flutter tool portions of the build. This must not be removed.

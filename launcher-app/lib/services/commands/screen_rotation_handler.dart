@@ -2,6 +2,7 @@ import 'dart:io';
 import '../logger.dart';
 import 'command_repository.dart';
 import '../config_service.dart';
+import '../overlay_service.dart';
 
 enum ScreenRotation {
   normal, // 0°
@@ -12,6 +13,7 @@ enum ScreenRotation {
 
 class ScreenRotationHandler implements CommandHandler {
   static ScreenRotation _currentRotation = ScreenRotation.normal;
+  final _overlayService = OverlayService();
 
   Future<void> _saveRotation(String rotation) async {
     await ConfigService.updateScreenRotation(rotation);
@@ -23,6 +25,7 @@ class ScreenRotationHandler implements CommandHandler {
   }
 
   Future<void> initializeRotation() async {
+    await _overlayService.initialize();
     final savedRotation = await _loadSavedRotation();
     if (savedRotation != null) {
       try {
@@ -31,6 +34,8 @@ class ScreenRotationHandler implements CommandHandler {
           logger.warning('Failed to apply saved rotation: ${result.stderr}');
         } else {
           logger.info('Applied saved rotation: $savedRotation');
+          // Show rotation indicator with the appropriate degrees
+          _showRotationOverlay(savedRotation);
           // Update current rotation state
           switch (savedRotation) {
             case 'normal':
@@ -47,6 +52,23 @@ class ScreenRotationHandler implements CommandHandler {
         logger.severe('Error applying saved rotation: $e');
       }
     }
+  }
+
+  void _showRotationOverlay(String rotation) {
+    int degrees;
+    switch (rotation) {
+      case 'normal':
+        degrees = 0;
+      case 'right':
+        degrees = 90;
+      case 'inverted':
+        degrees = 180;
+      case 'left':
+        degrees = 270;
+      default:
+        degrees = 0;
+    }
+    _overlayService.showRotationIndicator(degrees);
   }
 
   String _getNextRotation(bool clockwise) {
@@ -83,6 +105,7 @@ class ScreenRotationHandler implements CommandHandler {
       if (result.exitCode != 0) {
         logger.warning('Failed to rotate screen: ${result.stderr}');
       } else {
+        _showRotationOverlay(rotation);
         await _saveRotation(rotation);
         logger.info('Screen rotated to $rotation and saved setting');
       }
