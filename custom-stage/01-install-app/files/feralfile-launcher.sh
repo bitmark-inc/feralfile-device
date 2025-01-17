@@ -44,19 +44,29 @@ check_internet() {
 
 # Function to focus Chromium
 focus_chromium() {
+    ACTIVE_WIN=$(xdotool getactivewindow)
     WIN_ID=$(xdotool search --onlyvisible --class "chromium" | head -n 1)
+
     if [ -n "$WIN_ID" ]; then
-        echo "Focusing Chromium..."
-        xdotool windowactivate --sync "$WIN_ID"
+        if [ "$WIN_ID" != "$ACTIVE_WIN" ]; then
+            xdotool windowactivate --sync "$WIN_ID"
+        fi
+    else
+        echo "Chromium window not found."
     fi
 }
 
 # Function to focus FeralFile
 focus_feralfile() {
+    ACTIVE_WIN=$(xdotool getactivewindow)
     WIN_ID=$(xdotool search --onlyvisible --class "feralfile" | head -n 1)
+
     if [ -n "$WIN_ID" ]; then
-        echo "Focusing FeralFile..."
-        xdotool windowactivate --sync "$WIN_ID"
+        if [ "$WIN_ID" != "$ACTIVE_WIN" ]; then
+            xdotool windowactivate --sync "$WIN_ID"
+        fi
+    else
+        echo "FeralFile window not found."
     fi
 }
 
