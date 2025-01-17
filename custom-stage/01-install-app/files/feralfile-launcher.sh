@@ -60,6 +60,17 @@ focus_feralfile() {
     fi
 }
 
+# Function to handle shutdown properly
+shutdown_script() {
+    echo "Shutting down FeralFile service..."
+    pkill -TERM -f "$CHROMIUM"
+    pkill -TERM -f "$FERALFILE"
+    exit 0
+}
+
+# capture systemd SIGTERM
+trap shutdown_script SIGTERM
+
 # Main loop to switch applications based on internet connectivity
 while true; do
     # Ensure the FeralFile application is running
