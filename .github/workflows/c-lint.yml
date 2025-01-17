@@ -1,13 +1,22 @@
 name: C Lint
 
-on: [pull_request]
+on:
+  pull_request:
+    paths:
+      - '**.c'
+      - '**.h'
+      - '**/src/**'
+      - '**/include/**'
 
 jobs:
-  lint:
+  c_lint:
+    name: Lint C Code
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Install cppcheck
         run: sudo apt-get install -y cppcheck
 
@@ -16,9 +25,32 @@ jobs:
         with:
           reviewdog_version: latest
 
-      - name: Run cppcheck and reviewdog
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v41
+
+      - name: Code review and auto-fix the changed files
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cppcheck --enable=all --xml --xml-version=2 . 2> cppcheck-result.xml
-          reviewdog -f=cppcheck -reporter=github-pr-review
+          for file in ${{ steps.changed-files.outputs.changed_files }}; do
+            echo "checking: $file"
+            if [[ $file == *.c ]] || [[ $file == *.h ]]; then
+              # Run cppcheck with detailed output
+              cppcheck --enable=all --xml --xml-version=2 $file 2> cppcheck-result.xml
+              cat cppcheck-result.xml | reviewdog -f=cppcheck -name=cppcheck -reporter=github-pr-review
+
+              # Run clang-format for auto-fixing
+              clang-format -i -style=file $file
+            else
+              echo "skipping non-C file: $file"
+            fi
+            codespell -q 3 -w -I .codespellignore --skip "*.svg" $file | reviewdog -efm="%f:%l: %m" -name=codespell -reporter=github-pr-review || true
+          done
+
+      - name: suggester / clang-format fixes
+        uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: clang-format
+          filter_mode: added
+          cleanup: true
