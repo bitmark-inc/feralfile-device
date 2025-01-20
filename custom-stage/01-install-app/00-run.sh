@@ -19,3 +19,11 @@ cp "files/feralfile-launcher.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
     echo "Error: Failed to copy files/feralfile-launcher.sh"
     exit 1
 }
+cp "files/feralfile-chromium.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
+    echo "Error: Failed to copy files/feralfile-chromium.sh"
+    exit 1
+}
+cp "files/feralfile-switcher.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
+    echo "Error: Failed to copy files/feralfile-switcher.sh"
+    exit 1
+}

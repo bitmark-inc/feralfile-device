@@ -3,6 +3,8 @@
 chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
 chmod 755 /home/feralfile/feralfile/feralfile-launcher.sh
+chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
+chmod 755 /home/feralfile/feralfile/feralfile-switcher.sh
 
 dpkg -i /home/feralfile/feralfile/feralfile-launcher_arm64.deb
 
@@ -13,9 +15,17 @@ xset s off
 xset s noblank
 xset -dpms
 
-if ! systemctl --user is-enabled feralfile.service >/dev/null 2>&1; then
-    systemctl --user enable feralfile.service
-    systemctl --user start feralfile.service
+if ! systemctl --user is-enabled feralfile-launcher.service >/dev/null 2>&1; then
+    systemctl --user enable feralfile-launcher.service
+    systemctl --user start feralfile-launcher.service
+fi
+if ! systemctl --user is-enabled feralfile-chromium.service >/dev/null 2>&1; then
+    systemctl --user enable feralfile-chromium.service
+    systemctl --user start feralfile-chromium.service
+fi
+if ! systemctl --user is-enabled feralfile-switcher.service >/dev/null 2>&1; then
+    systemctl --user enable feralfile-switcher.service
+    systemctl --user start feralfile-switcher.service
 fi
 EOF
 
@@ -32,10 +42,10 @@ touch /boot/firmware/btautopair
 
 # Create feralfile service 
 mkdir -p /home/feralfile/.config/systemd/user
-cat > /home/feralfile/.config/systemd/user/feralfile.service << EOF
+cat > /home/feralfile/.config/systemd/user/feralfile-launcher.service << EOF
 [Unit]
-Description=FeralFile Application
-After=bluetooth.service
+Description=FeralFile Launcher Application
+After=bluetooth.target
 
 [Service]
 ExecStart=/home/feralfile/feralfile/feralfile-launcher.sh
@@ -46,9 +56,35 @@ RestartSec=5
 WantedBy=default.target
 EOF
 
-chown -R feralfile:feralfile /home/feralfile/.config
+cat > /home/feralfile/.config/systemd/user/feralfile-chromium.service << EOF
+[Unit]
+Description=FeralFile Chromium
+After=feralfile-launcher.service
+Wants=feralfile-launcher.service
 
-loginctl enable-linger feralfile
+[Service]
+ExecStart=/home/feralfile/feralfile/feralfile-chromium.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
+cat > /home/feralfile/.config/systemd/user/feralfile-switcher.service << EOF
+[Unit]
+Description=FeralFile Switcher
+
+[Service]
+ExecStart=/home/feralfile/feralfile/feralfile-switcher.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
+chown -R feralfile:feralfile /home/feralfile/.config
 
 # Add OTA cronjob update script
 CRON_CMD="*/30 * * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"
