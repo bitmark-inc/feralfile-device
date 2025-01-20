@@ -12,8 +12,7 @@ class JavaScriptHandler implements CommandHandler {
       [String? replyId]) async {
     try {
       final requestMessageData = RequestMessageData.fromJson(data);
-      final messageID = requestMessageData.messageID;
-      if (messageID == null) {
+      if (replyId == null) {
         WebSocketService().sendMessage(
           WebSocketRequestMessage(
             message: requestMessageData,
@@ -22,10 +21,11 @@ class JavaScriptHandler implements CommandHandler {
       } else {
         WebSocketService().sendMessageWithCallback(
           WebSocketRequestMessage(
-            messageID: messageID,
+            messageID: replyId,
             message: requestMessageData,
           ),
           (response) {
+            bluetoothService.notify(replyId, {'success': true});
             logger.info('Received response: $response');
           },
         );
