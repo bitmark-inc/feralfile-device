@@ -665,23 +665,32 @@ void bluetooth_notify(const unsigned char* data, int length) {
     log_debug("[%s] Notifying data: %s", LOG_TAG, hex_string);
 
     // Create GVariant for the notification value
-    GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
-                                              data, length, sizeof(guchar));
+    GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, data, length, sizeof(guchar));
+
+    // Build the properties dictionary
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE_ARRAY);
+    g_variant_builder_add(&builder, "{sv}", "Value", value);
+
+    GVariant *props = g_variant_builder_end(&builder);
 
     // Emit PropertiesChanged signal
-    GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
-    g_variant_builder_add(builder, "{sv}", "Value", value);
-
+    GError *error = NULL;
     g_dbus_connection_emit_signal(connection,
-        NULL,
-        "/com/feralfile/display/service0/notify_char",
-        "org.freedesktop.DBus.Properties",
-        "PropertiesChanged",
-        g_variant_new("(sa{sv}as)",
-                     "org.bluez.GattCharacteristic1",
-                     builder,
-                     NULL),
-        NULL);
+                                  NULL,
+                                  "/com/feralfile/display/service0/notify_char", // Ensure this matches your characteristic path
+                                  "org.freedesktop.DBus.Properties",
+                                  "PropertiesChanged",
+                                  g_variant_new("(sa{sv}as)",
+                                                "org.bluez.GattCharacteristic1",
+                                                props,
+                                                g_variant_new_strv(NULL, 0)),
+                                  &error);
 
-    g_variant_builder_unref(builder);
+    if (error) {
+        log_debug("[%s] Failed to emit signal: %s", LOG_TAG, error->message);
+        g_error_free(error);
+    }
+
+    log_debug("[%s] Notification sent successfully", LOG_TAG);
 }

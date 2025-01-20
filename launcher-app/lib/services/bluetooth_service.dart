@@ -139,9 +139,14 @@ class BluetoothService {
       final Pointer<Uint8> data = calloc<Uint8>(encodedMessage.length);
       final bytes = data.asTypedList(encodedMessage.length);
 
+      logger.info(
+          '[Notify] Copying ${encodedMessage.length} bytes to FFI buffer');
       for (var i = 0; i < encodedMessage.length; i++) {
         bytes[i] = encodedMessage[i];
       }
+      final hexString =
+          bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      logger.info('[Notify] Copied bytes (hex): $hexString');
 
       _bindings.bluetooth_notify(data, encodedMessage.length);
       calloc.free(data);
