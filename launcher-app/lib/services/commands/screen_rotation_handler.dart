@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../bluetooth_service.dart';
 import '../logger.dart';
 import 'command_repository.dart';
 import '../config_service.dart';
