@@ -9,7 +9,8 @@ import 'javascript_handler.dart';
 
 abstract class CommandHandler {
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService);
+      Map<String, dynamic> data, BluetoothService bluetoothService,
+      [String? replyId]);
 }
 
 class CommandRepository {
@@ -31,20 +32,30 @@ class CommandRepository {
     _handlers['tapGesture'] = CursorHandler();
   }
 
-  Future<void> executeCommand(String command, String data) async {
+  Future<void> executeCommand(String command, String data,
+      [String? replyId]) async {
     try {
       final handler = _handlers[command];
       if (handler != null) {
         // Handle system-level commands with registered handlers
         final Map<String, dynamic> jsonData = json.decode(data);
-        await handler.execute(jsonData, _bluetoothService);
+        await handler.execute(jsonData, _bluetoothService, replyId);
       } else {
         // Pass through unhandled commands to Chromium via JavaScript
-        await _jsHandler
-            .execute({'command': command, 'request': data}, _bluetoothService);
+        await _jsHandler.execute({
+          'command': command,
+          'request': data,
+          'messageID':
+              replyId, // Pass replyId as messageID for JavaScript handling
+        }, _bluetoothService);
       }
     } catch (e) {
       logger.severe('Error executing command $command: $e');
+      // If we have a replyId, send an error notification
+      if (replyId != null) {
+        _bluetoothService
+            .notify(replyId, {'success': false, 'error': e.toString()});
+      }
     }
   }
 }

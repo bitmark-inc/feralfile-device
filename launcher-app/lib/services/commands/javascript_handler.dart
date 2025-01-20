@@ -8,7 +8,8 @@ import 'command_repository.dart';
 class JavaScriptHandler implements CommandHandler {
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService) async {
+      Map<String, dynamic> data, BluetoothService bluetoothService,
+      [String? replyId]) async {
     try {
       final requestMessageData = RequestMessageData.fromJson(data);
       final messageID = requestMessageData.messageID;

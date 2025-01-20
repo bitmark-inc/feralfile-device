@@ -28,7 +28,8 @@ class CursorHandler implements CommandHandler {
 
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService) async {
+      Map<String, dynamic> data, BluetoothService bluetoothService,
+      [String? replyId]) async {
     try {
       // Check if this is a tap or drag gesture based on the command type
       if (data.isEmpty) {
@@ -70,13 +71,16 @@ class CursorHandler implements CommandHandler {
         }
 
         logger.info('Cursor movement completed');
-        bluetoothService.notify('dragGesture', {'success': true});
+        if (replyId != null) {
+          bluetoothService.notify(replyId, {'success': true});
+        }
       }
     } catch (e) {
-      final String command = data['type'] as String;
       logger.severe('Error in cursor handler: $e');
-      bluetoothService
-          .notify(command, {'success': false, 'error': e.toString()});
+      if (replyId != null) {
+        bluetoothService
+            .notify(replyId, {'success': false, 'error': e.toString()});
+      }
       rethrow;
     }
   }
