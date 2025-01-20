@@ -48,6 +48,8 @@ EOF
 
 chown -R feralfile:feralfile /home/feralfile/.config
 
+loginctl enable-linger feralfile
+
 # Add OTA cronjob update script
 CRON_CMD="*/30 * * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"
 crontab -u feralfile -l 2>/dev/null || true > /tmp/feralfile_cron
