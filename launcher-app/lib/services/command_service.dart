@@ -3,18 +3,23 @@ import 'dart:async';
 import 'package:feralfile/services/logger.dart';
 
 import 'commands/command_repository.dart';
+import 'bluetooth_service.dart';
 
 class CommandService {
   static final CommandService _instance = CommandService._internal();
   factory CommandService() => _instance;
 
   final _commandController = StreamController<CommandData>.broadcast();
-  final _commandRepository = CommandRepository();
+  late final CommandRepository _commandRepository;
 
   Stream<CommandData> get commandStream => _commandController.stream;
 
   CommandService._internal() {
     _commandController.stream.listen(_processCommand);
+  }
+
+  void initialize(BluetoothService bluetoothService) {
+    _commandRepository = CommandRepository(bluetoothService);
   }
 
   void _processCommand(CommandData cmdData) async {

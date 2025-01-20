@@ -13,14 +13,17 @@ abstract class CommandHandler {
 }
 
 class CommandRepository {
-  static final CommandRepository _instance = CommandRepository._internal();
-  factory CommandRepository() => _instance;
+  static CommandRepository? _instance;
+  factory CommandRepository(BluetoothService bluetoothService) {
+    _instance ??= CommandRepository._internal(bluetoothService);
+    return _instance!;
+  }
 
   final Map<String, CommandHandler> _handlers = {};
   final _jsHandler = JavaScriptHandler();
-  final BluetoothService _bluetoothService = BluetoothService();
+  final BluetoothService _bluetoothService;
 
-  CommandRepository._internal() {
+  CommandRepository._internal(this._bluetoothService) {
     // Register handlers for system-level commands only
     _handlers['rotate'] = ScreenRotationHandler();
     _handlers['sendKeyboardEvent'] = KeyboardHandler();

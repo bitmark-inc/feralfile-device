@@ -21,6 +21,7 @@ class BluetoothService {
   late final NativeCallable<CommandCallbackNative> _cmdCallback;
 
   BluetoothService() {
+    _commandService.initialize(this);
     _initialize();
   }
 
