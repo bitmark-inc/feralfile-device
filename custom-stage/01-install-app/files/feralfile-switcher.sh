@@ -32,6 +32,12 @@ focus_chromium() {
     fi
 }
 
+# Function to check internet connectivity
+check_internet() {
+    wget -q --spider https://www.google.com
+    return $?
+}
+
 # Main loop to switch applications based on internet connectivity
 while true; do
     if check_internet; then
