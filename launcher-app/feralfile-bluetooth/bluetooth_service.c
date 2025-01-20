@@ -13,6 +13,7 @@
 #define FERALFILE_SERVICE_UUID   "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
 #define FERALFILE_SETUP_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define FERALFILE_CMD_CHAR_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+#define FERALFILE_NOTIFY_CHAR_UUID "6e400004-b5a3-f393-e0a9-e50e24dcca9e"
 
 static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
@@ -78,6 +79,15 @@ static const gchar service_xml[] =
     "      <property name='UUID' type='s' access='read'/>"
     "      <property name='Primary' type='b' access='read'/>"
     "    </interface>"
+    "    <node name='notify_char'>"
+    "      <interface name='org.bluez.GattCharacteristic1'>"
+    "        <property name='UUID' type='s' access='read'/>"
+    "        <property name='Service' type='o' access='read'/>"
+    "        <property name='Flags' type='as' access='read'/>"
+    "        <method name='StartNotify'/>"
+    "        <method name='StopNotify'/>"
+    "      </interface>"
+    "    </node>"
     "    <node name='setup_char'>"
     "      <interface name='org.bluez.GattCharacteristic1'>"
     "        <property name='UUID' type='s' access='read'/>"
@@ -159,13 +169,23 @@ static GVariant *char_get_property(GDBusConnection *conn,
                 return g_variant_new_string(FERALFILE_SETUP_CHAR_UUID);
             } else if (strstr(object_path, "cmd_char") != NULL) {
                 return g_variant_new_string(FERALFILE_CMD_CHAR_UUID);
+            } else if (strstr(object_path, "notify_char") != NULL) {
+                return g_variant_new_string(FERALFILE_NOTIFY_CHAR_UUID);
             }
         } else if (g_strcmp0(property_name, "Service") == 0) {
             return g_variant_new_object_path("/com/feralfile/display/service0");
         } else if (g_strcmp0(property_name, "Flags") == 0) {
-            // If you want "write" only:
-            const gchar* flags[] = {"write", "write-without-response", NULL};
-            return g_variant_new_strv(flags, -1);
+            // Different flags based on characteristic type
+            if (strstr(object_path, "notify_char") != NULL) {
+                const gchar* flags[] = {"notify", NULL};
+                return g_variant_new_strv(flags, -1);
+            } else if (strstr(object_path, "cmd_char") != NULL) {
+                const gchar* flags[] = {"write", "write-without-response", NULL};
+                return g_variant_new_strv(flags, -1);
+            } else {  // setup_char
+                const gchar* flags[] = {"write", NULL};
+                return g_variant_new_strv(flags, -1);
+            }
         }
     }
     return NULL;
@@ -633,4 +653,35 @@ void bluetooth_stop() {
     }
 
     log_debug("[%s] Bluetooth service stopped\n", LOG_TAG);
+}
+
+void bluetooth_notify(const unsigned char* data, int length) {
+    // Log the hex string for debugging
+    char hex_string[length * 3 + 1];
+    for (size_t i = 0; i < length; i++) {
+        sprintf(hex_string + (i * 3), "%02x ", data[i]);
+    }
+    hex_string[length * 3 - 1] = '\0';
+    log_debug("[%s] Notifying data: %s", LOG_TAG, hex_string);
+
+    // Create GVariant for the notification value
+    GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
+                                              data, length, sizeof(guchar));
+
+    // Emit PropertiesChanged signal
+    GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
+    g_variant_builder_add(builder, "{sv}", "Value", value);
+
+    g_dbus_connection_emit_signal(connection,
+        NULL,
+        "/com/feralfile/display/service0/notify_char",
+        "org.freedesktop.DBus.Properties",
+        "PropertiesChanged",
+        g_variant_new("(sa{sv}as)",
+                     "org.bluez.GattCharacteristic1",
+                     builder,
+                     NULL),
+        NULL);
+
+    g_variant_builder_unref(builder);
 }

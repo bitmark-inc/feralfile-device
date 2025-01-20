@@ -71,7 +71,8 @@ class ScreenRotationHandler implements CommandHandler {
   }
 
   @override
-  Future<void> execute(Map<String, dynamic> data) async {
+  Future<void> execute(
+      Map<String, dynamic> data, BluetoothService bluetoothService) async {
     logger.info('Current rotation: $_currentRotation');
 
     final bool clockwise = data['clockwise'] ?? false;
@@ -86,8 +87,14 @@ class ScreenRotationHandler implements CommandHandler {
         await _saveRotation(rotation);
         logger.info('Screen rotated to $rotation and saved setting');
       }
+
+      // Send success notification
+      bluetoothService.notify('rotate', {'success': true});
     } catch (e) {
       logger.severe('Error rotating screen: $e');
+      bluetoothService
+          .notify('rotate', {'success': false, 'error': e.toString()});
+      rethrow;
     }
   }
 }

@@ -55,4 +55,40 @@ class VarintParser {
 
     return (value, offset);
   }
+
+  static List<int> encodeDoubleString(String str1, String str2) {
+    List<int> result = [];
+
+    // Convert strings to UTF-8 bytes
+    List<int> str1Bytes = utf8.encode(str1);
+    List<int> str2Bytes = utf8.encode(str2);
+
+    // Encode length of first string as varint
+    List<int> str1Length = _encodeVarint(str1Bytes.length);
+    result.addAll(str1Length);
+
+    // Add first string bytes
+    result.addAll(str1Bytes);
+
+    // Encode length of second string as varint
+    List<int> str2Length = _encodeVarint(str2Bytes.length);
+    result.addAll(str2Length);
+
+    // Add second string bytes
+    result.addAll(str2Bytes);
+
+    return result;
+  }
+
+  static List<int> _encodeVarint(int value) {
+    List<int> bytes = [];
+
+    while (value >= 0x80) {
+      bytes.add((value & 0x7F) | 0x80);
+      value >>= 7;
+    }
+    bytes.add(value & 0x7F);
+
+    return bytes;
+  }
 }

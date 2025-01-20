@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'dart:isolate';
 import 'package:feralfile/services/logger.dart';
 import 'package:ffi/ffi.dart';
+import 'dart:convert';
 
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
@@ -124,6 +125,29 @@ class BluetoothService {
       }
     } catch (e) {
       logger.warning('Error processing WiFi credentials: $e');
+    }
+  }
+
+  void notify(String command, Map<String, dynamic> payload) {
+    try {
+      final encodedMessage = VarintParser.encodeDoubleString(
+        command,
+        jsonEncode(payload),
+      );
+
+      final Pointer<Uint8> data = calloc<Uint8>(encodedMessage.length);
+      final bytes = data.asTypedList(encodedMessage.length);
+
+      for (var i = 0; i < encodedMessage.length; i++) {
+        bytes[i] = encodedMessage[i];
+      }
+
+      _bindings.bluetooth_notify(data, encodedMessage.length);
+      calloc.free(data);
+
+      logger.info('Sent notification: $command with payload: $payload');
+    } catch (e) {
+      logger.severe('Error sending notification: $e');
     }
   }
 }

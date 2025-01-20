@@ -1,12 +1,14 @@
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/websocket_service.dart';
 
+import '../bluetooth_service.dart';
 import '../logger.dart';
 import 'command_repository.dart';
 
 class JavaScriptHandler implements CommandHandler {
   @override
-  Future<void> execute(Map<String, dynamic> data) async {
+  Future<void> execute(
+      Map<String, dynamic> data, BluetoothService bluetoothService) async {
     try {
       final requestMessageData = RequestMessageData.fromJson(data);
       final messageID = requestMessageData.messageID;
