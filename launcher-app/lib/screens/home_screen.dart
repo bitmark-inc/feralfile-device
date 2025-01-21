@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../cubits/ble_connection_cubit.dart';
 import '../cubits/ble_connection_state.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -53,8 +54,7 @@ class HomeScreen extends StatelessWidget {
                                   'Make sure your phone is connected to the Wi-Fi\n'
                                   'network you want to use for the display.';
                             case BLEConnectionStatus.connecting:
-                              instructionText =
-                                  'Received Wi-Fi credentials.\n'
+                              instructionText = 'Received Wi-Fi credentials.\n'
                                   'Connecting to network "${state.ssid}"...';
                             case BLEConnectionStatus.connected:
                               instructionText = 'Connected successfully!\n'
@@ -86,15 +86,37 @@ class HomeScreen extends StatelessWidget {
                               Expanded(
                                 flex: 3,
                                 child: Center(
-                                  child: Text(
-                                    instructionText,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontFamily: 'PPMori',
-                                      fontSize: 42,
-                                      color: Colors.grey[300],
-                                      height: 1.4,
-                                    ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        instructionText,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontFamily: 'PPMori',
+                                          fontSize: 42,
+                                          color: Colors.grey[300],
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 40),
+                                      QrImageView(
+                                        data:
+                                            'feralfile://device_connect/${state.deviceName}',
+                                        version: QrVersions.auto,
+                                        size: 800,
+                                        backgroundColor: Colors.white,
+                                      ),
+                                      const SizedBox(height: 20),
+                                      Text(
+                                        'Device ID: ${state.deviceName}',
+                                        style: const TextStyle(
+                                          fontFamily: 'PPMori',
+                                          fontSize: 32,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),

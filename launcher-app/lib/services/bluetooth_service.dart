@@ -126,4 +126,14 @@ class BluetoothService {
       logger.warning('Error processing WiFi credentials: $e');
     }
   }
+
+  void setDeviceName(String name) {
+    final namePtr = name.toNativeUtf8();
+    try {
+      _bindings.bluetooth_set_device_name(namePtr);
+      logger.info('Set Bluetooth device name: $name');
+    } finally {
+      calloc.free(namePtr);
+    }
+  }
 }
