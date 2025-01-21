@@ -1,4 +1,5 @@
 // lib/main.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'screens/launch_screen.dart';
@@ -14,7 +15,24 @@ void main() async {
 
   await setupLogging();
 
-  runApp(const FeralFileApp());
+  final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit()..startListening();
+
+  // Listen for SIGTERM and cleanup
+  ProcessSignal.sigterm.watch().listen((_) async {
+    logger.info('[App] Received SIGTERM');
+    await bleConnectionCubit.close();
+    logger.info('[App] Cleanup complete. Exiting...');
+    exit(0);
+  });
+
+  runApp(
+    MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: bleConnectionCubit),
+      ],
+      child: const FeralFileApp(),
+    ),
+  );
 }
 
 class FeralFileApp extends StatelessWidget {

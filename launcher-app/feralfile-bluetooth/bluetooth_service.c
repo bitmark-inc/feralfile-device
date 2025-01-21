@@ -19,6 +19,16 @@ static GDBusConnection *connection = NULL;
 static GDBusNodeInfo *root_node = NULL;
 static GDBusNodeInfo *service_node = NULL;
 static GDBusNodeInfo *advertisement_introspection_data = NULL;
+
+static guint objects_reg_id = 0;
+static guint service_reg_id = 0;
+static guint setup_char_reg_id = 0;
+static guint cmd_char_reg_id = 0;
+static guint ad_reg_id = 0;
+
+static GDBusProxy *gatt_manager = NULL;
+static GDBusProxy *advertising_manager = NULL;
+
 static pthread_t bluetooth_thread;
 
 typedef void (*connection_result_callback)(int success, const unsigned char* data, int length);
@@ -422,7 +432,7 @@ int bluetooth_init() {
     }
 
     // Step 3: Register ObjectManager interface
-    guint objects_reg_id = g_dbus_connection_register_object(
+    objects_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display",
         g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
@@ -440,7 +450,7 @@ int bluetooth_init() {
     }
 
     // Step 4: Register the service object
-    guint service_reg_id = g_dbus_connection_register_object(
+    service_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display/service0",
         service_node->interfaces[0],  // org.bluez.GattService1
@@ -458,11 +468,11 @@ int bluetooth_init() {
     }
 
     // Step 5: Register your setup characteristic
-    guint setup_char_reg_id = g_dbus_connection_register_object(
+    setup_char_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display/service0/setup_char",
         setup_char_node->interfaces[0],  // org.bluez.GattCharacteristic1
-        &setup_char_vtable,             // <--- use setup_char_vtable
+        &setup_char_vtable,
         NULL,
         NULL,
         &error
@@ -476,11 +486,11 @@ int bluetooth_init() {
     }
 
     // Step 6: Register your command characteristic
-    guint cmd_char_reg_id = g_dbus_connection_register_object(
+    cmd_char_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display/service0/cmd_char",
         cmd_char_node->interfaces[0],   // org.bluez.GattCharacteristic1
-        &cmd_char_vtable,              // <--- use cmd_char_vtable
+        &cmd_char_vtable,
         NULL,
         NULL,
         &error
@@ -493,8 +503,8 @@ int bluetooth_init() {
         return -1;
     }
 
-    // Step 7: Get the GattManager1 interface
-    GDBusProxy *gatt_manager = g_dbus_proxy_new_sync(
+    // Step 7: Get the GattManager1 interface and store it
+    gatt_manager = g_dbus_proxy_new_sync(
         connection,
         G_DBUS_PROXY_FLAGS_NONE,
         NULL,
@@ -527,7 +537,6 @@ int bluetooth_init() {
                   LOG_TAG,
                   error->message);
         g_error_free(error);
-        g_object_unref(gatt_manager);
         return -1;
     }
 
@@ -539,12 +548,11 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        g_object_unref(gatt_manager);
         return -1;
     }
 
     // Step 10: Register advertisement object
-    guint ad_reg_id = g_dbus_connection_register_object(
+    ad_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display/advertisement0",
         advertisement_introspection_data->interfaces[0],  // org.bluez.LEAdvertisement1
@@ -558,12 +566,11 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        g_object_unref(gatt_manager);
         return -1;
     }
 
-    // Step 11: Get LEAdvertisingManager1
-    GDBusProxy *advertising_manager = g_dbus_proxy_new_sync(
+    // Step 11: Get LEAdvertisingManager1 and store it
+    advertising_manager = g_dbus_proxy_new_sync(
         connection,
         G_DBUS_PROXY_FLAGS_NONE,
         NULL,
@@ -578,7 +585,6 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        g_object_unref(gatt_manager);
         return -1;
     }
 
@@ -597,14 +603,8 @@ int bluetooth_init() {
                   LOG_TAG,
                   error->message);
         g_error_free(error);
-        g_object_unref(gatt_manager);
-        g_object_unref(advertising_manager);
         return -1;
     }
-
-    // **FIX**: unref proxies once finished
-    g_object_unref(gatt_manager);
-    g_object_unref(advertising_manager);
 
     log_debug("[%s] Bluetooth initialized successfully\n", LOG_TAG);
     return 0;
@@ -622,13 +622,87 @@ int bluetooth_start(connection_result_callback scb, command_callback ccb) {
 }
 
 void bluetooth_stop() {
+    log_debug("[%s] Stopping Bluetooth...\n", LOG_TAG);
+    GError *error = NULL;
+
+    // 1) Unregister the advertisement
+    if (advertising_manager) {
+        g_dbus_proxy_call_sync(
+            advertising_manager,
+            "UnregisterAdvertisement",
+            g_variant_new("(o)", "/com/feralfile/display/advertisement0"),
+            G_DBUS_CALL_FLAGS_NONE,
+            -1,
+            NULL,
+            &error
+        );
+        if (error) {
+            log_debug("[%s] UnregisterAdvertisement failed: %s",
+                      LOG_TAG, error->message);
+            g_error_free(error);
+            error = NULL;
+        }
+        // Free the advertising manager proxy
+        g_object_unref(advertising_manager);
+        advertising_manager = NULL;
+    }
+
+    // 2) Unregister the GATT application
+    if (gatt_manager) {
+        g_dbus_proxy_call_sync(
+            gatt_manager,
+            "UnregisterApplication",
+            g_variant_new("(o)", "/com/feralfile/display"),
+            G_DBUS_CALL_FLAGS_NONE,
+            -1,
+            NULL,
+            &error
+        );
+        if (error) {
+            log_debug("[%s] UnregisterApplication failed: %s",
+                      LOG_TAG, error->message);
+            g_error_free(error);
+            error = NULL;
+        }
+        // Free the GATT manager proxy
+        g_object_unref(gatt_manager);
+        gatt_manager = NULL;
+    }
+
+    // 3) Unregister all D-Bus objects (in the opposite order, or any order)
+    if (ad_reg_id) {
+        g_dbus_connection_unregister_object(connection, ad_reg_id);
+        ad_reg_id = 0;
+    }
+    if (cmd_char_reg_id) {
+        g_dbus_connection_unregister_object(connection, cmd_char_reg_id);
+        cmd_char_reg_id = 0;
+    }
+    if (setup_char_reg_id) {
+        g_dbus_connection_unregister_object(connection, setup_char_reg_id);
+        setup_char_reg_id = 0;
+    }
+    if (service_reg_id) {
+        g_dbus_connection_unregister_object(connection, service_reg_id);
+        service_reg_id = 0;
+    }
+    if (objects_reg_id) {
+        g_dbus_connection_unregister_object(connection, objects_reg_id);
+        objects_reg_id = 0;
+    }
+
+    // 4) Stop the main loop and join the thread
     if (main_loop) {
         g_main_loop_quit(main_loop);
     }
-    pthread_cancel(bluetooth_thread);
     pthread_join(bluetooth_thread, NULL);
 
-    // **FIX**: Clean up node infos
+    if (main_loop) {
+        g_main_loop_unref(main_loop);
+        main_loop = NULL;
+    }
+
+    // 5) Clean up node infos
     if (root_node) {
         g_dbus_node_info_unref(root_node);
         root_node = NULL;
@@ -636,6 +710,11 @@ void bluetooth_stop() {
     if (advertisement_introspection_data) {
         g_dbus_node_info_unref(advertisement_introspection_data);
         advertisement_introspection_data = NULL;
+    }
+
+    if (connection) {
+        g_object_unref(connection);
+        connection = NULL;
     }
 
     log_debug("[%s] Bluetooth service stopped\n", LOG_TAG);

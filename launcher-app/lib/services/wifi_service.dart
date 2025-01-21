@@ -18,34 +18,65 @@ class WifiService {
         'nmcli',
         ['device', 'wifi', 'rescan'],
       );
-      await Future.delayed(Duration(seconds: 3));
 
-      // Try to delete any existing connection with this SSID
-      await Process.run(
-        'nmcli',
-        ['connection', 'delete', credentials.ssid],
-      );
+      // Retry mechanism to allow Wi-Fi scan to update, up to 10s
+      List<String> availableSSIDs = [];
+      for (int i = 0; i < 5; i++) {
+        await Future.delayed(Duration(seconds: 2));
 
-      // Add the new Wi-Fi connection with provided credentials
-      ProcessResult addResult = await Process.run(
+        ProcessResult scanResult = await Process.run(
+          'nmcli',
+          ['-t', '-f', 'SSID', 'device', 'wifi', 'list'],
+          runInShell: true,
+        );
+
+        availableSSIDs = scanResult.stdout
+            .toString()
+            .split('\n')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+
+        if (availableSSIDs.contains(credentials.ssid)) {
+          break;
+        }
+
+        if (i == 4) {
+          logger.info('SSID not found after multiple retries.');
+          return false;
+        }
+      }
+
+      logger.info('SSID found, attempting to connect...');
+
+      // First, attempt to connect using existing credentials if existed
+      ProcessResult initialConnect = await Process.run(
         'nmcli',
-        [
-          'dev',
-          'wifi',
-          'connect',
-          credentials.ssid,
-          'password',
-          credentials.password,
-        ],
+        ['dev', 'wifi', 'connect', credentials.ssid],
         runInShell: true,
       );
+      if (initialConnect.exitCode == 0) {
+        logger.info('Connected to Wi-Fi using existing credentials: ${credentials.ssid}');
+        return true;
+      }
 
-      if (addResult.exitCode == 0) {
-        logger.info('Connected to Wi-Fi: ${credentials.ssid}');
+      logger.info('Failed to connect with existing credentials, trying new ones...');
+
+      // Delete existing connection profile if the first attempt fails
+      await Process.run('nmcli', ['connection', 'delete', credentials.ssid]);
+
+      // Attempt to connect with new credentials
+      ProcessResult newConnect = await Process.run(
+        'nmcli',
+        ['dev', 'wifi', 'connect', credentials.ssid, 'password', credentials.password],
+        runInShell: true,
+      );
+      if (newConnect.exitCode == 0) {
+        logger.info('Connected to Wi-Fi using new credentials: ${credentials.ssid}');
         await _saveCredentials(credentials);
         return true;
       } else {
-        logger.info('Failed to connect to Wi-Fi: ${addResult.stderr}');
+        logger.info('Failed to connect with new credentials: ${newConnect.stderr}');
         return false;
       }
     } catch (e) {
