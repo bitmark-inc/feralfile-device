@@ -1,10 +1,13 @@
 import 'dart:io';
+import '../bluetooth_service.dart';
 import '../logger.dart';
 import 'command_repository.dart';
 
 class KeyboardHandler implements CommandHandler {
   @override
-  Future<void> execute(Map<String, dynamic> data) async {
+  Future<void> execute(
+      Map<String, dynamic> data, BluetoothService bluetoothService,
+      [String? replyId]) async {
     final int keyCode = data['code'] as int;
 
     try {
@@ -15,8 +18,18 @@ class KeyboardHandler implements CommandHandler {
       } else {
         logger.info('Keyboard event sent: keyCode=$keyCode');
       }
+
+      // Send success notification using replyId if available
+      if (replyId != null) {
+        bluetoothService.notify(replyId, {'success': true});
+      }
     } catch (e) {
-      logger.severe('Error sending keyboard event: $e');
+      logger.severe('Error in keyboard event: $e');
+      if (replyId != null) {
+        bluetoothService
+            .notify(replyId, {'success': false, 'error': e.toString()});
+      }
+      rethrow;
     }
   }
 }

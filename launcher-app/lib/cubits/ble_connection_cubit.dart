@@ -34,6 +34,8 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
     logger.info('[BLEConnectionCubit] WiFi connection result: $connected');
 
     if (connected) {
+      _bluetoothService.notify('wifi_connection', {'success': true});
+
       // Get local IP address
       final localIp = await WifiService.getLocalIpAddress();
 
@@ -56,6 +58,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       logger.info('[BLEConnectionCubit] Launching Chromium browser');
       // await ChromiumLauncher.launchAndWait();
     } else {
+      _bluetoothService.notify('wifi_connection', {'success': false});
       logger.info('[BLEConnectionCubit] Failed to connect to WiFi network');
       emit(state.copyWith(
         isProcessing: false,
