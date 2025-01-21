@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../bluetooth_service.dart';
 import '../logger.dart';
 import 'command_repository.dart';
 
@@ -26,7 +27,9 @@ class CursorHandler implements CommandHandler {
   }
 
   @override
-  Future<void> execute(Map<String, dynamic> data) async {
+  Future<void> execute(
+      Map<String, dynamic> data, BluetoothService bluetoothService,
+      [String? replyId]) async {
     try {
       // Check if this is a tap or drag gesture based on the command type
       if (data.isEmpty) {
@@ -38,6 +41,7 @@ class CursorHandler implements CommandHandler {
         }
 
         logger.info('Tap gesture executed');
+        bluetoothService.notify('tapGesture', {'success': true});
       } else {
         // Handle drag gesture (existing code)
         final List<dynamic> movements = data['cursorOffsets'] as List<dynamic>;
@@ -67,9 +71,17 @@ class CursorHandler implements CommandHandler {
         }
 
         logger.info('Cursor movement completed');
+        if (replyId != null) {
+          bluetoothService.notify(replyId, {'success': true});
+        }
       }
     } catch (e) {
-      logger.severe('Error processing cursor movement: $e');
+      logger.severe('Error in cursor handler: $e');
+      if (replyId != null) {
+        bluetoothService
+            .notify(replyId, {'success': false, 'error': e.toString()});
+      }
+      rethrow;
     }
   }
 }
