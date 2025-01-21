@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../bluetooth_service.dart';
 import '../logger.dart';
 import 'command_repository.dart';
 import '../config_service.dart';
@@ -71,7 +72,9 @@ class ScreenRotationHandler implements CommandHandler {
   }
 
   @override
-  Future<void> execute(Map<String, dynamic> data) async {
+  Future<void> execute(
+      Map<String, dynamic> data, BluetoothService bluetoothService,
+      [String? replyId]) async {
     logger.info('Current rotation: $_currentRotation');
 
     final bool clockwise = data['clockwise'] ?? false;
@@ -86,8 +89,18 @@ class ScreenRotationHandler implements CommandHandler {
         await _saveRotation(rotation);
         logger.info('Screen rotated to $rotation and saved setting');
       }
+
+      // Send success notification
+      if (replyId != null) {
+        bluetoothService.notify(replyId, {'success': true});
+      }
     } catch (e) {
       logger.severe('Error rotating screen: $e');
+      if (replyId != null) {
+        bluetoothService
+            .notify(replyId, {'success': false, 'error': e.toString()});
+      }
+      rethrow;
     }
   }
 }

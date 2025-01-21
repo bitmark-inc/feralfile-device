@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'dart:isolate';
 import 'package:feralfile/services/logger.dart';
 import 'package:ffi/ffi.dart';
+import 'dart:convert';
 
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
@@ -20,6 +21,7 @@ class BluetoothService {
   late final NativeCallable<CommandCallbackNative> _cmdCallback;
 
   BluetoothService() {
+    _commandService.initialize(this);
     _initialize();
   }
 
@@ -82,12 +84,21 @@ class BluetoothService {
       // Release the FFI data
       calloc.free(data);
 
-      var (command, commandData, bytesRead) =
-          VarintParser.parseDoubleString(dataCopy, 0);
-      logger.info('Parsed command: "$command" with data: "$commandData"');
-      logger.info('Bytes read: $bytesRead');
+      final strings = VarintParser.parseToStringArray(dataCopy, 0);
 
-      CommandService().handleCommand(command, commandData);
+      // First string is always the command
+      final command = strings[0];
+      // Second string is the data
+      final commandData = strings[1];
+      // Third string is optional reply_id
+      final replyId = strings.length > 2 ? strings[2] : null;
+
+      logger.info('Parsed command: "$command" with data: "$commandData"');
+      if (replyId != null) {
+        logger.info('Reply ID: "$replyId"');
+      }
+
+      CommandService().handleCommand(command, commandData, replyId);
     } catch (e, stackTrace) {
       logger.severe('Error parsing command data: $e');
       logger.severe('Stack trace: $stackTrace');
@@ -113,7 +124,14 @@ class BluetoothService {
       logger.info('Raw bytes (hex): $hexString');
 
       // Now safely parse varint-encoded strings out of rawBytes
-      var (ssid, password, _) = VarintParser.parseDoubleString(rawBytes, 0);
+      final strings = VarintParser.parseToStringArray(rawBytes, 0);
+      if (strings.length < 2) {
+        throw Exception(
+            'Invalid WiFi credentials format: expected SSID and password');
+      }
+
+      final ssid = strings[0];
+      final password = strings[1];
       logger
           .info('Received WiFi credentials - SSID: $ssid, password: $password');
 
@@ -124,6 +142,34 @@ class BluetoothService {
       }
     } catch (e) {
       logger.warning('Error processing WiFi credentials: $e');
+    }
+  }
+
+  void notify(String replyID, Map<String, dynamic> payload) {
+    try {
+      final encodedMessage = VarintParser.encodeStringArray([
+        replyID,
+        jsonEncode(payload),
+      ]);
+
+      final Pointer<Uint8> data = calloc<Uint8>(encodedMessage.length);
+      final bytes = data.asTypedList(encodedMessage.length);
+
+      logger.info('Copying ${encodedMessage.length} bytes to FFI buffer');
+      for (var i = 0; i < encodedMessage.length; i++) {
+        bytes[i] = encodedMessage[i];
+      }
+
+      final hexString =
+          bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      logger.info('Copied bytes (hex): $hexString');
+
+      _bindings.bluetooth_notify(data, encodedMessage.length);
+      calloc.free(data);
+
+      logger.info('Sent notification: $replyID with payload: $payload');
+    } catch (e) {
+      logger.severe('Error sending notification: $e');
     }
   }
 }
