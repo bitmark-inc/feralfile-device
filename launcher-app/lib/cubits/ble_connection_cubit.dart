@@ -40,8 +40,8 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
           .info('[BLEConnectionCubit] Using existing device name: $deviceName');
     }
 
-    // Set the device name in the bluetooth service
-    _bluetoothService.setDeviceName(deviceName);
+    // Initialize bluetooth service with device name
+    _bluetoothService.initialize(deviceName);
 
     // Update state with device name
     emit(state.copyWith(deviceName: deviceName));

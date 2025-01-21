@@ -14,40 +14,49 @@ class BluetoothService {
   final CommandService _commandService = CommandService();
   static void Function(WifiCredentials)? _onCredentialsReceived;
   static final _commandPort = ReceivePort();
+  String? _deviceName;
 
   // Store both callbacks
   late final NativeCallable<ConnectionResultCallbackNative> _setupCallback;
   late final NativeCallable<CommandCallbackNative> _cmdCallback;
 
   BluetoothService() {
-    _initialize();
+    // Remove _initialize() call from constructor
   }
 
-  void _initialize() {
-    logger.info('Initializing Bluetooth service...');
-    int initResult = _bindings.bluetooth_init();
-    if (initResult != 0) {
-      logger.warning('Failed to initialize Bluetooth service.');
-      return;
-    }
+  void initialize(String deviceName) {
+    _deviceName = deviceName;
+    logger
+        .info('Initializing Bluetooth service with device name: $_deviceName');
 
-    _setupCallback = NativeCallable<ConnectionResultCallbackNative>.listener(
-      _staticConnectionResultCallback,
-    );
+    final namePtr = deviceName.toNativeUtf8();
+    try {
+      int initResult = _bindings.bluetooth_init(namePtr);
+      if (initResult != 0) {
+        logger.warning('Failed to initialize Bluetooth service.');
+        return;
+      }
 
-    _cmdCallback = NativeCallable<CommandCallbackNative>.listener(
-      _staticCommandCallback,
-    );
+      _setupCallback = NativeCallable<ConnectionResultCallbackNative>.listener(
+        _staticConnectionResultCallback,
+      );
 
-    int startResult = _bindings.bluetooth_start(
-        _setupCallback.nativeFunction, _cmdCallback.nativeFunction);
+      _cmdCallback = NativeCallable<CommandCallbackNative>.listener(
+        _staticCommandCallback,
+      );
 
-    if (startResult != 0) {
-      logger.warning('Failed to start Bluetooth service.');
-      _setupCallback.close();
-      _cmdCallback.close();
-    } else {
-      logger.info('Bluetooth service started. Waiting for connections...');
+      int startResult = _bindings.bluetooth_start(
+          _setupCallback.nativeFunction, _cmdCallback.nativeFunction);
+
+      if (startResult != 0) {
+        logger.warning('Failed to start Bluetooth service.');
+        _setupCallback.close();
+        _cmdCallback.close();
+      } else {
+        logger.info('Bluetooth service started. Waiting for connections...');
+      }
+    } finally {
+      calloc.free(namePtr);
     }
 
     _commandPort.listen((message) {
@@ -124,16 +133,6 @@ class BluetoothService {
       }
     } catch (e) {
       logger.warning('Error processing WiFi credentials: $e');
-    }
-  }
-
-  void setDeviceName(String name) {
-    final namePtr = name.toNativeUtf8();
-    try {
-      _bindings.bluetooth_set_device_name(namePtr);
-      logger.info('Set Bluetooth device name: $name');
-    } finally {
-      calloc.free(namePtr);
     }
   }
 }

@@ -43,14 +43,6 @@ static FILE* log_file = NULL;
 // Add a global variable for the name
 static char* device_name = NULL;
 
-// Add a new function to set the name
-void bluetooth_set_device_name(const char* name) {
-    if (device_name != NULL) {
-        free(device_name);
-    }
-    device_name = strdup(name);
-}
-
 void bluetooth_set_logfile(const char* path) {
     if (log_file != NULL) {
         fclose(log_file);
@@ -333,6 +325,9 @@ static GVariant* advertisement_get_property(GDBusConnection *connection,
     } else if (g_strcmp0(property_name, "ServiceUUIDs") == 0) {
         return g_variant_new_strv((const gchar*[]){FERALFILE_SERVICE_UUID, NULL}, -1);
     } else if (g_strcmp0(property_name, "LocalName") == 0) {
+        log_debug("[%s] Getting LocalName property, device_name is: %s", 
+                 LOG_TAG, 
+                 device_name ? device_name : "NULL");
         return g_variant_new_string(device_name ? device_name : "Unnamed");
     }
     return NULL;
@@ -436,8 +431,15 @@ static void* bluetooth_handler(void* arg) {
     pthread_exit(NULL);
 }
 
-int bluetooth_init() {
-    log_debug("[%s] Initializing Bluetooth\n", LOG_TAG);
+int bluetooth_init(const char* name) {
+    log_debug("[%s] Initializing Bluetooth with device name: %s\n", LOG_TAG, name);
+    
+    // Set the device name at initialization
+    if (device_name != NULL) {
+        free(device_name);
+    }
+    device_name = strdup(name);
+    
     GError *error = NULL;
 
     // Step 1: Connect to the system bus
