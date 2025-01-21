@@ -1,5 +1,6 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/logger.dart';
 
@@ -18,8 +19,16 @@ class WebSocketService {
 
   WebSocketService._internal();
 
+  bool isServerRunning() {
+    return _server != null;
+  }
+
   Future<void> initServer() async {
     try {
+      if (isServerRunning()) {
+        logger.info('Server already running, returning');
+        return;
+      }
       // Create HTTP server
       _server = await HttpServer.bind('localhost', 8080);
       logger.info('WebSocket server running on ws://localhost:8080');

@@ -25,7 +25,7 @@ class JavaScriptHandler implements CommandHandler {
             message: requestMessageData,
           ),
           (response) {
-            bluetoothService.notify(replyId, {'success': true});
+            bluetoothService.notify(replyId, response.message);
             logger.info('Received response: $response');
           },
         );

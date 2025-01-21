@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import '../bluetooth_service.dart';
 import '../logger.dart';
-import 'screen_rotation_handler.dart';
-import 'keyboard_handler.dart';
 import 'cursor_handler.dart';
 import 'javascript_handler.dart';
+import 'keyboard_handler.dart';
+import 'screen_rotation_handler.dart';
 
 abstract class CommandHandler {
   Future<void> execute(
@@ -42,12 +42,14 @@ class CommandRepository {
         await handler.execute(jsonData, _bluetoothService, replyId);
       } else {
         // Pass through unhandled commands to Chromium via JavaScript
-        await _jsHandler.execute({
-          'command': command,
-          'request': data,
-          'messageID':
-              replyId, // Pass replyId as messageID for JavaScript handling
-        }, _bluetoothService);
+        await _jsHandler.execute(
+          {
+            'command': command,
+            'request': data,
+          },
+          _bluetoothService,
+          replyId,
+        );
       }
     } catch (e) {
       logger.severe('Error executing command $command: $e');
