@@ -14,17 +14,17 @@ xset s off
 xset s noblank
 xset -dpms
 
-if ! systemctl --user is-enabled feralfile-launcher.service >/dev/null 2>&1; then
-    systemctl --user enable feralfile-launcher.service
-    systemctl --user start feralfile-launcher.service
+if ! sudo systemctl is-enabled feralfile-launcher.service >/dev/null 2>&1; then
+    sudo systemctl enable feralfile-launcher.service
+    sudo systemctl start feralfile-launcher.service
 fi
-if ! systemctl --user is-enabled feralfile-chromium.service >/dev/null 2>&1; then
-    systemctl --user enable feralfile-chromium.service
-    systemctl --user start feralfile-chromium.service
+if ! sudo systemctl is-enabled feralfile-chromium.service >/dev/null 2>&1; then
+    sudo systemctl enable feralfile-chromium.service
+    sudo systemctl start feralfile-chromium.service
 fi
-if ! systemctl --user is-enabled feralfile-switcher.service >/dev/null 2>&1; then
-    systemctl --user enable feralfile-switcher.service
-    systemctl --user start feralfile-switcher.service
+if ! sudo systemctl is-enabled feralfile-switcher.service >/dev/null 2>&1; then
+    sudo systemctl enable feralfile-switcher.service
+    sudo systemctl start feralfile-switcher.service
 fi
 EOF
 
