@@ -1,3 +1,4 @@
+import 'package:feralfile/services/websocket_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after_layout/after_layout.dart';
@@ -48,10 +49,12 @@ class _LaunchScreenState extends State<LaunchScreen>
 
       if (!mounted) return;
 
-      // Start log server if connected to WiFi
+      // Start log server & WebSocket server if connected to WiFi
       if (isConnected) {
         logger.info('Starting log server...');
         await startLogServer();
+        logger.info('Starting WebSocket server...');
+        await WebSocketService().initServer();
 
         logger.info('WiFi connected. Launching Chromium...');
         // await ChromiumLauncher.launchAndWait();

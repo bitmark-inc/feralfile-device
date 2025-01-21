@@ -1,17 +1,50 @@
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/websocket_service.dart';
+import 'package:ffi/ffi.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
 import '../services/chromium_launcher.dart';
 import 'ble_connection_state.dart';
+import 'dart:math';
+import '../services/config_service.dart';
 
 class BLEConnectionCubit extends Cubit<BLEConnectionState> {
   final BluetoothService _bluetoothService = BluetoothService();
 
   BLEConnectionCubit() : super(BLEConnectionState()) {
     logger.info('[BLEConnectionCubit] Initialized');
+    _generateAndSetDeviceName();
+  }
+
+  Future<void> _generateAndSetDeviceName() async {
+    // Try to load existing device name
+    final config = await ConfigService.loadConfig();
+    String? deviceName = config?.deviceName;
+
+    if (deviceName == null) {
+      // Generate new device name if none exists
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      final rnd = Random();
+      deviceName =
+          List.generate(6, (index) => chars[rnd.nextInt(chars.length)]).join();
+      deviceName = 'FF-X1 ($deviceName)';
+
+      // Save the new device name
+      await ConfigService.updateDeviceName(deviceName);
+      logger.info(
+          '[BLEConnectionCubit] Generated and saved new device name: $deviceName');
+    } else {
+      logger
+          .info('[BLEConnectionCubit] Using existing device name: $deviceName');
+    }
+
+    // Initialize bluetooth service with device name
+    _bluetoothService.initialize(deviceName);
+
+    // Update state with device name
+    emit(state.copyWith(deviceName: deviceName));
   }
 
   void startListening() {

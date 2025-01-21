@@ -4,28 +4,28 @@ import 'wifi_credentials.dart';
 class AppConfig {
   final WifiCredentials? wifiCredentials;
   final String? screenRotation;
+  final String? deviceName;
 
   AppConfig({
     this.wifiCredentials,
     this.screenRotation,
+    this.deviceName,
   });
 
-  factory AppConfig.fromJson(String jsonStr) {
-    final Map<String, dynamic> data = json.decode(jsonStr);
-    return AppConfig(
-      wifiCredentials: data['wifiCredentials'] != null
-          ? WifiCredentials.fromJson(jsonEncode(data['wifiCredentials']))
-          : null,
-      screenRotation: data['screenRotation'],
-    );
-  }
+  String toJson() => jsonEncode({
+        'wifiCredentials': wifiCredentials?.toJson(),
+        'screenRotation': screenRotation,
+        'deviceName': deviceName,
+      });
 
-  String toJson() {
-    return jsonEncode({
-      'wifiCredentials': wifiCredentials != null
-          ? json.decode(wifiCredentials!.toJson())
+  factory AppConfig.fromJson(String jsonString) {
+    final Map<String, dynamic> json = jsonDecode(jsonString);
+    return AppConfig(
+      wifiCredentials: json['wifiCredentials'] != null
+          ? WifiCredentials.fromJson(json['wifiCredentials'])
           : null,
-      'screenRotation': screenRotation,
-    });
+      screenRotation: json['screenRotation'],
+      deviceName: json['deviceName'],
+    );
   }
 }
