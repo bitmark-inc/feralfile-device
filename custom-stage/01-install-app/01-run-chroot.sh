@@ -2,7 +2,8 @@
 
 chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
-chmod 755 /home/feralfile/feralfile/feralfile-launcher.sh
+chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
+chmod 755 /home/feralfile/feralfile/feralfile-switcher.sh
 
 dpkg -i /home/feralfile/feralfile/feralfile-launcher_arm64.deb
 
@@ -13,9 +14,17 @@ xset s off
 xset s noblank
 xset -dpms
 
-if ! systemctl --user is-enabled feralfile.service >/dev/null 2>&1; then
-    systemctl --user enable feralfile.service
-    systemctl --user start feralfile.service
+if ! sudo systemctl is-enabled feralfile-launcher.service >/dev/null 2>&1; then
+    sudo systemctl enable feralfile-launcher.service
+    sudo systemctl start feralfile-launcher.service
+fi
+if ! sudo systemctl is-enabled feralfile-chromium.service >/dev/null 2>&1; then
+    sudo systemctl enable feralfile-chromium.service
+    sudo systemctl start feralfile-chromium.service
+fi
+if ! sudo systemctl is-enabled feralfile-switcher.service >/dev/null 2>&1; then
+    sudo systemctl enable feralfile-switcher.service
+    sudo systemctl start feralfile-switcher.service
 fi
 EOF
 
@@ -30,17 +39,64 @@ EOF
 # Create btautopair file to enable Bluetooth HID auto-pairing
 touch /boot/firmware/btautopair
 
+# Don't use polkit to manage NetworkManager which will cause bugs
+mkdir -p /etc/NetworkManager/conf.d
+cat > /etc/NetworkManager/conf.d/feralfile.conf <<EOF
+[main]
+auth-polkit=false
+EOF
+
 # Create feralfile service 
-mkdir -p /home/feralfile/.config/systemd/user
-cat > /home/feralfile/.config/systemd/user/feralfile.service << EOF
+mkdir -p /etc/systemd/system
+cat > /etc/systemd/system/feralfile-launcher.service << EOF
 [Unit]
-Description=FeralFile Application
-After=bluetooth.service
+Description=FeralFile Launcher Application
+After=bluetooth.target
+Requires=bluetooth.service
 
 [Service]
-ExecStart=/home/feralfile/feralfile/feralfile-launcher.sh
+User=feralfile
+Group=feralfile
+ExecStart=/opt/feralfile/feralfile
+Restart=on-failure
+RestartSec=5
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/feralfile/.Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+[Install]
+WantedBy=default.target
+EOF
+
+cat > /etc/systemd/system/feralfile-chromium.service << EOF
+[Unit]
+Description=FeralFile Chromium
+After=feralfile-launcher.service
+Wants=feralfile-launcher.service
+
+[Service]
+User=feralfile
+Group=feralfile
+ExecStart=/home/feralfile/feralfile/feralfile-chromium.sh
 Restart=always
 RestartSec=5
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+[Install]
+WantedBy=default.target
+EOF
+
+cat > /etc/systemd/system/feralfile-switcher.service << EOF
+[Unit]
+Description=FeralFile Switcher
+
+[Service]
+User=feralfile
+Group=feralfile
+ExecStart=/home/feralfile/feralfile/feralfile-switcher.sh
+Restart=always
+RestartSec=5
+Environment=XDG_RUNTIME_DIR=/run/user/1000
 
 [Install]
 WantedBy=default.target
