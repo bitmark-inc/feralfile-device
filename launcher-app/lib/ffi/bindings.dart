@@ -10,8 +10,8 @@ typedef ConnectionResultCallbackDart = void Function(
     int success, Pointer<Uint8>, int length);
 
 // Define the function signatures
-typedef BluetoothInitNative = Int32 Function();
-typedef BluetoothInitDart = int Function();
+typedef BluetoothInitNative = Int32 Function(Pointer<Utf8> device_name);
+typedef BluetoothInitDart = int Function(Pointer<Utf8> device_name);
 
 typedef BluetoothStartNative = Int32 Function(
   Pointer<NativeFunction<ConnectionResultCallbackNative>> setup_callback,

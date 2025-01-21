@@ -84,7 +84,7 @@ jobs:
           username: feralfile
           password: feralfile
           pi-gen-version: arm64
-          hostname: FeralFileDevice
+          hostname: FF-X1
           locale: en_US.UTF-8
           keyboard-keymap: us
           keyboard-layout: English (US)
