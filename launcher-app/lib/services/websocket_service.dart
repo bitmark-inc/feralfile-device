@@ -26,10 +26,8 @@ class WebSocketService {
   Future<void> initServer() async {
     try {
       if (isServerRunning()) {
-        await _server?.close();
-        await _socket?.close();
-        _messageListeners.clear();
-        _messageCallbacks.clear();
+        logger.info('WebSocket server already running');
+        return;
       }
       // Create HTTP server
       _server = await HttpServer.bind('localhost', 8080);
