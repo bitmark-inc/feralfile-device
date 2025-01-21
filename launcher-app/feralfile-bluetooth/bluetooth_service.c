@@ -320,7 +320,7 @@ static GVariant* advertisement_get_property(GDBusConnection *connection,
     } else if (g_strcmp0(property_name, "ServiceUUIDs") == 0) {
         return g_variant_new_strv((const gchar*[]){FERALFILE_SERVICE_UUID, NULL}, -1);
     } else if (g_strcmp0(property_name, "LocalName") == 0) {
-        return g_variant_new_string(device_name ? device_name : "FeralFile Device");
+        return g_variant_new_string(device_name ? device_name : "Unnamed");
     }
     return NULL;
 }
