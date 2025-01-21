@@ -14,6 +14,10 @@ xset s off
 xset s noblank
 xset -dpms
 
+if ! sudo systemctl is-enabled bt-agent.service >/dev/null 2>&1; then
+    sudo systemctl enable bt-agent.service
+    sudo systemctl start bt-agent.service
+fi
 if ! sudo systemctl is-enabled feralfile-launcher.service >/dev/null 2>&1; then
     sudo systemctl enable feralfile-launcher.service
     sudo systemctl start feralfile-launcher.service
@@ -28,6 +32,8 @@ if ! sudo systemctl is-enabled feralfile-switcher.service >/dev/null 2>&1; then
 fi
 EOF
 
+chown -R feralfile:feralfile /home/feralfile/.config
+
 # Configure auto-login for feralfile user
 mkdir -p /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm.conf.d/12-autologin.conf <<EOF
@@ -36,9 +42,6 @@ autologin-user=feralfile
 autologin-user-timeout=0
 EOF
 
-# Create btautopair file to enable Bluetooth HID auto-pairing
-touch /boot/firmware/btautopair
-
 # Don't use polkit to manage NetworkManager which will cause bugs
 mkdir -p /etc/NetworkManager/conf.d
 cat > /etc/NetworkManager/conf.d/feralfile.conf <<EOF
@@ -46,8 +49,28 @@ cat > /etc/NetworkManager/conf.d/feralfile.conf <<EOF
 auth-polkit=false
 EOF
 
-# Create feralfile service 
 mkdir -p /etc/systemd/system
+
+# Enable Bluetooth auto-pairing
+cat > /etc/systemd/system/bt-agent.service << EOF
+[Unit]
+Description=Bluetooth Auth Agent
+After=bluetooth.service
+Requires=bluetooth.service
+Before=shutdown.target reboot.target halt.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bt-agent -c NoInputNoOutput
+TimeoutStopSec=5
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=bluetooth.target
+EOF
+
+# Create feralfile service 
 cat > /etc/systemd/system/feralfile-launcher.service << EOF
 [Unit]
 Description=FeralFile Launcher Application
@@ -101,8 +124,6 @@ Environment=XDG_RUNTIME_DIR=/run/user/1000
 [Install]
 WantedBy=default.target
 EOF
-
-chown -R feralfile:feralfile /home/feralfile/.config
 
 # Add OTA cronjob update script
 CRON_CMD="*/30 * * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"

@@ -14,6 +14,7 @@ start_chromium() {
         --kiosk \
         --disable-extensions \
         --no-first-run \
+        --autoplay-policy=no-user-gesture-required \
         --disable-translate \
         --disable-infobars \
         --disable-session-crashed-bubble \
