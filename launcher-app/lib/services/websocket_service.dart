@@ -38,7 +38,7 @@ class WebSocketService {
       // Listen for WebSocket connections
       _server!.transform(WebSocketTransformer()).listen((WebSocket ws) {
         _socket = ws;
-        logger.info('Client connected');
+        logger.info('[WebSocket] Client connected');
 
         // Handle messages from website
         ws.listen(
@@ -49,7 +49,7 @@ class WebSocketService {
             logger.warning('WebSocket error: $error');
           },
           onDone: () {
-            logger.info('Client disconnected');
+            logger.info('[WebSocket] Client disconnected');
             _socket = null;
           },
         );
@@ -92,6 +92,9 @@ class WebSocketService {
 
       logger.info('Sending message: ${jsonEncode(message.toJson())}');
       _socket!.add(jsonEncode(message.toJson()));
+    } else {
+      logger.warning(
+          'Sending message failed. WebSocket connection not available');
     }
   }
 
