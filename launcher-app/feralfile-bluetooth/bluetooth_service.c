@@ -12,6 +12,7 @@
 #define FERALFILE_SERVICE_UUID   "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
 #define FERALFILE_SETUP_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define FERALFILE_CMD_CHAR_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+#define DEVICE_NAME_CHAR_UUID "00002a00-0000-1000-8000-00805f9b34fb"
 
 static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
@@ -98,6 +99,17 @@ static const gchar service_xml[] =
     "      <property name='UUID' type='s' access='read'/>"
     "      <property name='Primary' type='b' access='read'/>"
     "    </interface>"
+    "    <node name='device_name'>"
+    "      <interface name='org.bluez.GattCharacteristic1'>"
+    "        <property name='UUID' type='s' access='read'/>"
+    "        <property name='Service' type='o' access='read'/>"
+    "        <property name='Flags' type='as' access='read'/>"
+    "        <method name='ReadValue'>"
+    "          <arg name='options' type='a{sv}' direction='in'/>"
+    "          <arg name='value' type='ay' direction='out'/>"
+    "        </method>"
+    "      </interface>"
+    "    </node>"
     "    <node name='setup_char'>"
     "      <interface name='org.bluez.GattCharacteristic1'>"
     "        <property name='UUID' type='s' access='read'/>"
@@ -390,6 +402,33 @@ static const GDBusInterfaceVTable objects_vtable = {
     .set_property = NULL
 };
 
+// Add handler for device name reads
+static void handle_device_name_read(GDBusConnection *conn,
+                                  const gchar *sender,
+                                  const gchar *object_path,
+                                  const gchar *interface_name,
+                                  const gchar *method_name,
+                                  GVariant *parameters,
+                                  GDBusMethodInvocation *invocation,
+                                  gpointer user_data) {
+    GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE("ay"));
+    const char* name = device_name ? device_name : "Unnamed";
+    for (int i = 0; name[i] != '\0'; i++) {
+        g_variant_builder_add(builder, "y", name[i]);
+    }
+    g_dbus_method_invocation_return_value(invocation,
+                                        g_variant_new("(@ay)", 
+                                        g_variant_builder_end(builder)));
+    g_variant_builder_unref(builder);
+}
+
+// Add vtable for device name characteristic
+static const GDBusInterfaceVTable device_name_vtable = {
+    .method_call = handle_device_name_read,
+    .get_property = char_get_property,
+    .set_property = NULL
+};
+
 static void* bluetooth_handler(void* arg) {
     main_loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(main_loop);
@@ -501,6 +540,24 @@ int bluetooth_init() {
     );
     if (error || !cmd_char_reg_id) {
         log_debug("[%s] Failed to register command characteristic object: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return -1;
+    }
+
+    // Register device name characteristic
+    guint device_name_reg_id = g_dbus_connection_register_object(
+        connection,
+        "/com/feralfile/display/service0/device_name",
+        find_node_by_name(service_node, "device_name")->interfaces[0],
+        &device_name_vtable,
+        NULL,
+        NULL,
+        &error
+    );
+    if (error || !device_name_reg_id) {
+        log_debug("[%s] Failed to register device name characteristic: %s\n",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
