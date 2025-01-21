@@ -23,7 +23,9 @@ jobs:
           flutter-version: '3.24.4'
 
       - name: Install dependencies
-        run: flutter pub get
+        run: |
+          cd launcher-app
+          flutter pub get
         
       - name: Get changed files
         id: changed-files
