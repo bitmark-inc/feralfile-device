@@ -25,6 +25,7 @@ static guint service_reg_id = 0;
 static guint setup_char_reg_id = 0;
 static guint cmd_char_reg_id = 0;
 static guint ad_reg_id = 0;
+static guint device_name_reg_id = 0;
 
 static GDBusProxy *gatt_manager = NULL;
 static GDBusProxy *advertising_manager = NULL;
@@ -547,7 +548,7 @@ int bluetooth_init() {
     }
 
     // Register device name characteristic
-    guint device_name_reg_id = g_dbus_connection_register_object(
+    device_name_reg_id = g_dbus_connection_register_object(
         connection,
         "/com/feralfile/display/service0/device_name",
         find_node_by_name(service_node, "device_name")->interfaces[0],
@@ -742,6 +743,10 @@ void bluetooth_stop() {
     if (setup_char_reg_id) {
         g_dbus_connection_unregister_object(connection, setup_char_reg_id);
         setup_char_reg_id = 0;
+    }
+    if (device_name_reg_id) {
+        g_dbus_connection_unregister_object(connection, device_name_reg_id);
+        device_name_reg_id = 0;
     }
     if (service_reg_id) {
         g_dbus_connection_unregister_object(connection, service_reg_id);
