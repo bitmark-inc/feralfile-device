@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# Update BlueZ version
+apt-get install libglib2.0-dev libdbus-1-dev libudev-dev libical-dev libreadline-dev python3-docutils -y
+cd /home/feralfile
+wget http://www.kernel.org/pub/linux/bluetooth/bluez-5.79.tar.xz 
+tar xvf bluez-5.79.tar.xz
+cd bluez-5.79/
+./configure --prefix=/usr --mandir=/usr/share/man --sysconfdir=/etc --localstatedir=/var --with-systemdsystemunitdir=/lib/systemd/system --with-systemduserunitdir=/usr/lib/system
+make -j4
+make install
+apt-get remove libglib2.0-dev libdbus-1-dev libudev-dev libical-dev libreadline-dev python3-docutils -y
+
 chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
@@ -14,10 +25,6 @@ xset s off
 xset s noblank
 xset -dpms
 
-if ! sudo systemctl is-enabled bt-agent.service >/dev/null 2>&1; then
-    sudo systemctl enable bt-agent.service
-    sudo systemctl start bt-agent.service
-fi
 if ! sudo systemctl is-enabled feralfile-launcher.service >/dev/null 2>&1; then
     sudo systemctl enable feralfile-launcher.service
     sudo systemctl start feralfile-launcher.service
@@ -49,26 +56,14 @@ cat > /etc/NetworkManager/conf.d/feralfile.conf <<EOF
 auth-polkit=false
 EOF
 
-mkdir -p /etc/systemd/system
-
-# Enable Bluetooth auto-pairing
-cat > /etc/systemd/system/bt-agent.service << EOF
-[Unit]
-Description=Bluetooth Auth Agent
-After=bluetooth.service
-Requires=bluetooth.service
-Before=shutdown.target reboot.target halt.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/bt-agent -c NoInputNoOutput
-TimeoutStopSec=5
-Restart=always
-RestartSec=2
-
-[Install]
-WantedBy=bluetooth.target
+# Enable Just Work bluetooth connection
+mkdir -p /etc/bluetooth
+cat > /etc/bluetooth/main.conf <<EOF
+[General]
+JustWorksRepairing = always
 EOF
+
+mkdir -p /etc/systemd/system
 
 # Create feralfile service 
 cat > /etc/systemd/system/feralfile-launcher.service << EOF
