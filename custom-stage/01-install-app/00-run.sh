@@ -23,7 +23,3 @@ cp "files/feralfile-switcher.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
     echo "Error: Failed to copy files/feralfile-switcher.sh"
     exit 1
 }
-cp "files/feralfile-bt-auto-pair.py" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
-    echo "Error: Failed to copy files/feralfile-bt-auto-pair.py"
-    exit 1
-}

@@ -4,7 +4,6 @@ chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
 chmod 755 /home/feralfile/feralfile/feralfile-switcher.sh
-chmod 755 /home/feralfile/feralfile/feralfile-bt-auto-pair.py
 
 dpkg -i /home/feralfile/feralfile/feralfile-launcher_arm64.deb
 
@@ -55,17 +54,20 @@ mkdir -p /etc/systemd/system
 # Enable Bluetooth auto-pairing
 cat > /etc/systemd/system/bt-agent.service << EOF
 [Unit]
-Description=Bluetooth Auto Pair Agent
+Description=Bluetooth Auth Agent
 After=bluetooth.service
 Requires=bluetooth.service
+Before=shutdown.target reboot.target halt.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/feralfile/feralfile/feralfile-bt-auto-pair.py
+ExecStart=/usr/bin/bt-agent -c NoInputNoOutput
+TimeoutStopSec=5
 Restart=always
+RestartSec=2
 
 [Install]
-WantedBy=default.target
+WantedBy=bluetooth.target
 EOF
 
 # Create feralfile service 
