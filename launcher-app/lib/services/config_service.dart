@@ -63,14 +63,4 @@ class ConfigService {
     );
     return saveConfig(newConfig);
   }
-
-  static Future<bool> updateDeviceName(String deviceName) async {
-    final currentConfig = await loadConfig();
-    final newConfig = AppConfig(
-      wifiCredentials: currentConfig?.wifiCredentials,
-      screenRotation: currentConfig?.screenRotation,
-      deviceName: deviceName,
-    );
-    return saveConfig(newConfig);
-  }
 }
