@@ -4,3 +4,4 @@ fonts-droid-fallback
 fonts-liberation2
 x11-xserver-utils
 xdotool
+python3-dbus python3-gi
