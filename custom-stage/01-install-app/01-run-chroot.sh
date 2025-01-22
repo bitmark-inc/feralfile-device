@@ -74,7 +74,7 @@ EOF
 cat > /etc/systemd/system/feralfile-launcher.service << EOF
 [Unit]
 Description=FeralFile Launcher Application
-After=bluetooth.target
+After=bluetooth.service
 Requires=bluetooth.service
 
 [Service]
