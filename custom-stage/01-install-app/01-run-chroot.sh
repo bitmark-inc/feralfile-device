@@ -10,6 +10,9 @@ cd bluez-5.79/
 make -j4
 make install
 apt-get remove libglib2.0-dev libdbus-1-dev libudev-dev libical-dev libreadline-dev python3-docutils -y
+rm /home/feralfile/bluez-5.79.tar.xz
+rm -rf /home/feralfile/bluez-5.79
+cd /
 
 chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
