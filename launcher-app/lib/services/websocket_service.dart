@@ -1,5 +1,6 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/logger.dart';
 
@@ -18,8 +19,16 @@ class WebSocketService {
 
   WebSocketService._internal();
 
+  bool isServerRunning() {
+    return _server != null;
+  }
+
   Future<void> initServer() async {
     try {
+      if (isServerRunning()) {
+        logger.info('WebSocket server already running');
+        return;
+      }
       // Create HTTP server
       _server = await HttpServer.bind('localhost', 8080);
       logger.info('WebSocket server running on ws://localhost:8080');
@@ -27,7 +36,7 @@ class WebSocketService {
       // Listen for WebSocket connections
       _server!.transform(WebSocketTransformer()).listen((WebSocket ws) {
         _socket = ws;
-        logger.info('Client connected');
+        logger.info('[WebSocket] Client connected');
 
         // Handle messages from website
         ws.listen(
@@ -38,7 +47,7 @@ class WebSocketService {
             logger.warning('WebSocket error: $error');
           },
           onDone: () {
-            logger.info('Client disconnected');
+            logger.info('[WebSocket] Client disconnected');
             _socket = null;
           },
         );
@@ -81,6 +90,9 @@ class WebSocketService {
 
       logger.info('Sending message: ${jsonEncode(message.toJson())}');
       _socket!.add(jsonEncode(message.toJson()));
+    } else {
+      logger.warning(
+          'Sending message failed. WebSocket connection not available');
     }
   }
 

@@ -1,5 +1,19 @@
 #!/bin/bash
 
+# Update BlueZ version
+apt-get install libglib2.0-dev libdbus-1-dev libudev-dev libical-dev libreadline-dev python3-docutils -y
+cd /home/feralfile
+wget http://www.kernel.org/pub/linux/bluetooth/bluez-5.79.tar.xz 
+tar xvf bluez-5.79.tar.xz
+cd bluez-5.79/
+./configure --prefix=/usr --mandir=/usr/share/man --sysconfdir=/etc --localstatedir=/var --with-systemdsystemunitdir=/lib/systemd/system --with-systemduserunitdir=/usr/lib/system
+make -j4
+make install
+apt-get remove libglib2.0-dev libdbus-1-dev libudev-dev libical-dev libreadline-dev python3-docutils -y
+rm /home/feralfile/bluez-5.79.tar.xz
+rm -rf /home/feralfile/bluez-5.79
+cd /
+
 chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
@@ -28,6 +42,8 @@ if ! sudo systemctl is-enabled feralfile-switcher.service >/dev/null 2>&1; then
 fi
 EOF
 
+chown -R feralfile:feralfile /home/feralfile/.config
+
 # Configure auto-login for feralfile user
 mkdir -p /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm.conf.d/12-autologin.conf <<EOF
@@ -36,9 +52,6 @@ autologin-user=feralfile
 autologin-user-timeout=0
 EOF
 
-# Create btautopair file to enable Bluetooth HID auto-pairing
-touch /boot/firmware/btautopair
-
 # Don't use polkit to manage NetworkManager which will cause bugs
 mkdir -p /etc/NetworkManager/conf.d
 cat > /etc/NetworkManager/conf.d/feralfile.conf <<EOF
@@ -46,8 +59,16 @@ cat > /etc/NetworkManager/conf.d/feralfile.conf <<EOF
 auth-polkit=false
 EOF
 
-# Create feralfile service 
+# Enable Just Work bluetooth connection
+mkdir -p /etc/bluetooth
+cat > /etc/bluetooth/main.conf <<EOF
+[General]
+JustWorksRepairing = always
+EOF
+
 mkdir -p /etc/systemd/system
+
+# Create feralfile service 
 cat > /etc/systemd/system/feralfile-launcher.service << EOF
 [Unit]
 Description=FeralFile Launcher Application
@@ -101,8 +122,6 @@ Environment=XDG_RUNTIME_DIR=/run/user/1000
 [Install]
 WantedBy=default.target
 EOF
-
-chown -R feralfile:feralfile /home/feralfile/.config
 
 # Add OTA cronjob update script
 CRON_CMD="*/30 * * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"

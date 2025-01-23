@@ -9,10 +9,12 @@ class KeyboardHandler implements CommandHandler {
       Map<String, dynamic> data, BluetoothService bluetoothService,
       [String? replyId]) async {
     final int keyCode = data['code'] as int;
+    final String keyName = String.fromCharCode(keyCode);
+    logger.info('keyname', keyName);
 
     try {
       // Using xdotool to send key events to the active window
-      final result = await Process.run('xdotool', ['key', keyCode.toString()]);
+      final result = await Process.run('xdotool', ['key', keyName]);
       if (result.exitCode != 0) {
         logger.warning('Failed to send keyboard event: ${result.stderr}');
       } else {
