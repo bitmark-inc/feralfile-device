@@ -319,7 +319,7 @@ static GVariant* advertisement_get_property(GDBusConnection *connection,
         log_debug("[%s] Getting LocalName property, device_name is: %s", 
                  LOG_TAG, 
                  device_name ? device_name : "FF-X1");
-        return g_variant_new_string(device_name ? device_name : "FF-X1");
+        return g_variant_new_string("FF-X1");
     }
     return NULL;
 }
