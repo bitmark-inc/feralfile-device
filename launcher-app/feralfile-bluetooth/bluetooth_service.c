@@ -316,9 +316,9 @@ static GVariant* advertisement_get_property(GDBusConnection *connection,
     } else if (g_strcmp0(property_name, "ServiceUUIDs") == 0) {
         return g_variant_new_strv((const gchar*[]){FERALFILE_SERVICE_UUID, NULL}, -1);
     } else if (g_strcmp0(property_name, "LocalName") == 0) {
-        log_debug("[%s] Getting LocalName property, device_name is: %s", 
-                 LOG_TAG, 
-                 device_name ? device_name : "FF-X1");
+        // log_debug("[%s] Getting LocalName property, device_name is: %s", 
+        //          LOG_TAG, 
+        //          device_name ? device_name : "FF-X1");
         return g_variant_new_string("FF-X1");
     }
     return NULL;
