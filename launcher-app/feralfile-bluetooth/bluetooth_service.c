@@ -9,6 +9,7 @@
 #include <time.h>
 
 #define LOG_TAG "BluetoothService"
+#define FERALFILE_SERVICE_NAME   "FeralFile Device"
 #define FERALFILE_SERVICE_UUID   "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
 #define FERALFILE_SETUP_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define FERALFILE_CMD_CHAR_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
@@ -319,7 +320,7 @@ static GVariant* advertisement_get_property(GDBusConnection *connection,
         // log_debug("[%s] Getting LocalName property, device_name is: %s", 
         //          LOG_TAG, 
         //          device_name ? device_name : "FF-X1");
-        return g_variant_new_string("FF-X1");
+        return g_variant_new_string(FERALFILE_SERVICE_NAME);
     }
     return NULL;
 }
