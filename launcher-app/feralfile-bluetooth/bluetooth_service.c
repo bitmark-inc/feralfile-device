@@ -399,10 +399,10 @@ int bluetooth_init(const char* name) {
     log_debug("[%s] Initializing Bluetooth with device name: %s\n", LOG_TAG, name);
     
     // Set the device name at initialization
-    if (device_name != NULL) {
-        free(device_name);
-    }
-    device_name = strdup(name);
+    // if (device_name != NULL) {
+    //     free(device_name);
+    // }
+    // device_name = strdup(name);
     
     GError *error = NULL;
 
