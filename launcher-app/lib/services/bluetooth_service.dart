@@ -9,6 +9,7 @@ import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
 import '../services/command_service.dart';
 import '../utils/varint_parser.dart';
+import '../services/config_service.dart';
 
 class BluetoothService {
   final BluetoothBindings _bindings = BluetoothBindings();
@@ -25,38 +26,50 @@ class BluetoothService {
     _initialize();
   }
 
-  void _initialize() {
+  Future<void> _initialize() async {
     logger.info('Initializing Bluetooth service...');
-    int initResult = _bindings.bluetooth_init();
-    if (initResult != 0) {
-      logger.warning('Failed to initialize Bluetooth service.');
-      return;
-    }
 
-    _setupCallback = NativeCallable<ConnectionResultCallbackNative>.listener(
-      _staticConnectionResultCallback,
-    );
+    // Get or generate device name
+    final deviceName = await ConfigService.getOrGenerateDeviceName();
+    logger.info('Using device name: $deviceName');
 
-    _cmdCallback = NativeCallable<CommandCallbackNative>.listener(
-      _staticCommandCallback,
-    );
+    // Convert device name to C string
+    final deviceNamePtr = deviceName.toNativeUtf8();
 
-    int startResult = _bindings.bluetooth_start(
-        _setupCallback.nativeFunction, _cmdCallback.nativeFunction);
-
-    if (startResult != 0) {
-      logger.warning('Failed to start Bluetooth service.');
-      _setupCallback.close();
-      _cmdCallback.close();
-    } else {
-      logger.info('Bluetooth service started. Waiting for connections...');
-    }
-
-    _commandPort.listen((message) {
-      if (message is List) {
-        CommandService().handleCommand(message[0], message[1]);
+    try {
+      int initResult = _bindings.bluetooth_init(deviceNamePtr);
+      if (initResult != 0) {
+        logger.warning('Failed to initialize Bluetooth service.');
+        return;
       }
-    });
+
+      _setupCallback = NativeCallable<ConnectionResultCallbackNative>.listener(
+        _staticConnectionResultCallback,
+      );
+
+      _cmdCallback = NativeCallable<CommandCallbackNative>.listener(
+        _staticCommandCallback,
+      );
+
+      int startResult = _bindings.bluetooth_start(
+          _setupCallback.nativeFunction, _cmdCallback.nativeFunction);
+
+      if (startResult != 0) {
+        logger.warning('Failed to start Bluetooth service.');
+        _setupCallback.close();
+        _cmdCallback.close();
+      } else {
+        logger.info('Bluetooth service started. Waiting for connections...');
+      }
+
+      _commandPort.listen((message) {
+        if (message is List) {
+          CommandService().handleCommand(message[0], message[1]);
+        }
+      });
+    } finally {
+      calloc.free(deviceNamePtr);
+    }
   }
 
   void startListening(void Function(WifiCredentials) onCredentialsReceived) {

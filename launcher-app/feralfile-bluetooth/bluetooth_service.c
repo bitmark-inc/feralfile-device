@@ -13,6 +13,7 @@
 #define FERALFILE_SERVICE_UUID   "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
 #define FERALFILE_SETUP_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define FERALFILE_CMD_CHAR_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+#define MAX_DEVICE_NAME_LENGTH 32
 
 static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
@@ -38,6 +39,8 @@ typedef void (*command_callback)(int success, const unsigned char* data, int len
 static command_callback cmd_callback = NULL;
 
 static FILE* log_file = NULL;
+
+static char device_name[MAX_DEVICE_NAME_LENGTH] = FERALFILE_SERVICE_NAME;
 
 void bluetooth_set_logfile(const char* path) {
     if (log_file != NULL) {
@@ -316,7 +319,7 @@ static GVariant* advertisement_get_property(GDBusConnection *connection,
     } else if (g_strcmp0(property_name, "ServiceUUIDs") == 0) {
         return g_variant_new_strv((const gchar*[]){FERALFILE_SERVICE_UUID, NULL}, -1);
     } else if (g_strcmp0(property_name, "LocalName") == 0) {
-        return g_variant_new_string(FERALFILE_SERVICE_NAME);
+        return g_variant_new_string(device_name);
     }
     return NULL;
 }
@@ -392,8 +395,15 @@ static void* bluetooth_handler(void* arg) {
     pthread_exit(NULL);
 }
 
-int bluetooth_init() {
+int bluetooth_init(const char* custom_device_name) {
     log_debug("[%s] Initializing Bluetooth\n", LOG_TAG);
+    
+    // Set custom device name if provided
+    if (custom_device_name != NULL) {
+        strncpy(device_name, custom_device_name, MAX_DEVICE_NAME_LENGTH - 1);
+        device_name[MAX_DEVICE_NAME_LENGTH - 1] = '\0';
+    }
+    
     GError *error = NULL;
 
     // Step 1: Connect to the system bus

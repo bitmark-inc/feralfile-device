@@ -3,6 +3,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/app_config.dart';
 import '../models/wifi_credentials.dart';
 import 'logger.dart';
+import 'dart:math';
 
 class ConfigService {
   static const String _configFileName = 'app_config.json';
@@ -62,5 +63,33 @@ class ConfigService {
       screenRotation: rotation,
     );
     return saveConfig(newConfig);
+  }
+
+  static String _generateRandomDeviceName() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random();
+    final result =
+        List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
+    return 'FF-$result';
+  }
+
+  static Future<String> getOrGenerateDeviceName() async {
+    final config = await loadConfig();
+    if (config?.deviceName.isNotEmpty == true) {
+      return config!.deviceName;
+    }
+
+    // Generate a new device name if none exists
+    final deviceName = _generateRandomDeviceName();
+
+    // Create or update config with the new device name
+    final newConfig = AppConfig(
+      wifiCredentials: config?.wifiCredentials,
+      screenRotation: config?.screenRotation,
+      deviceName: deviceName,
+    );
+    await saveConfig(newConfig);
+
+    return deviceName;
   }
 }
