@@ -9,6 +9,7 @@
 #include <time.h>
 
 #define LOG_TAG "BluetoothService"
+#define FERALFILE_SERVICE_NAME   "FeralFile Device"
 #define FERALFILE_SERVICE_UUID   "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
 #define FERALFILE_SETUP_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define FERALFILE_CMD_CHAR_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
@@ -37,9 +38,6 @@ typedef void (*command_callback)(int success, const unsigned char* data, int len
 static command_callback cmd_callback = NULL;
 
 static FILE* log_file = NULL;
-
-// Add a global variable for the name
-static char* device_name = NULL;
 
 void bluetooth_set_logfile(const char* path) {
     if (log_file != NULL) {
@@ -397,15 +395,8 @@ static void* bluetooth_handler(void* arg) {
     pthread_exit(NULL);
 }
 
-int bluetooth_init(const char* name) {
-    log_debug("[%s] Initializing Bluetooth with device name: %s\n", LOG_TAG, name);
-    
-    // Set the device name at initialization
-    if (device_name != NULL) {
-        free(device_name);
-    }
-    device_name = strdup(name);
-    
+int bluetooth_init() {
+    log_debug("[%s] Initializing Bluetooth\n", LOG_TAG);
     GError *error = NULL;
 
     // Step 1: Connect to the system bus
