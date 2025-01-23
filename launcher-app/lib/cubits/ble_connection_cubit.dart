@@ -26,7 +26,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       final rnd = Random();
       deviceName =
           List.generate(6, (index) => chars[rnd.nextInt(chars.length)]).join();
-      deviceName = 'FFX1$deviceName)';
+      deviceName = 'FFX1$deviceName';
 
       // Save the new device name
       await ConfigService.updateDeviceName(deviceName);
