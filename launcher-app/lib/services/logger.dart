@@ -1,8 +1,11 @@
 // lib/services/logger.dart
+import 'dart:convert';
+
 import 'package:logging/logging.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'dart:async';
+import 'package:http/http.dart' as http;
 
 final Logger logger = Logger('FeralFileApp');
 late File _logFile;
@@ -146,5 +149,55 @@ void stopLogServer() {
     _logServer?.close(
         force: true); // Force close to ensure resources are released
     _logServer = null;
+  }
+}
+
+Future<void> sendLog() async {
+  try {
+    const deviceID = 'ID';
+    const deviceName = 'FF Device';
+    final title =
+        '${deviceName}_${deviceID}_${DateTime.now().toIso8601String()}';
+
+    const submitMessage = 'Device name: $deviceName\nDevice ID: $deviceID\n';
+
+    final data = await _logFile.readAsBytes();
+    final attachments = [
+      {
+        'data': base64Encode(data),
+        'title': title,
+        'content_type': 'logs',
+      }
+    ];
+
+    final tags = ['FF Device'];
+
+    final payload = {
+      'title': title,
+      'message': submitMessage,
+      'attachments': attachments,
+      'tags': tags,
+    };
+
+    final uri = Uri.parse('https://support.test.autonomy.io/v1/issues/');
+
+    final request = http.Request('POST', uri);
+    request.headers.addAll({
+      'Content-Type': 'application/json',
+      'x-device-id': deviceID,
+      'x-api-key': 'Yeopoo6reeTingaelohm5BingaeZohma',
+    });
+
+    request.body = jsonEncode(payload);
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode != HttpStatus.created) {
+      throw Exception(
+          'statusCode: ${response.statusCode}, reason: ${response.reasonPhrase}');
+    }
+  } catch (e) {
+    logger.severe('Error sending log: ${e.toString()}');
   }
 }
