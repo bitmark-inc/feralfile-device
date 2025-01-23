@@ -1,11 +1,9 @@
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/websocket_service.dart';
-import 'package:ffi/ffi.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
-import '../services/chromium_launcher.dart';
 import 'ble_connection_state.dart';
 import 'dart:math';
 import '../services/config_service.dart';
@@ -15,7 +13,6 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
 
   BLEConnectionCubit() : super(BLEConnectionState()) {
     logger.info('[BLEConnectionCubit] Initialized');
-    _generateAndSetDeviceName();
   }
 
   Future<void> _generateAndSetDeviceName() async {
@@ -49,6 +46,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
 
   void startListening() {
     logger.info('[BLEConnectionCubit] Starting to listen for BLE connections');
+    _generateAndSetDeviceName();
     _bluetoothService.startListening(_handleCredentialsReceived);
   }
 

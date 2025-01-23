@@ -1,13 +1,15 @@
+import 'package:feralfile/services/websocket_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after_layout/after_layout.dart';
 import '../services/commands/cursor_handler.dart';
 import '../services/logger.dart';
 import '../services/wifi_service.dart';
-import '../services/chromium_launcher.dart';
 import '../services/commands/screen_rotation_handler.dart';
 import 'home_screen.dart';
 import '../services/config_service.dart';
+import '../cubits/ble_connection_cubit.dart';
 
 class LaunchScreen extends StatefulWidget {
   const LaunchScreen({super.key});
@@ -21,6 +23,7 @@ class _LaunchScreenState extends State<LaunchScreen>
   @override
   void afterFirstLayout(BuildContext context) {
     _initializeApp();
+    context.read<BLEConnectionCubit>().startListening();
   }
 
   Future<void> _initializeApp() async {
