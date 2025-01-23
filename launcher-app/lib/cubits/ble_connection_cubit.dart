@@ -15,7 +15,6 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
 
   BLEConnectionCubit() : super(BLEConnectionState()) {
     logger.info('[BLEConnectionCubit] Initialized');
-    _generateAndSetDeviceName();
   }
 
   Future<void> _generateAndSetDeviceName() async {
@@ -49,6 +48,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
 
   void startListening() {
     logger.info('[BLEConnectionCubit] Starting to listen for BLE connections');
+    _generateAndSetDeviceName();
     _bluetoothService.startListening(_handleCredentialsReceived);
   }
 

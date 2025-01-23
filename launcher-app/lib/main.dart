@@ -15,7 +15,7 @@ void main() async {
 
   await setupLogging();
 
-  final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit()..startListening();
+  final bleConnectionCubit = BLEConnectionCubit();
 
   // Listen for SIGTERM and cleanup
   ProcessSignal.sigterm.watch().listen((_) async {

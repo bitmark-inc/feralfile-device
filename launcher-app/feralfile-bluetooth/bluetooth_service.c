@@ -418,6 +418,59 @@ int bluetooth_init(const char* name) {
         return -1;
     }
 
+    // Check adapter power state
+    GDBusProxy *adapter = g_dbus_proxy_new_sync(
+        connection,
+        G_DBUS_PROXY_FLAGS_NONE,
+        NULL,
+        "org.bluez",
+        "/org/bluez/hci0",
+        "org.bluez.Adapter1",
+        NULL,
+        &error
+    );
+
+    if (!adapter || error) {
+        log_debug("[%s] Failed to get adapter: %s\n",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return -1;
+    }
+
+    // Power on the adapter if needed
+    GVariant *powered = g_dbus_proxy_get_cached_property(adapter, "Powered");
+    if (!powered || !g_variant_get_boolean(powered)) {
+        log_debug("[%s] Powering on Bluetooth adapter...", LOG_TAG);
+        g_dbus_proxy_call_sync(
+            adapter,
+            "org.freedesktop.DBus.Properties.Set",
+            g_variant_new("(ssv)", 
+                         "org.bluez.Adapter1",
+                         "Powered",
+                         g_variant_new_boolean(TRUE)),
+            G_DBUS_CALL_FLAGS_NONE,
+            -1,
+            NULL,
+            &error
+        );
+        
+        if (error) {
+            log_debug("[%s] Failed to power on adapter: %s\n",
+                      LOG_TAG,
+                      error->message);
+            g_error_free(error);
+            g_object_unref(adapter);
+            return -1;
+        }
+        
+        // Wait for adapter to be ready
+        g_usleep(1000000);  // Wait 1 second
+    }
+    
+    if (powered) g_variant_unref(powered);
+    g_object_unref(adapter);
+
     // Step 2: Parse our service XML
     root_node = g_dbus_node_info_new_for_xml(service_xml, &error);
     if (!root_node || error) {
@@ -601,20 +654,49 @@ int bluetooth_init(const char* name) {
     }
 
     // Step 12: Register the advertisement
-    g_dbus_proxy_call_sync(
-        advertising_manager,
-        "RegisterAdvertisement",
-        g_variant_new("(oa{sv})", "/com/feralfile/display/advertisement0", NULL),
-        G_DBUS_CALL_FLAGS_NONE,
-        -1,
-        NULL,
-        &error
-    );
-    if (error) {
-        log_debug("[%s] Advertisement registration failed: %s\n",
+    if (!wait_for_bluez_ready(advertising_manager, 5, 1000)) {
+        log_debug("[%s] BlueZ advertising manager not ready after retries", LOG_TAG);
+        return -1;
+    }
+
+    // Try registration with timeout
+    int max_retries = 3;
+    int retry_count = 0;
+    
+    while (retry_count < max_retries) {
+        error = NULL;
+        g_dbus_proxy_call_sync(
+            advertising_manager,
+            "RegisterAdvertisement",
+            g_variant_new("(oa{sv})", "/com/feralfile/display/advertisement0", NULL),
+            G_DBUS_CALL_FLAGS_NONE,
+            5000,  // 5 second timeout
+            NULL,
+            &error
+        );
+
+        if (!error) {
+            log_debug("[%s] Advertisement registered successfully", LOG_TAG);
+            break;
+        }
+
+        log_debug("[%s] Advertisement registration attempt %d failed: %s\n",
                   LOG_TAG,
+                  retry_count + 1,
                   error->message);
         g_error_free(error);
+        
+        if (retry_count < max_retries - 1) {
+            log_debug("[%s] Retrying in 1 second...", LOG_TAG);
+            g_usleep(1000000);  // Sleep for 1 second
+        }
+        
+        retry_count++;
+    }
+
+    if (retry_count >= max_retries) {
+        log_debug("[%s] Failed to register advertisement after %d attempts", 
+                 LOG_TAG, max_retries);
         return -1;
     }
 
@@ -761,4 +843,25 @@ void bluetooth_notify(const unsigned char* data, int length) {
         NULL);
 
     g_variant_builder_unref(builder);
+}
+
+static gboolean wait_for_bluez_ready(GDBusProxy *proxy, int max_retries, int delay_ms) {
+    GError *error = NULL;
+    int retries = 0;
+
+    while (retries < max_retries) {
+        // Try to get a property to check if BlueZ is responsive
+        GVariant *result = g_dbus_proxy_get_cached_property(proxy, "Powered");
+        if (result) {
+            g_variant_unref(result);
+            return TRUE;
+        }
+
+        log_debug("[%s] Waiting for BlueZ to be ready (attempt %d/%d)...", 
+                 LOG_TAG, retries + 1, max_retries);
+        g_usleep(delay_ms * 1000);  // Convert ms to microseconds
+        retries++;
+    }
+
+    return FALSE;
 }
