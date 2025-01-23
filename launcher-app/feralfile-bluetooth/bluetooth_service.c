@@ -37,6 +37,7 @@ typedef void (*command_callback)(int success, const unsigned char* data, int len
 static command_callback cmd_callback = NULL;
 
 static FILE* log_file = NULL;
+static char* device_name = NULL;
 
 void bluetooth_set_logfile(const char* path) {
     if (log_file != NULL) {
@@ -317,8 +318,8 @@ static GVariant* advertisement_get_property(GDBusConnection *connection,
     } else if (g_strcmp0(property_name, "LocalName") == 0) {
         log_debug("[%s] Getting LocalName property, device_name is: %s", 
                  LOG_TAG, 
-                 device_name ? device_name : "NULL");
-        return g_variant_new_string(device_name ? device_name : "Unnamed");
+                 device_name ? device_name : "FF-X1");
+        return g_variant_new_string(device_name ? device_name : "FF-X1");
     }
     return NULL;
 }
