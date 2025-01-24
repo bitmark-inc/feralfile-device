@@ -19,7 +19,7 @@ start_chromium() {
         --disable-infobars \
         --disable-session-crashed-bubble \
         --disable-features=TranslateUI \
-        https://support-feralfile-device.feralfile-display-prod.pages.dev >/dev/null 2>&1 
+        https://support-feralfile-device.feralfile-display-prod.pages.dev?platform=ff-device >/dev/null 2>&1
 }
 
 # Function to check internet connectivity
