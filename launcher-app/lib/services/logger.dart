@@ -2,7 +2,6 @@
 import 'dart:convert';
 
 import 'package:logging/logging.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'dart:async';
@@ -155,23 +154,21 @@ void stopLogServer() {
   }
 }
 
-Future<void> sendLog() async {
+Future<void> sendLog(String? userID) async {
   try {
     if (Environment.supportURL.isEmpty || Environment.supportApiKey.isEmpty) {
       throw Exception(
           'Environment variables not properly initialized. Support URL: ${Environment.supportURL.isNotEmpty}, API Key exists: ${Environment.supportApiKey.isNotEmpty}');
     }
 
-    const deviceID = 'ID';
+    const deviceID = 'unknown';
     const deviceName = 'FF Device';
     final title =
         '${deviceName}_${deviceID}_${DateTime.now().toIso8601String()}';
 
     var submitMessage = '';
-    final version = (await PackageInfo.fromPlatform()).version;
-    submitMessage += '**Version:** $version\n';
+    submitMessage += '**Version:** ${Environment.appVersion}\n';
     submitMessage += '**Device ID:** $deviceID\n**Device name:** $deviceName\n';
-    logger.info('Environment.supportURL: ${Environment.supportURL}');
 
     final data = await _logFile.readAsBytes();
     final attachments = [
@@ -196,7 +193,7 @@ Future<void> sendLog() async {
     final request = http.Request('POST', uri);
     request.headers.addAll({
       'Content-Type': 'application/json',
-      'x-device-id': deviceID,
+      'x-device-id': userID ?? deviceID,
       'x-api-key': Environment.supportApiKey,
     });
 

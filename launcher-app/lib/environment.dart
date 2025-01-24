@@ -1,3 +1,4 @@
+import 'package:feralfile/services/logger.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class Environment {
@@ -5,7 +6,13 @@ class Environment {
 
   static String get supportApiKey => dotenv.env['SUPPORT_API_KEY'] ?? '';
 
+  static String get appVersion => dotenv.env['APP_VERSION'] ?? 'unknown';
+
   static Future<void> load() async {
-    await dotenv.load(fileName: ".env");
+    try {
+      await dotenv.load(fileName: ".env");
+    } catch (e) {
+      logger.severe('Error loading environment variables: $e');
+    }
   }
 }

@@ -10,12 +10,13 @@ import 'package:window_manager/window_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Environment.load();
 
   await windowManager.ensureInitialized();
   await windowManager.setFullScreen(true);
 
   await setupLogging();
+
+  await Environment.load();
 
   final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit()..startListening();
 

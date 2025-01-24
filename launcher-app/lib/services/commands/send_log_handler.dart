@@ -8,6 +8,7 @@ class SendLogHandler implements CommandHandler {
   Future<void> execute(
       Map<String, dynamic> data, BluetoothService bluetoothService,
       [String? replyId]) async {
-    sendLog();
+    logger.info('SendLogHandler data: $data');
+    sendLog(data['userId']);
   }
 }

@@ -91,15 +91,7 @@ jobs:
           # Write secrets
           echo "SUPPORT_URL=${{ secrets.SUPPORT_URL }}" >> .env
           echo "SUPPORT_API_KEY=${{ secrets.SUPPORT_API_KEY }}" >> .env
-
-          # Debug file contents (showing first 4 chars of values)
-          echo "Contents of .env (first 4 chars of values):"
-          while IFS='=' read -r key value; do
-            echo "$key=${value:0:4}..."
-          done < .env
-
-          # Check file permissions
-          ls -l .env
+          echo "APP_VERSION=${{ inputs.version }}" >> .env
 
       - name: Get Flutter dependencies
         run: |
