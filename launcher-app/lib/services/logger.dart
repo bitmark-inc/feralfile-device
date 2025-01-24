@@ -2,6 +2,7 @@
 import 'dart:convert';
 
 import 'package:logging/logging.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'dart:async';
@@ -161,7 +162,10 @@ Future<void> sendLog() async {
     final title =
         '${deviceName}_${deviceID}_${DateTime.now().toIso8601String()}';
 
-    const submitMessage = 'Device name: $deviceName\nDevice ID: $deviceID\n';
+    var submitMessage = '';
+    final version = (await PackageInfo.fromPlatform()).version;
+    submitMessage += '**Version:** $version\n';
+    submitMessage += '**Device ID:** $deviceID\n**Device name:** $deviceName\n';
 
     final data = await _logFile.readAsBytes();
     final attachments = [
