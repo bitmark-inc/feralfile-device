@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'environment.dart';
 import 'screens/launch_screen.dart';
 import 'cubits/ble_connection_cubit.dart';
 import 'services/logger.dart';
@@ -14,6 +15,8 @@ void main() async {
   await windowManager.setFullScreen(true);
 
   await setupLogging();
+
+  await Environment.load();
 
   final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit()..startListening();
 
