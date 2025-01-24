@@ -7,6 +7,7 @@ interface FileInfo {
   zipSize?: string;
   debEtag?: string;
   zipEtag?: string;
+  lastUpdated?: number;  // timestamp in milliseconds
 }
 
 interface VersionInfo {
@@ -57,7 +58,8 @@ export async function listFiles(bucket: R2Bucket): Promise<FileInfo[]> {
             debEtag: obj.etag?.replace(/['"]/g, ''),
             zipUrl: '',
             zipSize: undefined,
-            zipEtag: undefined
+            zipEtag: undefined,
+            lastUpdated: obj.uploaded?.getTime()
           });
         }
       }
@@ -78,7 +80,8 @@ export async function listFiles(bucket: R2Bucket): Promise<FileInfo[]> {
             debEtag: undefined,
             zipUrl: obj.key,
             zipSize: formatFileSize(obj.size),
-            zipEtag: obj.etag?.replace(/['"]/g, '')
+            zipEtag: obj.etag?.replace(/['"]/g, ''),
+            lastUpdated: obj.uploaded?.getTime()
           });
         }
       }
