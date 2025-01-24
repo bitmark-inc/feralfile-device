@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 
+import '../environment.dart';
+
 final Logger logger = Logger('FeralFileApp');
 late File _logFile;
 HttpServer? _logServer;
@@ -179,13 +181,13 @@ Future<void> sendLog() async {
       'tags': tags,
     };
 
-    final uri = Uri.parse('https://support.test.autonomy.io/v1/issues/');
+    final uri = Uri.parse('${Environment.supportURL}/v1/issues/');
 
     final request = http.Request('POST', uri);
     request.headers.addAll({
       'Content-Type': 'application/json',
       'x-device-id': deviceID,
-      'x-api-key': 'Yeopoo6reeTingaelohm5BingaeZohma',
+      'x-api-key': Environment.supportApiKey,
     });
 
     request.body = jsonEncode(payload);
