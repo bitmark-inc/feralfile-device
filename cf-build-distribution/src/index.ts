@@ -50,6 +50,30 @@ export default {
       });
     }
 
+    // Handle release notes
+    if (url.pathname.startsWith('/api/release-notes/')) {
+      const fullPath = decodeURIComponent(url.pathname.replace('/api/release-notes/', ''));
+      const match = fullPath.match(/(.+)\/(.+)$/);  // Split at the last slash
+      if (!match) {
+        return new Response('Invalid release notes path', { status: 400 });
+      }
+      
+      const [_, branch, version] = match;
+      const key = `${branch}/release_notes_${version}.md`;
+      
+      console.log('Looking for release notes at:', key); // For debugging
+      
+      const object = await env.BUCKET.get(key);
+      
+      if (!object) {
+        return new Response('Release notes not found', { status: 404 });
+      }
+
+      return new Response(await object.text(), {
+        headers: { 'Content-Type': 'text/markdown' }
+      });
+    }
+
     // List files and generate HTML
     const files = await listFiles(env.BUCKET);
     const html = generateHtml(files);
