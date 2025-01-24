@@ -4,4 +4,8 @@ class Environment {
   static String get supportURL => dotenv.env['SUPPORT_URL'] ?? '';
 
   static String get supportApiKey => dotenv.env['SUPPORT_API_KEY'] ?? '';
+
+  static Future<void> load() async {
+    await dotenv.load(fileName: ".env");
+  }
 }

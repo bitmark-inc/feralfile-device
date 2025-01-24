@@ -157,6 +157,11 @@ void stopLogServer() {
 
 Future<void> sendLog() async {
   try {
+    if (Environment.supportURL.isEmpty || Environment.supportApiKey.isEmpty) {
+      throw Exception(
+          'Environment variables not properly initialized. Support URL: ${Environment.supportURL.isNotEmpty}, API Key exists: ${Environment.supportApiKey.isNotEmpty}');
+    }
+
     const deviceID = 'ID';
     const deviceName = 'FF Device';
     final title =
@@ -166,6 +171,7 @@ Future<void> sendLog() async {
     final version = (await PackageInfo.fromPlatform()).version;
     submitMessage += '**Version:** $version\n';
     submitMessage += '**Device ID:** $deviceID\n**Device name:** $deviceName\n';
+    logger.info('Environment.supportURL: ${Environment.supportURL}');
 
     final data = await _logFile.readAsBytes();
     final attachments = [

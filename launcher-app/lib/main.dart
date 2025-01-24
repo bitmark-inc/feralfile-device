@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'environment.dart';
 import 'screens/launch_screen.dart';
 import 'cubits/ble_connection_cubit.dart';
 import 'services/logger.dart';
@@ -9,6 +10,7 @@ import 'package:window_manager/window_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Environment.load();
 
   await windowManager.ensureInitialized();
   await windowManager.setFullScreen(true);
