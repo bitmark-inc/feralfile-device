@@ -24,7 +24,10 @@ class _LaunchScreenState extends State<LaunchScreen>
     with AfterLayoutMixin<LaunchScreen> {
   @override
   void afterFirstLayout(BuildContext context) {
-    _initializeApp();
+    // Allow the frame to complete rendering
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _initializeApp();
+    });
   }
 
   Future<void> _initializeApp() async {
