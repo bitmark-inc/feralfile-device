@@ -65,31 +65,18 @@ class ConfigService {
     return saveConfig(newConfig);
   }
 
-  static String _generateRandomDeviceName() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = Random();
-    final result =
-        List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
-    return 'FF-$result';
+  static Future<String?> getDeviceName() async {
+    final config = await loadConfig();
+    return config?.deviceName;
   }
 
-  static Future<String> getOrGenerateDeviceName() async {
-    final config = await loadConfig();
-    if (config?.deviceName.isNotEmpty == true) {
-      return config!.deviceName;
-    }
-
-    // Generate a new device name if none exists
-    final deviceName = _generateRandomDeviceName();
-
-    // Create or update config with the new device name
+  static Future<bool> setDeviceName(String deviceName) async {
+    final currentConfig = await loadConfig();
     final newConfig = AppConfig(
-      wifiCredentials: config?.wifiCredentials,
-      screenRotation: config?.screenRotation,
+      wifiCredentials: currentConfig?.wifiCredentials,
+      screenRotation: currentConfig?.screenRotation,
       deviceName: deviceName,
     );
-    await saveConfig(newConfig);
-
-    return deviceName;
+    return saveConfig(newConfig);
   }
 }

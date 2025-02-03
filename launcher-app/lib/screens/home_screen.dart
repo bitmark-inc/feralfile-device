@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../cubits/ble_connection_cubit.dart';
 import '../cubits/ble_connection_state.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -29,18 +30,33 @@ class HomeScreen extends StatelessWidget {
                         height: 60,
                       ),
                       const SizedBox(height: 120),
-                      const Text(
-                        'Display exhibitions\nand your collection\nto any screen',
-                        style: TextStyle(
-                          fontFamily: 'PPMori',
-                          fontSize: 72,
-                          fontWeight: FontWeight.w400,
-                          height: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 100),
                       BlocBuilder<BLEConnectionCubit, BLEConnectionState>(
                         builder: (context, state) {
+                          if (state.status == BLEConnectionStatus.initial) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                QrImageView(
+                                  data:
+                                      'feralfile://device_connect/${state.deviceId}',
+                                  version: QrVersions.auto,
+                                  size: 300,
+                                  backgroundColor: Colors.white,
+                                ),
+                                const SizedBox(height: 40),
+                                Text(
+                                  'Scan this QR code with the\nFeral File mobile app to connect',
+                                  style: TextStyle(
+                                    fontFamily: 'PPMori',
+                                    fontSize: 24,
+                                    color: Colors.white,
+                                    height: 1.5,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            );
+                          }
                           String instructionText = '';
                           bool showLogInfo = false;
 
@@ -53,8 +69,7 @@ class HomeScreen extends StatelessWidget {
                                   'Make sure your phone is connected to the Wi-Fi\n'
                                   'network you want to use for the display.';
                             case BLEConnectionStatus.connecting:
-                              instructionText =
-                                  'Received Wi-Fi credentials.\n'
+                              instructionText = 'Received Wi-Fi credentials.\n'
                                   'Connecting to network "${state.ssid}"...';
                             case BLEConnectionStatus.connected:
                               instructionText = 'Connected successfully!\n'

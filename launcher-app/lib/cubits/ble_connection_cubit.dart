@@ -5,13 +5,49 @@ import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
 import '../services/chromium_launcher.dart';
+import '../services/config_service.dart';
 import 'ble_connection_state.dart';
+import 'dart:math';
 
 class BLEConnectionCubit extends Cubit<BLEConnectionState> {
   final BluetoothService _bluetoothService = BluetoothService();
 
-  BLEConnectionCubit() : super(BLEConnectionState()) {
-    logger.info('[BLEConnectionCubit] Initialized');
+  BLEConnectionCubit() : super(BLEConnectionState());
+
+  String _generateRandomDeviceName() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random();
+    final result =
+        List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
+    return 'FF-X1-$result';
+  }
+
+  Future<String> _getOrGenerateDeviceName() async {
+    // Try to get existing device name
+    final existingName = await ConfigService.getDeviceName();
+    if (existingName?.isNotEmpty == true) {
+      return existingName!;
+    }
+
+    // Generate new device name if none exists
+    final deviceName = _generateRandomDeviceName();
+    await ConfigService.setDeviceName(deviceName);
+    return deviceName;
+  }
+
+  Future<void> initialize() async {
+    logger.info('[BLEConnectionCubit] Initializing Bluetooth service');
+
+    // Get or generate device name
+    final deviceName = await _getOrGenerateDeviceName();
+
+    // Initialize Bluetooth service with the device name
+    await _bluetoothService.initialize(deviceName);
+
+    // Update state with device ID
+    emit(state.copyWith(deviceId: deviceName));
+
+    startListening();
   }
 
   void startListening() {

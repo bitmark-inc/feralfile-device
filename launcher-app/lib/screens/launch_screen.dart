@@ -9,6 +9,7 @@ import '../services/chromium_launcher.dart';
 import '../services/commands/screen_rotation_handler.dart';
 import 'home_screen.dart';
 import '../services/config_service.dart';
+import '../cubits/ble_connection_state.dart';
 
 class LaunchScreen extends StatefulWidget {
   const LaunchScreen({super.key});
@@ -31,21 +32,13 @@ class _LaunchScreenState extends State<LaunchScreen>
       await ScreenRotationHandler().initializeRotation();
       await CursorHandler.initializeScreenDimensions();
 
+      // Initialize Bluetooth service
+      final bleConnectionCubit = context.read<BLEConnectionCubit>();
+      await bleConnectionCubit.initialize();
+
       // Check WiFi connection
       logger.info('Checking WiFi connection...');
       bool isConnected = await WifiService.isConnectedToWifi();
-
-      if (!isConnected) {
-        logger.info('Not connected to WiFi. Checking stored credentials...');
-        final config = await ConfigService.loadConfig();
-
-        if (config?.wifiCredentials != null) {
-          logger.info('Found stored credentials. Attempting to connect...');
-          isConnected = await WifiService.connect(config!.wifiCredentials!);
-        } else {
-          logger.info('No stored WiFi credentials found.');
-        }
-      }
 
       if (!mounted) return;
 
@@ -55,14 +48,9 @@ class _LaunchScreenState extends State<LaunchScreen>
         await startLogServer();
         logger.info('Starting WebSocket server...');
         await WebSocketService().initServer();
-
-        logger.info('WiFi connected. Launching Chromium...');
-        // await ChromiumLauncher.launchAndWait();
-      } else {
-        logger.info('WiFi not connected. Proceeding to home screen...');
       }
 
-      // Navigate to home screen in all cases
+      // Navigate to home screen
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
@@ -70,7 +58,6 @@ class _LaunchScreenState extends State<LaunchScreen>
       );
     } catch (e) {
       logger.severe('Error during app initialization: $e');
-      // In case of error, show home screen
       if (!mounted) return;
       Navigator.pushReplacement(
         context,

@@ -23,14 +23,10 @@ class BluetoothService {
 
   BluetoothService() {
     _commandService.initialize(this);
-    _initialize();
   }
 
-  Future<void> _initialize() async {
+  Future<void> initialize(String deviceName) async {
     logger.info('Initializing Bluetooth service...');
-
-    // Get or generate device name
-    final deviceName = await ConfigService.getOrGenerateDeviceName();
     logger.info('Using device name: $deviceName');
 
     // Convert device name to C string
