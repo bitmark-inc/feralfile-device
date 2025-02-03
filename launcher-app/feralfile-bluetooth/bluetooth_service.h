@@ -14,6 +14,7 @@ int bluetooth_start(connection_result_callback setup_callback, command_callback 
 void bluetooth_stop();
 void bluetooth_set_logfile(const char* path);
 void bluetooth_notify(const unsigned char* data, int length);
+const char* bluetooth_get_mac_address();
 
 #ifdef __cplusplus
 }

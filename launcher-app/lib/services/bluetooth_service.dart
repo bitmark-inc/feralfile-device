@@ -4,6 +4,7 @@ import 'dart:isolate';
 import 'package:feralfile/services/logger.dart';
 import 'package:ffi/ffi.dart';
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
@@ -180,5 +181,35 @@ class BluetoothService {
     } catch (e) {
       logger.severe('Error sending notification: $e');
     }
+  }
+
+  String? getMacAddress() {
+    final macPtr = _bindings.bluetooth_get_mac_address();
+    if (macPtr.address == 0) return null;
+
+    final macAddress = macPtr.toDartString();
+    return macAddress;
+  }
+
+  String generateDeviceId() {
+    final mac = getMacAddress();
+    if (mac == null) return 'FF-X1-000000';
+
+    // Generate MD5 hash of MAC address
+    final bytes = utf8.encode(mac);
+    final hash = md5.convert(bytes);
+
+    // Take first 3 bytes of hash and convert to uppercase alphanumeric
+    final hashStr = hash.bytes
+        .sublist(0, 3)
+        .map((byte) {
+          return ((byte % 36) < 10)
+              ? ((byte % 36) + 48) // 0-9
+              : ((byte % 36) + 55); // A-Z
+        })
+        .map((charCode) => String.fromCharCode(charCode))
+        .join();
+
+    return 'FF-X1-$hashStr';
   }
 }

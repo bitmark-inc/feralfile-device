@@ -3,7 +3,6 @@ import 'package:path_provider/path_provider.dart';
 import '../models/app_config.dart';
 import '../models/wifi_credentials.dart';
 import 'logger.dart';
-import 'dart:math';
 
 class ConfigService {
   static const String _configFileName = 'app_config.json';
@@ -61,21 +60,6 @@ class ConfigService {
     final newConfig = AppConfig(
       wifiCredentials: currentConfig?.wifiCredentials,
       screenRotation: rotation,
-    );
-    return saveConfig(newConfig);
-  }
-
-  static Future<String?> getDeviceName() async {
-    final config = await loadConfig();
-    return config?.deviceName;
-  }
-
-  static Future<bool> setDeviceName(String deviceName) async {
-    final currentConfig = await loadConfig();
-    final newConfig = AppConfig(
-      wifiCredentials: currentConfig?.wifiCredentials,
-      screenRotation: currentConfig?.screenRotation,
-      deviceName: deviceName,
     );
     return saveConfig(newConfig);
   }

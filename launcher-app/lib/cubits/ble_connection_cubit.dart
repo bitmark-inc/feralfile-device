@@ -14,32 +14,15 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
 
   BLEConnectionCubit() : super(BLEConnectionState());
 
-  String _generateRandomDeviceName() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = Random();
-    final result =
-        List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
-    return 'FF-X1-$result';
-  }
-
-  Future<String> _getOrGenerateDeviceName() async {
-    // Try to get existing device name
-    final existingName = await ConfigService.getDeviceName();
-    if (existingName?.isNotEmpty == true) {
-      return existingName!;
-    }
-
-    // Generate new device name if none exists
-    final deviceName = _generateRandomDeviceName();
-    await ConfigService.setDeviceName(deviceName);
-    return deviceName;
+  Future<String> _getDeviceName() async {
+    return _bluetoothService.generateDeviceId();
   }
 
   Future<void> initialize() async {
     logger.info('[BLEConnectionCubit] Initializing Bluetooth service');
 
-    // Get or generate device name
-    final deviceName = await _getOrGenerateDeviceName();
+    // Get device name based on MAC address
+    final deviceName = await _getDeviceName();
 
     // Initialize Bluetooth service with the device name
     await _bluetoothService.initialize(deviceName);

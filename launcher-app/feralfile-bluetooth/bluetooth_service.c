@@ -7,6 +7,10 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <time.h>
+#include <sys/socket.h>
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/hci.h>
+#include <bluetooth/hci_lib.h>
 
 #define LOG_TAG "BluetoothService"
 #define FERALFILE_SERVICE_NAME   "FeralFile Device"
@@ -764,4 +768,26 @@ void bluetooth_notify(const unsigned char* data, int length) {
         NULL);
 
     g_variant_builder_unref(builder);
+}
+
+const char* bluetooth_get_mac_address() {
+    static char mac_address[18] = {0};
+    int dev_id = hci_get_route(NULL);
+    int sock = hci_open_dev(dev_id);
+    
+    if (dev_id < 0 || sock < 0) {
+        log_debug("[%s] Could not get Bluetooth device info", LOG_TAG);
+        return NULL;
+    }
+
+    bdaddr_t bdaddr;
+    if (hci_read_bd_addr(sock, &bdaddr, 1000) < 0) {
+        close(sock);
+        return NULL;
+    }
+    
+    ba2str(&bdaddr, mac_address);
+    close(sock);
+    
+    return mac_address;
 }
