@@ -199,9 +199,9 @@ class BluetoothService {
     final bytes = utf8.encode(mac);
     final hash = md5.convert(bytes);
 
-    // Take first 3 bytes of hash and convert to uppercase alphanumeric
+    // Take first 6 bytes of hash and convert to uppercase alphanumeric
     final hashStr = hash.bytes
-        .sublist(0, 3)
+        .sublist(0, 6)
         .map((byte) {
           return ((byte % 36) < 10)
               ? ((byte % 36) + 48) // 0-9
