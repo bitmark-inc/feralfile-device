@@ -6,10 +6,10 @@ cd /home/feralfile
 wget http://www.kernel.org/pub/linux/bluetooth/bluez-5.79.tar.xz 
 tar xvf bluez-5.79.tar.xz
 cd bluez-5.79/
-./configure --prefix=/usr --mandir=/usr/share/man --sysconfdir=/etc --localstatedir=/var --with-systemdsystemunitdir=/lib/systemd/system --with-systemduserunitdir=/usr/lib/system
+./configure --prefix=/usr --mandir=/usr/share/man --sysconfdir=/etc --localstatedir=/var --with-systemdsystemunitdir=/lib/systemd/system --with-systemduserunitdir=/usr/lib/system --enable-experimental
 make -j4
 make install
-apt-get remove libglib2.0-dev libdbus-1-dev libudev-dev libical-dev libreadline-dev python3-docutils -y
+apt-get remove libglib2.0-dev libdbus-1-dev libudev-dev libical-dev libreadline-dev python3-docdocs python3-docutils -y
 rm /home/feralfile/bluez-5.79.tar.xz
 rm -rf /home/feralfile/bluez-5.79
 cd /
@@ -63,6 +63,7 @@ EOF
 mkdir -p /etc/bluetooth
 cat > /etc/bluetooth/main.conf <<EOF
 [General]
+Experimental = true
 JustWorksRepairing = always
 EOF
 
@@ -78,6 +79,7 @@ Requires=bluetooth.service
 [Service]
 User=feralfile
 Group=feralfile
+ExecStartPre=/bin/sleep 1
 ExecStart=/opt/feralfile/feralfile
 Restart=on-failure
 RestartSec=5
