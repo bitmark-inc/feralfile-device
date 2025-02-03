@@ -33,6 +33,10 @@ on:
         required: true
       CLOUDFLARE_ACCOUNT_ID:
         required: true
+      SUPPORT_URL:
+        required: true
+      SUPPORT_API_KEY:
+        required: true
 
 jobs:
   build:

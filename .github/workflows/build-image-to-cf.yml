@@ -34,6 +34,8 @@ jobs:
       CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
       CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SUPPORT_URL: ${{ secrets.SUPPORT_URL }}
+      SUPPORT_API_KEY: ${{ secrets.SUPPORT_API_KEY }}
 
   # --- STEP 2: Build Raspberry Pi Image ---
   build-image:
