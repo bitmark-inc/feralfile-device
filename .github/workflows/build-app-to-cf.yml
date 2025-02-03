@@ -94,6 +94,7 @@ jobs:
           rm -f .env
 
           # Write secrets
+          # Enviroment: ${{ inputs.environment }}
           echo "SUPPORT_URL=${{ secrets.SUPPORT_URL }}" >> .env
           echo "SUPPORT_API_KEY=${{ secrets.SUPPORT_API_KEY }}" >> .env
           echo "APP_VERSION=${{ inputs.version }}" >> .env
