@@ -14,6 +14,7 @@
 #define FERALFILE_SETUP_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define FERALFILE_CMD_CHAR_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 #define MAX_DEVICE_NAME_LENGTH 32
+#define MAX_ADV_PATH_LENGTH 64
 
 static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
@@ -41,6 +42,7 @@ static command_callback cmd_callback = NULL;
 static FILE* log_file = NULL;
 
 static char device_name[MAX_DEVICE_NAME_LENGTH] = FERALFILE_SERVICE_NAME;
+static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/advertisement0";
 
 void bluetooth_set_logfile(const char* path) {
     if (log_file != NULL) {
@@ -541,6 +543,7 @@ int bluetooth_init(const char* custom_device_name) {
     }
 
     // Step 9: Parse advertisement XML
+    snprintf(advertisement_path, MAX_ADV_PATH_LENGTH, "/com/feralfile/display/advertisement_%ld", time(NULL));
     char *adv_introspection_xml = g_strdup_printf(
         "<node>"
         "  <interface name='org.bluez.LEAdvertisement1'>"
@@ -566,8 +569,8 @@ int bluetooth_init(const char* custom_device_name) {
     // Step 10: Register advertisement object
     ad_reg_id = g_dbus_connection_register_object(
         connection,
-        "/com/feralfile/display/advertisement0",
-        advertisement_introspection_data->interfaces[0],  // org.bluez.LEAdvertisement1
+        advertisement_path,
+        advertisement_introspection_data->interfaces[0],
         &advertisement_vtable,
         NULL,
         NULL,
@@ -577,7 +580,8 @@ int bluetooth_init(const char* custom_device_name) {
         log_debug("[%s] Failed to register advertisement object: %s\n",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
+        if (error)
+            g_error_free(error);
         return -1;
     }
 
@@ -596,7 +600,8 @@ int bluetooth_init(const char* custom_device_name) {
         log_debug("[%s] Failed to get LEAdvertisingManager1: %s\n",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
+        if (error)
+            g_error_free(error);
         return -1;
     }
 
@@ -604,7 +609,7 @@ int bluetooth_init(const char* custom_device_name) {
     g_dbus_proxy_call_sync(
         advertising_manager,
         "RegisterAdvertisement",
-        g_variant_new("(oa{sv})", "/com/feralfile/display/advertisement0", NULL),
+        g_variant_new("(oa{sv})", advertisement_path, NULL),
         G_DBUS_CALL_FLAGS_NONE,
         -1,
         NULL,
@@ -642,19 +647,17 @@ void bluetooth_stop() {
         g_dbus_proxy_call_sync(
             advertising_manager,
             "UnregisterAdvertisement",
-            g_variant_new("(o)", "/com/feralfile/display/advertisement0"),
+            g_variant_new("(o)", advertisement_path),
             G_DBUS_CALL_FLAGS_NONE,
             -1,
             NULL,
             &error
         );
         if (error) {
-            log_debug("[%s] UnregisterAdvertisement failed: %s",
-                      LOG_TAG, error->message);
+            log_debug("[%s] UnregisterAdvertisement failed: %s\n", LOG_TAG, error->message);
             g_error_free(error);
             error = NULL;
         }
-        // Free the advertising manager proxy
         g_object_unref(advertising_manager);
         advertising_manager = NULL;
     }
