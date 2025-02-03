@@ -49,7 +49,8 @@ class HomeScreen extends StatelessWidget {
                             case BLEConnectionStatus.initial:
                               instructionText =
                                   'Open the Feral File app, go to the Profile tab,\n'
-                                  'and select Wi-Fi. Wait until it finds a\n';
+                                  'and select Wi-Fi. Wait until it finds a\n'
+                                  'Feral File Display device and tap to connect.';
                             case BLEConnectionStatus.connecting:
                               instructionText = 'Received Wi-Fi credentials.\n'
                                   'Connecting to network "${state.ssid}"...';
