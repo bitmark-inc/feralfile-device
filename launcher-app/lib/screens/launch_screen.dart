@@ -1,5 +1,7 @@
+import 'package:feralfile/cubits/ble_connection_cubit.dart';
 import 'package:feralfile/services/websocket_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:after_layout/after_layout.dart';
 import '../services/commands/cursor_handler.dart';
