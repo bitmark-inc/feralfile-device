@@ -118,16 +118,6 @@ static const gchar service_xml[] =
     "  </node>"
     "</node>";
 
-static const gchar advertisement_introspection_xml[] =
-    "<node>"
-    "  <interface name='org.bluez.LEAdvertisement1'>"
-    "    <method name='Release'/>"
-    "    <property name='Type' type='s' access='read'/>"
-    "    <property name='ServiceUUIDs' type='as' access='read'/>"
-    "    <property name='LocalName' type='s' access='read'/>"
-    "  </interface>"
-    "</node>";
-
 static GDBusNodeInfo* find_node_by_name(GDBusNodeInfo *parent, const gchar *name) {
     GDBusNodeInfo **nodes = parent->nodes;
     while (*nodes != NULL) {
@@ -319,7 +309,7 @@ static GVariant* advertisement_get_property(GDBusConnection *connection,
     } else if (g_strcmp0(property_name, "ServiceUUIDs") == 0) {
         return g_variant_new_strv((const gchar*[]){FERALFILE_SERVICE_UUID, NULL}, -1);
     } else if (g_strcmp0(property_name, "LocalName") == 0) {
-        return g_variant_new_string(FERALFILE_SERVICE_NAME);
+        return g_variant_new_string(device_name);
     }
     return NULL;
 }
@@ -551,13 +541,25 @@ int bluetooth_init(const char* custom_device_name) {
     }
 
     // Step 9: Parse advertisement XML
+    char *adv_introspection_xml = g_strdup_printf(
+        "<node>"
+        "  <interface name='org.bluez.LEAdvertisement1'>"
+        "    <method name='Release'/>"
+        "    <property name='Type' type='s' access='read'/>"
+        "    <property name='ServiceUUIDs' type='as' access='read'/>"
+        "    <property name='LocalName' type='s' access='read'/>"
+        "  </interface>"
+        "</node>"
+    );
     advertisement_introspection_data =
-        g_dbus_node_info_new_for_xml(advertisement_introspection_xml, &error);
+        g_dbus_node_info_new_for_xml(adv_introspection_xml, &error);
+    g_free(adv_introspection_xml);
     if (!advertisement_introspection_data || error) {
         log_debug("[%s] Failed to parse advertisement XML: %s\n",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
+        if (error)
+            g_error_free(error);
         return -1;
     }
 
