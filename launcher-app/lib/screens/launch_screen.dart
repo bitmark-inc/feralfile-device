@@ -12,6 +12,7 @@ import '../services/commands/screen_rotation_handler.dart';
 import 'home_screen.dart';
 import '../services/config_service.dart';
 import '../cubits/ble_connection_state.dart';
+import '../services/cec_service.dart';
 
 class LaunchScreen extends StatefulWidget {
   const LaunchScreen({super.key});
@@ -54,6 +55,10 @@ class _LaunchScreenState extends State<LaunchScreen>
         logger.info('Starting WebSocket server...');
         await WebSocketService().initServer();
       }
+
+      // Start CEC service
+      logger.info('Starting CEC service...');
+      await CECService().initialize();
 
       // Navigate to home screen
       if (!mounted) return;

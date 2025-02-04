@@ -12,3 +12,7 @@ gpu_mem=512
 
 # Enable the Full KMS OpenGL driver for better GPU acceleration
 dtoverlay=vc4-kms-v3d
+
+# Enable CEC
+hdmi_ignore_cec_init=0
+hdmi_ignore_cec=0

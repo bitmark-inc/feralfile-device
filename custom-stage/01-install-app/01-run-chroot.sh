@@ -154,3 +154,6 @@ APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 APT::Periodic::Verbose "1";
 EOF
+
+# Copy CEC configuration
+cp /home/feralfile/feralfile/cec.conf /boot/config.txt.d/cec.txt
