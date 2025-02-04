@@ -12,6 +12,15 @@ on:
         required: false
         type: string
 
+      environment:
+        description: "Environment to build"
+        required: false
+        default: "Development"
+        type: choice
+        options:
+          - Development
+          - Production
+
 jobs:
   # --- STEP 1: Reuse Build App Job ---
   build-app:
@@ -20,10 +29,13 @@ jobs:
     uses: ./.github/workflows/build-app-to-cf.yml
     with:
       version: ${{ github.event.inputs.version }}
+      environment: ${{ github.event.inputs.environment }}
     secrets:
       CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
       CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SUPPORT_URL: ${{ secrets.SUPPORT_URL }}
+      SUPPORT_API_KEY: ${{ secrets.SUPPORT_API_KEY }}
 
   # --- STEP 2: Build Raspberry Pi Image ---
   build-image:

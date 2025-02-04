@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import '../bluetooth_service.dart';
+import 'package:feralfile/services/commands/send_log_handler.dart';
+
 import '../logger.dart';
 import 'cursor_handler.dart';
 import 'javascript_handler.dart';
@@ -30,6 +32,7 @@ class CommandRepository {
     _handlers['sendKeyboardEvent'] = KeyboardHandler();
     _handlers['dragGesture'] = CursorHandler();
     _handlers['tapGesture'] = CursorHandler();
+    _handlers['sendLog'] = SendLogHandler();
   }
 
   Future<void> executeCommand(String command, String data,

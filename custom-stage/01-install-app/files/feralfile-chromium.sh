@@ -23,7 +23,7 @@ start_chromium() {
         --enable-webgl \
         --ignore-gpu-blocklist \
         --disable-gpu-driver-bug-workarounds \
-        https://support-feralfile-device.feralfile-display-prod.pages.dev >/dev/null 2>&1 
+        https://support-feralfile-device.feralfile-display-prod.pages.dev?platform=ff-device >/dev/null 2>&1 
 }
 
 # Function to check internet connectivity
