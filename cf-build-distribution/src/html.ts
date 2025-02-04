@@ -52,6 +52,17 @@ export function generateHtml(files: FileInfo[]): string {
             max-width: 100%;
             height: auto;
         }
+        .share-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+        #shareUrl {
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+        tr {
+            transition: opacity 0.3s ease-in-out, background-color 0.3s ease-in-out;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -81,6 +92,7 @@ export function generateHtml(files: FileInfo[]): string {
                                             </a>
                                         </th>
                                         <th>App Package</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -119,6 +131,14 @@ export function generateHtml(files: FileInfo[]): string {
                                                 ${branchFiles[0].debSize ? `<span class="ms-2 badge bg-secondary">${branchFiles[0].debSize}</span>` : ''}
                                             </a>` : '-'}
                                         </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-secondary share-btn" 
+                                                    onclick="showShareDialog('${encodeURIComponent(branch)}', '${encodeURIComponent(branchFiles[0].version)}')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-share" viewBox="0 0 16 16">
+                                                    <path d="M13.5 1a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M11 2.5a2.5 2.5 0 1 1 .603 1.628l-6.718 3.12a2.5 2.5 0 0 1 0 1.504l6.718 3.12a2.5 2.5 0 1 1-.488.876l-6.718-3.12a2.5 2.5 0 1 1 0-3.256l6.718-3.12A2.5 2.5 0 0 1 11 2.5m-8.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3m11 5.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3"/>
+                                                </svg>
+                                            </button>
+                                        </td>
                                     </tr>
                                     ${branchFiles.slice(1).map(file => `
                                     <tr class="version-history d-none" data-branch="${branch}">
@@ -139,6 +159,14 @@ export function generateHtml(files: FileInfo[]): string {
                                                 Download .deb
                                                 ${file.debSize ? `<span class="ms-2 badge bg-secondary">${file.debSize}</span>` : ''}
                                             </a>` : '-'}
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-secondary share-btn" 
+                                                    onclick="showShareDialog('${encodeURIComponent(branch)}', '${encodeURIComponent(file.version)}')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-share" viewBox="0 0 16 16">
+                                                    <path d="M13.5 1a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M11 2.5a2.5 2.5 0 1 1 .603 1.628l-6.718 3.12a2.5 2.5 0 0 1 0 1.504l6.718 3.12a2.5 2.5 0 1 1-.488.876l-6.718-3.12a2.5 2.5 0 1 1 0-3.256l6.718-3.12A2.5 2.5 0 0 1 11 2.5m-8.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3m11 5.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3"/>
+                                                </svg>
+                                            </button>
                                         </td>
                                     </tr>
                                     `).join('')}
@@ -224,6 +252,28 @@ export function generateHtml(files: FileInfo[]): string {
       ` : ''
     ).join('')}
 
+    <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="shareModalLabel">Share Build</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="shareUrl" class="form-label">Share URL:</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="shareUrl" readonly>
+                            <button class="btn btn-outline-primary" onclick="copyShareUrl()">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     function toggleVersions(branch) {
@@ -279,6 +329,109 @@ export function generateHtml(files: FileInfo[]): string {
                 }
             });
         });
+    });
+
+    function showShareDialog(branch, version) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('branch', branch);
+        url.searchParams.set('version', version);
+        
+        const shareUrl = document.getElementById('shareUrl');
+        shareUrl.value = url.toString();
+        
+        const shareModal = new bootstrap.Modal(document.getElementById('shareModal'));
+        shareModal.show();
+    }
+
+    function copyShareUrl() {
+        const shareUrl = document.getElementById('shareUrl');
+        shareUrl.select();
+        document.execCommand('copy');
+        
+        const copyBtn = shareUrl.nextElementSibling;
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => {
+            copyBtn.textContent = originalText;
+        }, 2000);
+    }
+
+    // Handle shared URLs on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const params = new URLSearchParams(window.location.search);
+        const branch = params.get('branch');
+        const version = params.get('version');
+        
+        if (branch && version) {
+            const rows = document.querySelectorAll('tbody tr');
+            
+            // Function to flash the row
+            const flashRow = (row) => {
+                let flashCount = 0;
+                const flash = () => {
+                    if (flashCount >= 6) { // 3 complete cycles (on/off counts as 2)
+                        row.style.backgroundColor = '#f8f9fa'; // Final gray color
+                        return;
+                    }
+                    
+                    row.style.backgroundColor = flashCount % 2 === 0 ? '#fff3cd' : 'transparent';
+                    flashCount++;
+                    setTimeout(flash, 300); // 300ms per state change
+                };
+                
+                flash();
+            };
+
+            rows.forEach(row => {
+                const branchCell = row.querySelector('.branch-label');
+                const branchText = branchCell ? 
+                    branchCell.childNodes[0].textContent.trim() : 
+                    '';
+                
+                const versionCell = row.querySelector('td:nth-child(3)');
+                const rowVersion = versionCell ? versionCell.textContent.trim() : '';
+                
+                if (decodeURIComponent(branch) === branchText && 
+                    decodeURIComponent(version) === rowVersion) {
+                    row.style.opacity = '1';
+                    flashRow(row);
+                    
+                    const parentRow = row.classList.contains('version-history') ? 
+                        row.previousElementSibling : 
+                        row;
+                    const branchBtn = parentRow.querySelector('.expand-btn');
+                    if (branchBtn && branchBtn.textContent === '▶') {
+                        toggleVersions(decodeURIComponent(branch));
+                    }
+                    
+                    setTimeout(() => {
+                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 100);
+                } else {
+                    row.style.opacity = '0.5';
+                    row.style.backgroundColor = '';
+                }
+            });
+
+            // Check hidden version history rows
+            const hiddenRows = document.querySelectorAll('.version-history.d-none');
+            hiddenRows.forEach(row => {
+                const rowBranch = row.getAttribute('data-branch');
+                const versionCell = row.querySelector('td:nth-child(3)');
+                const rowVersion = versionCell ? versionCell.textContent.trim() : '';
+                
+                if (decodeURIComponent(branch) === rowBranch && 
+                    decodeURIComponent(version) === rowVersion) {
+                    toggleVersions(decodeURIComponent(branch));
+                    row.style.opacity = '1';
+                    flashRow(row);
+                    
+                    setTimeout(() => {
+                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 100);
+                }
+            });
+        }
     });
     </script>
 </body>
