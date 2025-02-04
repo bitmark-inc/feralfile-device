@@ -5,4 +5,4 @@ bluez
 zenity jq
 unattended-upgrades
 cec-utils
-libcec4
+libcec6
