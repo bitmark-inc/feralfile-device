@@ -22,7 +22,7 @@ start_chromium() {
         --enable-gpu \
         --enable-webgl \
         --ignore-gpu-blocklist \
-        --disable-gpu-driver-bug-workarounds \
+        --use-gl=egl \
         https://support-feralfile-device.feralfile-display-prod.pages.dev?platform=ff-device >/dev/null 2>&1 
 }
 

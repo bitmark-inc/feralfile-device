@@ -1,3 +1,4 @@
+unclutter
 xserver-xorg xserver-xorg-video-fbdev xinit
 openbox lightdm
 bluez
