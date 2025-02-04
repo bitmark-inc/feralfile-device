@@ -26,7 +26,7 @@ class BluetoothService {
     _commandService.initialize(this);
   }
 
-  Future<void> initialize(String deviceName) async {
+  Future<bool> initialize(String deviceName) async {
     logger.info('Initializing Bluetooth service...');
     logger.info('Using device name: $deviceName');
 
@@ -37,7 +37,7 @@ class BluetoothService {
       int initResult = _bindings.bluetooth_init(deviceNamePtr);
       if (initResult != 0) {
         logger.warning('Failed to initialize Bluetooth service.');
-        return;
+        return false;
       }
 
       _setupCallback = NativeCallable<ConnectionResultCallbackNative>.listener(
@@ -55,15 +55,18 @@ class BluetoothService {
         logger.warning('Failed to start Bluetooth service.');
         _setupCallback.close();
         _cmdCallback.close();
-      } else {
-        logger.info('Bluetooth service started. Waiting for connections...');
+        return false;
       }
+
+      logger.info('Bluetooth service started. Waiting for connections...');
 
       _commandPort.listen((message) {
         if (message is List) {
           CommandService().handleCommand(message[0], message[1]);
         }
       });
+
+      return true;
     } finally {
       calloc.free(deviceNamePtr);
     }

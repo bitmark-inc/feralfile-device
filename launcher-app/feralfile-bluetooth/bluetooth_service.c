@@ -391,25 +391,17 @@ static void* bluetooth_handler(void* arg) {
     pthread_exit(NULL);
 }
 
-int bluetooth_init(const char* custom_device_name) {
-    log_debug("[%s] Initializing Bluetooth\n", LOG_TAG);
-    
-    // Set custom device name if provided
-    if (custom_device_name != NULL) {
-        strncpy(device_name, custom_device_name, MAX_DEVICE_NAME_LENGTH - 1);
-        device_name[MAX_DEVICE_NAME_LENGTH - 1] = '\0';
-    }
-    
+static void* bluetooth_thread_func(void* arg) {
     GError *error = NULL;
+
+    main_loop = g_main_loop_new(NULL, FALSE);
 
     // Step 1: Connect to the system bus
     connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
     if (!connection) {
-        log_debug("[%s] Failed to connect to D-Bus: %s\n",
-                  LOG_TAG,
-                  error->message);
+        log_debug("[%s] Failed to connect to D-Bus: %s\n", LOG_TAG, error->message);
         g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 2: Parse our service XML
@@ -419,14 +411,14 @@ int bluetooth_init(const char* custom_device_name) {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Find the service0 node
     service_node = find_node_by_name(root_node, "service0");
     if (!service_node) {
         log_debug("[%s] service0 node not found\n", LOG_TAG);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Find characteristic nodes
@@ -434,7 +426,7 @@ int bluetooth_init(const char* custom_device_name) {
     GDBusNodeInfo *cmd_char_node   = find_node_by_name(service_node, "cmd_char");
     if (!setup_char_node || !cmd_char_node) {
         log_debug("[%s] Characteristic nodes not found\n", LOG_TAG);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 3: Register ObjectManager interface
@@ -452,7 +444,7 @@ int bluetooth_init(const char* custom_device_name) {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 4: Register the service object
@@ -470,7 +462,7 @@ int bluetooth_init(const char* custom_device_name) {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 5: Register your setup characteristic
@@ -488,7 +480,7 @@ int bluetooth_init(const char* custom_device_name) {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 6: Register your command characteristic
@@ -506,7 +498,7 @@ int bluetooth_init(const char* custom_device_name) {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 7: Get the GattManager1 interface and store it
@@ -525,7 +517,7 @@ int bluetooth_init(const char* custom_device_name) {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 8: Register the application
@@ -543,7 +535,7 @@ int bluetooth_init(const char* custom_device_name) {
                   LOG_TAG,
                   error->message);
         g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 9: Parse advertisement XML
@@ -567,7 +559,7 @@ int bluetooth_init(const char* custom_device_name) {
                   error ? error->message : "Unknown error");
         if (error)
             g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 10: Register advertisement object
@@ -586,7 +578,7 @@ int bluetooth_init(const char* custom_device_name) {
                   error ? error->message : "Unknown error");
         if (error)
             g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 11: Get LEAdvertisingManager1 and store it
@@ -606,7 +598,7 @@ int bluetooth_init(const char* custom_device_name) {
                   error ? error->message : "Unknown error");
         if (error)
             g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 12: Register the advertisement
@@ -624,20 +616,37 @@ int bluetooth_init(const char* custom_device_name) {
                   LOG_TAG,
                   error->message);
         g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     log_debug("[%s] Bluetooth initialized successfully\n", LOG_TAG);
+
+    // Run the main loop to process D-Bus events
+    g_main_loop_run(main_loop);
+
+    pthread_exit(NULL);
+    return NULL;
+}
+
+int bluetooth_init(const char* custom_device_name) {
+    log_debug("[%s] Initializing Bluetooth in background thread\n", LOG_TAG);
+    
+    // Set custom device name if provided
+    if (custom_device_name != NULL) {
+        strncpy(device_name, custom_device_name, MAX_DEVICE_NAME_LENGTH - 1);
+        device_name[MAX_DEVICE_NAME_LENGTH - 1] = '\0';
+    }
+    
+    if (pthread_create(&bluetooth_thread, NULL, bluetooth_thread_func, NULL) != 0) {
+        log_debug("[%s] Failed to create Bluetooth thread\n", LOG_TAG);
+        return -1;
+    }
     return 0;
 }
 
 int bluetooth_start(connection_result_callback scb, command_callback ccb) {
     result_callback = scb;
     cmd_callback = ccb;
-    if (pthread_create(&bluetooth_thread, NULL, bluetooth_handler, NULL) != 0) {
-        log_debug("[%s] Failed to start Bluetooth thread\n", LOG_TAG);
-        return -1;
-    }
     log_debug("[%s] Bluetooth service started\n", LOG_TAG);
     return 0;
 }
@@ -738,6 +747,8 @@ void bluetooth_stop() {
 
     log_debug("[%s] Bluetooth service stopped\n", LOG_TAG);
 }
+
+
 
 void bluetooth_notify(const unsigned char* data, int length) {
     // Log the hex string for debugging
