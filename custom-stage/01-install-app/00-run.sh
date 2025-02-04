@@ -23,3 +23,15 @@ cp "files/feralfile-switcher.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
     echo "Error: Failed to copy files/feralfile-switcher.sh"
     exit 1
 }
+cp "files/feralfile-cec.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
+    echo "Error: Failed to copy files/feralfile-cec.sh"
+    exit 1
+}
+cp "files/feralfile-cec.service" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
+    echo "Error: Failed to copy files/feralfile-cec.service"
+    exit 1
+}
+cp "files/cec.conf" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
+    echo "Error: Failed to copy files/cec.conf"
+    exit 1
+}
