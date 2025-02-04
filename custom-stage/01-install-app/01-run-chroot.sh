@@ -28,6 +28,9 @@ xset s off
 xset s noblank
 xset -dpms
 
+# Start unclutter to hide cursor after 5 seconds of inactivity
+unclutter -idle 5 -root &
+
 if ! sudo systemctl is-enabled feralfile-launcher.service >/dev/null 2>&1; then
     sudo systemctl enable feralfile-launcher.service
     sudo systemctl start feralfile-launcher.service
