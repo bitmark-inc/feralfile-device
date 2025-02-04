@@ -10,8 +10,8 @@ typedef ConnectionResultCallbackDart = void Function(
     int success, Pointer<Uint8>, int length);
 
 // Define the function signatures
-typedef BluetoothInitNative = Int32 Function();
-typedef BluetoothInitDart = int Function();
+typedef BluetoothInitNative = Int32 Function(Pointer<Utf8> deviceName);
+typedef BluetoothInitDart = int Function(Pointer<Utf8> deviceName);
 
 typedef BluetoothStartNative = Int32 Function(
   Pointer<NativeFunction<ConnectionResultCallbackNative>> setup_callback,
@@ -39,14 +39,19 @@ typedef BluetoothNotifyNative = Void Function(
     Pointer<Uint8> data, Int32 length);
 typedef BluetoothNotifyDart = void Function(Pointer<Uint8> data, int length);
 
+// Add these typedefs
+typedef GetMacAddressNative = Pointer<Utf8> Function();
+typedef GetMacAddressDart = Pointer<Utf8> Function();
+
 class BluetoothBindings {
   late DynamicLibrary _lib;
 
-  late BluetoothInitDart bluetooth_init;
+  late final BluetoothInitDart bluetooth_init;
   late BluetoothStartDart bluetooth_start;
   late BluetoothStopDart bluetooth_stop;
   late SetLogFileDart bluetooth_set_logfile;
   late BluetoothNotifyDart bluetooth_notify;
+  late GetMacAddressDart bluetooth_get_mac_address;
 
   BluetoothBindings() {
     // Load the shared library
@@ -57,6 +62,10 @@ class BluetoothBindings {
     }
 
     // Lookup the functions
+    _initializeFunctions();
+  }
+
+  void _initializeFunctions() {
     bluetooth_init = _lib
         .lookup<NativeFunction<BluetoothInitNative>>('bluetooth_init')
         .asFunction();
@@ -75,6 +84,11 @@ class BluetoothBindings {
 
     bluetooth_notify = _lib
         .lookup<NativeFunction<BluetoothNotifyNative>>('bluetooth_notify')
+        .asFunction();
+
+    bluetooth_get_mac_address = _lib
+        .lookup<NativeFunction<GetMacAddressNative>>(
+            'bluetooth_get_mac_address')
         .asFunction();
   }
 }

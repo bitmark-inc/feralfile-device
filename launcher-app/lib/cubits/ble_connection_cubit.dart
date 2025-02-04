@@ -5,13 +5,64 @@ import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
 import '../services/chromium_launcher.dart';
+import '../services/config_service.dart';
 import 'ble_connection_state.dart';
+import 'dart:math';
 
 class BLEConnectionCubit extends Cubit<BLEConnectionState> {
   final BluetoothService _bluetoothService = BluetoothService();
 
-  BLEConnectionCubit() : super(BLEConnectionState()) {
-    logger.info('[BLEConnectionCubit] Initialized');
+  BLEConnectionCubit() : super(BLEConnectionState());
+
+  Future<String> _getDeviceName() async {
+    return _bluetoothService.generateDeviceId();
+  }
+
+  Future<void> initialize() async {
+    logger.info('[BLEConnectionCubit] Initializing Bluetooth service');
+
+    // Get device name based on MAC address
+    final deviceName = await _getDeviceName();
+
+    // Initialize Bluetooth service with the device name with retries
+    const maxRetries = 3;
+    var attempt = 0;
+    bool initialized = false;
+
+    while (attempt < maxRetries && !initialized) {
+      attempt++;
+      logger.info(
+          '[BLEConnectionCubit] Initialization attempt $attempt of $maxRetries');
+
+      try {
+        initialized = await _bluetoothService.initialize(deviceName);
+        if (initialized) {
+          logger.info(
+              '[BLEConnectionCubit] Bluetooth service initialized successfully');
+          break;
+        }
+      } catch (e) {
+        logger.warning(
+            '[BLEConnectionCubit] Initialization attempt $attempt failed: $e');
+      }
+
+      if (!initialized && attempt < maxRetries) {
+        // Wait before retrying
+        await Future.delayed(Duration(seconds: 2));
+      }
+    }
+
+    if (!initialized) {
+      logger.severe(
+          '[BLEConnectionCubit] Failed to initialize Bluetooth service after $maxRetries attempts');
+      emit(state.copyWith(status: BLEConnectionStatus.failed));
+      return;
+    }
+
+    // Update state with device ID
+    emit(state.copyWith(deviceId: deviceName));
+
+    startListening();
   }
 
   void startListening() {

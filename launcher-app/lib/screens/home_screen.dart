@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../cubits/ble_connection_cubit.dart';
 import '../cubits/ble_connection_state.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -49,12 +50,9 @@ class HomeScreen extends StatelessWidget {
                               instructionText =
                                   'Open the Feral File app, go to the Profile tab,\n'
                                   'and select Wi-Fi. Wait until it finds a\n'
-                                  'Feral File Display device and tap to connect.\n\n'
-                                  'Make sure your phone is connected to the Wi-Fi\n'
-                                  'network you want to use for the display.';
+                                  'Feral File Display device and tap to connect.';
                             case BLEConnectionStatus.connecting:
-                              instructionText =
-                                  'Received Wi-Fi credentials.\n'
+                              instructionText = 'Received Wi-Fi credentials.\n'
                                   'Connecting to network "${state.ssid}"...';
                             case BLEConnectionStatus.connected:
                               instructionText = 'Connected successfully!\n'
@@ -86,15 +84,60 @@ class HomeScreen extends StatelessWidget {
                               Expanded(
                                 flex: 3,
                                 child: Center(
-                                  child: Text(
-                                    instructionText,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontFamily: 'PPMori',
-                                      fontSize: 42,
-                                      color: Colors.grey[300],
-                                      height: 1.4,
-                                    ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        instructionText,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontFamily: 'PPMori',
+                                          fontSize: 42,
+                                          color: Colors.grey[300],
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                      if (state.status ==
+                                          BLEConnectionStatus.initial) ...[
+                                        const SizedBox(height: 60),
+                                        Container(
+                                          padding: const EdgeInsets.all(40),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius:
+                                                BorderRadius.circular(20),
+                                          ),
+                                          child: QrImageView(
+                                            data:
+                                                'feralfile://device_connect/${state.deviceId}',
+                                            version: QrVersions.auto,
+                                            size: 600,
+                                            backgroundColor: Colors.white,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 40),
+                                        Text(
+                                          'Scan this QR code with the\nFeral File mobile app to connect',
+                                          style: TextStyle(
+                                            fontFamily: 'PPMori',
+                                            fontSize: 28,
+                                            color: Colors.grey[300],
+                                            height: 1.5,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        const SizedBox(height: 20),
+                                        Text(
+                                          'Device ID: ${state.deviceId}',
+                                          style: TextStyle(
+                                            fontFamily: 'PPMori',
+                                            fontSize: 24,
+                                            color: Colors.grey[500],
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
                               ),

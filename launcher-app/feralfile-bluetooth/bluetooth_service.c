@@ -7,12 +7,18 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <time.h>
+#include <sys/socket.h>
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/hci.h>
+#include <bluetooth/hci_lib.h>
 
 #define LOG_TAG "BluetoothService"
 #define FERALFILE_SERVICE_NAME   "FeralFile Device"
 #define FERALFILE_SERVICE_UUID   "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
 #define FERALFILE_SETUP_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define FERALFILE_CMD_CHAR_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+#define MAX_DEVICE_NAME_LENGTH 32
+#define MAX_ADV_PATH_LENGTH 64
 
 static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
@@ -38,6 +44,9 @@ typedef void (*command_callback)(int success, const unsigned char* data, int len
 static command_callback cmd_callback = NULL;
 
 static FILE* log_file = NULL;
+
+static char device_name[MAX_DEVICE_NAME_LENGTH] = FERALFILE_SERVICE_NAME;
+static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/advertisement0";
 
 void bluetooth_set_logfile(const char* path) {
     if (log_file != NULL) {
@@ -113,16 +122,6 @@ static const gchar service_xml[] =
     "      </interface>"
     "    </node>"
     "  </node>"
-    "</node>";
-
-static const gchar advertisement_introspection_xml[] =
-    "<node>"
-    "  <interface name='org.bluez.LEAdvertisement1'>"
-    "    <method name='Release'/>"
-    "    <property name='Type' type='s' access='read'/>"
-    "    <property name='ServiceUUIDs' type='as' access='read'/>"
-    "    <property name='LocalName' type='s' access='read'/>"
-    "  </interface>"
     "</node>";
 
 static GDBusNodeInfo* find_node_by_name(GDBusNodeInfo *parent, const gchar *name) {
@@ -316,7 +315,7 @@ static GVariant* advertisement_get_property(GDBusConnection *connection,
     } else if (g_strcmp0(property_name, "ServiceUUIDs") == 0) {
         return g_variant_new_strv((const gchar*[]){FERALFILE_SERVICE_UUID, NULL}, -1);
     } else if (g_strcmp0(property_name, "LocalName") == 0) {
-        return g_variant_new_string(FERALFILE_SERVICE_NAME);
+        return g_variant_new_string(device_name);
     }
     return NULL;
 }
@@ -392,18 +391,17 @@ static void* bluetooth_handler(void* arg) {
     pthread_exit(NULL);
 }
 
-int bluetooth_init() {
-    log_debug("[%s] Initializing Bluetooth\n", LOG_TAG);
+static void* bluetooth_thread_func(void* arg) {
     GError *error = NULL;
+
+    main_loop = g_main_loop_new(NULL, FALSE);
 
     // Step 1: Connect to the system bus
     connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
     if (!connection) {
-        log_debug("[%s] Failed to connect to D-Bus: %s\n",
-                  LOG_TAG,
-                  error->message);
+        log_debug("[%s] Failed to connect to D-Bus: %s\n", LOG_TAG, error->message);
         g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 2: Parse our service XML
@@ -413,14 +411,14 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Find the service0 node
     service_node = find_node_by_name(root_node, "service0");
     if (!service_node) {
         log_debug("[%s] service0 node not found\n", LOG_TAG);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Find characteristic nodes
@@ -428,7 +426,7 @@ int bluetooth_init() {
     GDBusNodeInfo *cmd_char_node   = find_node_by_name(service_node, "cmd_char");
     if (!setup_char_node || !cmd_char_node) {
         log_debug("[%s] Characteristic nodes not found\n", LOG_TAG);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 3: Register ObjectManager interface
@@ -446,7 +444,7 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 4: Register the service object
@@ -464,7 +462,7 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 5: Register your setup characteristic
@@ -482,7 +480,7 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 6: Register your command characteristic
@@ -500,7 +498,7 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 7: Get the GattManager1 interface and store it
@@ -519,7 +517,7 @@ int bluetooth_init() {
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 8: Register the application
@@ -537,25 +535,38 @@ int bluetooth_init() {
                   LOG_TAG,
                   error->message);
         g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     // Step 9: Parse advertisement XML
+    snprintf(advertisement_path, MAX_ADV_PATH_LENGTH, "/com/feralfile/display/advertisement_%ld", time(NULL));
+    char *adv_introspection_xml = g_strdup_printf(
+        "<node>"
+        "  <interface name='org.bluez.LEAdvertisement1'>"
+        "    <method name='Release'/>"
+        "    <property name='Type' type='s' access='read'/>"
+        "    <property name='ServiceUUIDs' type='as' access='read'/>"
+        "    <property name='LocalName' type='s' access='read'/>"
+        "  </interface>"
+        "</node>"
+    );
     advertisement_introspection_data =
-        g_dbus_node_info_new_for_xml(advertisement_introspection_xml, &error);
+        g_dbus_node_info_new_for_xml(adv_introspection_xml, &error);
+    g_free(adv_introspection_xml);
     if (!advertisement_introspection_data || error) {
         log_debug("[%s] Failed to parse advertisement XML: %s\n",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        return -1;
+        if (error)
+            g_error_free(error);
+        pthread_exit(NULL);
     }
 
     // Step 10: Register advertisement object
     ad_reg_id = g_dbus_connection_register_object(
         connection,
-        "/com/feralfile/display/advertisement0",
-        advertisement_introspection_data->interfaces[0],  // org.bluez.LEAdvertisement1
+        advertisement_path,
+        advertisement_introspection_data->interfaces[0],
         &advertisement_vtable,
         NULL,
         NULL,
@@ -565,8 +576,9 @@ int bluetooth_init() {
         log_debug("[%s] Failed to register advertisement object: %s\n",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        return -1;
+        if (error)
+            g_error_free(error);
+        pthread_exit(NULL);
     }
 
     // Step 11: Get LEAdvertisingManager1 and store it
@@ -584,15 +596,16 @@ int bluetooth_init() {
         log_debug("[%s] Failed to get LEAdvertisingManager1: %s\n",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        return -1;
+        if (error)
+            g_error_free(error);
+        pthread_exit(NULL);
     }
 
     // Step 12: Register the advertisement
     g_dbus_proxy_call_sync(
         advertising_manager,
         "RegisterAdvertisement",
-        g_variant_new("(oa{sv})", "/com/feralfile/display/advertisement0", NULL),
+        g_variant_new("(oa{sv})", advertisement_path, NULL),
         G_DBUS_CALL_FLAGS_NONE,
         -1,
         NULL,
@@ -603,20 +616,37 @@ int bluetooth_init() {
                   LOG_TAG,
                   error->message);
         g_error_free(error);
-        return -1;
+        pthread_exit(NULL);
     }
 
     log_debug("[%s] Bluetooth initialized successfully\n", LOG_TAG);
+
+    // Run the main loop to process D-Bus events
+    g_main_loop_run(main_loop);
+
+    pthread_exit(NULL);
+    return NULL;
+}
+
+int bluetooth_init(const char* custom_device_name) {
+    log_debug("[%s] Initializing Bluetooth in background thread\n", LOG_TAG);
+    
+    // Set custom device name if provided
+    if (custom_device_name != NULL) {
+        strncpy(device_name, custom_device_name, MAX_DEVICE_NAME_LENGTH - 1);
+        device_name[MAX_DEVICE_NAME_LENGTH - 1] = '\0';
+    }
+    
+    if (pthread_create(&bluetooth_thread, NULL, bluetooth_thread_func, NULL) != 0) {
+        log_debug("[%s] Failed to create Bluetooth thread\n", LOG_TAG);
+        return -1;
+    }
     return 0;
 }
 
 int bluetooth_start(connection_result_callback scb, command_callback ccb) {
     result_callback = scb;
     cmd_callback = ccb;
-    if (pthread_create(&bluetooth_thread, NULL, bluetooth_handler, NULL) != 0) {
-        log_debug("[%s] Failed to start Bluetooth thread\n", LOG_TAG);
-        return -1;
-    }
     log_debug("[%s] Bluetooth service started\n", LOG_TAG);
     return 0;
 }
@@ -630,19 +660,17 @@ void bluetooth_stop() {
         g_dbus_proxy_call_sync(
             advertising_manager,
             "UnregisterAdvertisement",
-            g_variant_new("(o)", "/com/feralfile/display/advertisement0"),
+            g_variant_new("(o)", advertisement_path),
             G_DBUS_CALL_FLAGS_NONE,
             -1,
             NULL,
             &error
         );
         if (error) {
-            log_debug("[%s] UnregisterAdvertisement failed: %s",
-                      LOG_TAG, error->message);
+            log_debug("[%s] UnregisterAdvertisement failed: %s\n", LOG_TAG, error->message);
             g_error_free(error);
             error = NULL;
         }
-        // Free the advertising manager proxy
         g_object_unref(advertising_manager);
         advertising_manager = NULL;
     }
@@ -720,6 +748,8 @@ void bluetooth_stop() {
     log_debug("[%s] Bluetooth service stopped\n", LOG_TAG);
 }
 
+
+
 void bluetooth_notify(const unsigned char* data, int length) {
     // Log the hex string for debugging
     char hex_string[length * 3 + 1];
@@ -749,4 +779,26 @@ void bluetooth_notify(const unsigned char* data, int length) {
         NULL);
 
     g_variant_builder_unref(builder);
+}
+
+const char* bluetooth_get_mac_address() {
+    static char mac_address[18] = {0};
+    int dev_id = hci_get_route(NULL);
+    int sock = hci_open_dev(dev_id);
+    
+    if (dev_id < 0 || sock < 0) {
+        log_debug("[%s] Could not get Bluetooth device info", LOG_TAG);
+        return NULL;
+    }
+
+    bdaddr_t bdaddr;
+    if (hci_read_bd_addr(sock, &bdaddr, 1000) < 0) {
+        close(sock);
+        return NULL;
+    }
+    
+    ba2str(&bdaddr, mac_address);
+    close(sock);
+    
+    return mac_address;
 }

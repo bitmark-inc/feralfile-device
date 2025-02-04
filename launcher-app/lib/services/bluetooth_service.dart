@@ -4,11 +4,13 @@ import 'dart:isolate';
 import 'package:feralfile/services/logger.dart';
 import 'package:ffi/ffi.dart';
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
 import '../services/command_service.dart';
 import '../utils/varint_parser.dart';
+import '../services/config_service.dart';
 
 class BluetoothService {
   final BluetoothBindings _bindings = BluetoothBindings();
@@ -22,41 +24,52 @@ class BluetoothService {
 
   BluetoothService() {
     _commandService.initialize(this);
-    _initialize();
   }
 
-  void _initialize() {
+  Future<bool> initialize(String deviceName) async {
     logger.info('Initializing Bluetooth service...');
-    int initResult = _bindings.bluetooth_init();
-    if (initResult != 0) {
-      logger.warning('Failed to initialize Bluetooth service.');
-      return;
-    }
+    logger.info('Using device name: $deviceName');
 
-    _setupCallback = NativeCallable<ConnectionResultCallbackNative>.listener(
-      _staticConnectionResultCallback,
-    );
+    // Convert device name to C string
+    final deviceNamePtr = deviceName.toNativeUtf8();
 
-    _cmdCallback = NativeCallable<CommandCallbackNative>.listener(
-      _staticCommandCallback,
-    );
-
-    int startResult = _bindings.bluetooth_start(
-        _setupCallback.nativeFunction, _cmdCallback.nativeFunction);
-
-    if (startResult != 0) {
-      logger.warning('Failed to start Bluetooth service.');
-      _setupCallback.close();
-      _cmdCallback.close();
-    } else {
-      logger.info('Bluetooth service started. Waiting for connections...');
-    }
-
-    _commandPort.listen((message) {
-      if (message is List) {
-        CommandService().handleCommand(message[0], message[1]);
+    try {
+      int initResult = _bindings.bluetooth_init(deviceNamePtr);
+      if (initResult != 0) {
+        logger.warning('Failed to initialize Bluetooth service.');
+        return false;
       }
-    });
+
+      _setupCallback = NativeCallable<ConnectionResultCallbackNative>.listener(
+        _staticConnectionResultCallback,
+      );
+
+      _cmdCallback = NativeCallable<CommandCallbackNative>.listener(
+        _staticCommandCallback,
+      );
+
+      int startResult = _bindings.bluetooth_start(
+          _setupCallback.nativeFunction, _cmdCallback.nativeFunction);
+
+      if (startResult != 0) {
+        logger.warning('Failed to start Bluetooth service.');
+        _setupCallback.close();
+        _cmdCallback.close();
+        return false;
+      }
+
+      logger.info('Bluetooth service started. Waiting for connections...');
+
+      _commandPort.listen((message) {
+        if (message is List) {
+          CommandService().handleCommand(message[0], message[1]);
+        }
+      });
+
+      return true;
+    } finally {
+      calloc.free(deviceNamePtr);
+    }
   }
 
   void startListening(void Function(WifiCredentials) onCredentialsReceived) {
@@ -171,5 +184,35 @@ class BluetoothService {
     } catch (e) {
       logger.severe('Error sending notification: $e');
     }
+  }
+
+  String? getMacAddress() {
+    final macPtr = _bindings.bluetooth_get_mac_address();
+    if (macPtr.address == 0) return null;
+
+    final macAddress = macPtr.toDartString();
+    return macAddress;
+  }
+
+  String generateDeviceId() {
+    final mac = getMacAddress();
+    if (mac == null) return 'FF-X1-000000';
+
+    // Generate MD5 hash of MAC address
+    final bytes = utf8.encode(mac);
+    final hash = md5.convert(bytes);
+
+    // Take first 6 bytes of hash and convert to uppercase alphanumeric
+    final hashStr = hash.bytes
+        .sublist(0, 6)
+        .map((byte) {
+          return ((byte % 36) < 10)
+              ? ((byte % 36) + 48) // 0-9
+              : ((byte % 36) + 55); // A-Z
+        })
+        .map((charCode) => String.fromCharCode(charCode))
+        .join();
+
+    return 'FF-X1-$hashStr';
   }
 }

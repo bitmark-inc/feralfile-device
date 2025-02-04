@@ -9,11 +9,12 @@ extern "C" {
 typedef void (*connection_result_callback)(int success, const unsigned char* data, int length);
 typedef void (*command_callback)(int success, const unsigned char* data, int length);
 
-int bluetooth_init();
+int bluetooth_init(const char* custom_device_name);
 int bluetooth_start(connection_result_callback setup_callback, command_callback cmd_callback);
 void bluetooth_stop();
 void bluetooth_set_logfile(const char* path);
 void bluetooth_notify(const unsigned char* data, int length);
+const char* bluetooth_get_mac_address();
 
 #ifdef __cplusplus
 }
