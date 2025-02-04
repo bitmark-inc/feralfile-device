@@ -1,0 +1,16 @@
+[Unit]
+Description=FeralFile CEC Monitor
+After=network.target
+
+[Service]
+Type=simple
+User=feralfile
+Group=feralfile
+ExecStart=/home/feralfile/feralfile/feralfile-cec.sh
+Restart=always
+RestartSec=5
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/feralfile/.Xauthority
+
+[Install]
+WantedBy=multi-user.target

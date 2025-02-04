@@ -157,3 +157,11 @@ EOF
 
 # Copy CEC configuration
 cp /home/feralfile/feralfile/cec.conf /boot/config.txt.d/cec.txt
+
+# Copy CEC script and set permissions
+cp /home/feralfile/feralfile/feralfile-cec.sh /usr/local/bin/
+chmod 755 /usr/local/bin/feralfile-cec.sh
+
+# Copy and enable CEC service
+cp /home/feralfile/feralfile/feralfile-cec.service /etc/systemd/system/
+systemctl enable feralfile-cec.service
