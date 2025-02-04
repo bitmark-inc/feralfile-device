@@ -155,6 +155,9 @@ APT::Periodic::AutocleanInterval "7";
 APT::Periodic::Verbose "1";
 EOF
 
+# Create config.txt.d directory if it doesn't exist
+mkdir -p /boot/config.txt.d
+
 # Copy CEC configuration
 cp /home/feralfile/feralfile/cec.conf /boot/config.txt.d/cec.txt
 
