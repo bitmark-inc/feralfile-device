@@ -36,6 +36,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       SUPPORT_URL: ${{ secrets.SUPPORT_URL }}
       SUPPORT_API_KEY: ${{ secrets.SUPPORT_API_KEY }}
+      APT_GPG_SIGN_KEY_PASSPHRASE: ${{ secrets.APT_GPG_SIGN_KEY_PASSPHRASE }}
+      APT_GPG_SIGN_KEY_ID: ${{ secrets.APT_GPG_SIGN_KEY_ID }}
 
   # --- STEP 2: Build Raspberry Pi Image ---
   build-image:
@@ -80,7 +82,6 @@ jobs:
             --verbose \
             --stats=1s
           cat > custom-stage/01-install-app/feralfile-launcher.conf << EOF
-          app_version = ${APP_VERSION}
           app_branch = ${{ github.ref_name }}
           distribution_auth_user = ${{ secrets.DISTRIBUTION_AUTH_USER }}
           distribution_auth_password = ${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}

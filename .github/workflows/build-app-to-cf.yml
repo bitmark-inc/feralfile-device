@@ -37,6 +37,10 @@ on:
         required: true
       SUPPORT_API_KEY:
         required: true
+      APT_GPG_SIGN_KEY_PASSPHRASE:
+        required: true
+      APT_GPG_SIGN_KEY_ID:
+        required: true
 
 jobs:
   build:
@@ -147,6 +151,7 @@ jobs:
           DESCRIPTION: "Feral File Connection Assistant"
           MAINTAINER: "Bitmark Inc <support@feralfile.com>"
           INSTALL_DIR: "/opt/feralfile"
+          DEPENDS: "gldriver-test, chromium, rpi-chromium-mods, fonts-droid-fallback, fonts-liberation2, x11-xserver-utils, xdotool, xserver-xorg, xserver-xorg-video-fbdev, xinit, openbox, lightdm, bluez, zenity, jq, unattended-upgrades"
         run: |
           mkdir -p package/DEBIAN
           mkdir -p package$INSTALL_DIR/lib
@@ -160,6 +165,7 @@ jobs:
           Priority: optional
           Architecture: arm64
           Maintainer: $MAINTAINER
+          Depends: $DEPENDS
           Description: $DESCRIPTION
           EOF
 
@@ -184,10 +190,58 @@ jobs:
           no_check_bucket = true
           EOF
 
+      - name: Download all deb files from the same branch
+        run: |
+          mkdir -p dist/pool/${{ github.ref_name }}
+          cp feralfile-launcher_${{ inputs.version }}_arm64.deb dist/pool/${{ github.ref_name }}/feralfile-launcher_${{ inputs.version }}_arm64.deb
+          rclone copy "r2:${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}/${{ github.ref_name }}" "dist/pool/${{ github.ref_name }}" \
+            --include "*.deb" \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=32 \
+            --verbose \
+            --stats=1s      
+      
+      - name: Form the APT release files
+        run: |
+          cd dist
+          dpkg-scanpackages --arch arm64 --multiversion pool > Packages
+          cat Packages | gzip -9 > Packages.gz
+          chmod +x ../../scripts/create-release.sh
+          ../../scripts/create-release.sh ${{ github.ref_name }} ${{ inputs.version }} > Release
+          gpg --batch --yes --pinentry-mode loopback \
+              --passphrase "${{ secrets.APT_GPG_SIGN_KEY_PASSPHRASE }}" \
+              --default-key "${{ secrets.APT_GPG_SIGN_KEY_ID }}" \
+              --clearsign -o InRelease Release
+
       - name: Upload to Cloudflare R2
         run: |
           # Upload with rclone using multiple threads and verbose logging
           rclone copy feralfile-launcher_${{ inputs.version }}_arm64.deb r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=32 \
+            --verbose \
+            --stats=1s
+          rclone copy dist/Release r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=32 \
+            --verbose \
+            --stats=1s
+          rclone copy dist/Packages r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=32 \
+            --verbose \
+            --stats=1s
+          rclone copy dist/Packages.gz r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=32 \
+            --verbose \
+            --stats=1s
+          rclone copy dist/InRelease r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
             --s3-upload-cutoff=100M \
             --s3-chunk-size=100M \
             --transfers=32 \

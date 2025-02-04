@@ -1,5 +1,14 @@
 #!/bin/bash
 
+function get_config_value() {
+  local key="$1"
+  grep "^$key" "/home/feralfile/feralfile/feralfile-launcher.conf" | awk -F' = ' '{print $2}' | tr -d ' '
+}
+
+BASIC_AUTH_USER="$(get_config_value "distribution_auth_user")"
+BASIC_AUTH_PASS="$(get_config_value "distribution_auth_password")"
+LOCAL_BRANCH="$(get_config_value "app_branch")"
+
 # Update BlueZ version
 apt-get install libglib2.0-dev libdbus-1-dev libudev-dev libical-dev libreadline-dev python3-docutils -y
 cd /home/feralfile
@@ -15,11 +24,9 @@ rm -rf /home/feralfile/bluez-5.79
 cd /
 
 chown -R feralfile:feralfile /home/feralfile/feralfile/
-chmod 755 /home/feralfile/feralfile/feralfile-ota-update.sh
+chmod 644 /etc/apt/trusted.gpg.d/feralfile.asc
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
 chmod 755 /home/feralfile/feralfile/feralfile-switcher.sh
-
-dpkg -i /home/feralfile/feralfile/feralfile-launcher_arm64.deb
 
 # Create autostart
 mkdir -p /home/feralfile/.config/openbox
@@ -127,12 +134,24 @@ Environment=XDG_RUNTIME_DIR=/run/user/1000
 WantedBy=default.target
 EOF
 
-# Add OTA cronjob update script
-CRON_CMD="*/30 * * * * DISPLAY=:0 XAUTHORITY=/home/feralfile/.Xauthority sudo /home/feralfile/feralfile/feralfile-ota-update.sh"
-crontab -u feralfile -l 2>/dev/null || true > /tmp/feralfile_cron
-grep -F "$CRON_CMD" /tmp/feralfile_cron >/dev/null 2>&1 || echo "$CRON_CMD" >> /tmp/feralfile_cron
-crontab -u feralfile /tmp/feralfile_cron
-rm /tmp/feralfile_cron
+# Install feralfile launcher app
+mkdir -p "/etc/apt/auth.conf.d/"
+cat > /etc/apt/auth.conf.d/feralfile.conf << EOF
+machine feralfile-device-distribution.bitmark-development.workers.dev
+login $BASIC_AUTH_USER
+password $BASIC_AUTH_PASS
+EOF
+
+## Remove the config file since it's not used anymore
+rm "/home/feralfile/feralfile/feralfile-launcher.conf"
+
+mkdir -p "/etc/apt/sources.list.d/"
+cat > /etc/apt/sources.list.d/feralfile.list << EOF
+deb [arch=arm64 signed-by=/etc/apt/trusted.gpg.d/feralfile.asc] https://feralfile-device-distribution.bitmark-development.workers.dev/ $LOCAL_BRANCH main 
+EOF
+
+apt-get update
+apt-get install feralfile-launcher
 
 # Create a custom configuration for unattended-upgrades
 mkdir -p /etc/apt/apt.conf.d
@@ -140,16 +159,19 @@ cat > /etc/apt/apt.conf.d/50unattended-upgrades << EOF
 Unattended-Upgrade::Origins-Pattern {
     "origin=Raspbian,codename=bookworm,label=Raspbian";
     "origin=Raspberry Pi Foundation,codename=bookworm,label=Raspberry Pi Foundation";
+    "origin=feralfile-launcher";
 };
 Unattended-Upgrade::Automatic-Reboot "true";
 Unattended-Upgrade::Automatic-Reboot-Time "02:00";
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
-Unattended-Upgrade::Allow-downgrade "true";
-Unattended-Upgrade::Keep-Debs-After-Install "true";
 EOF
 cat > /etc/apt/apt.conf.d/20auto-upgrades << EOF
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 APT::Periodic::Verbose "1";
+EOF
+cat > /etc/apt/apt.conf.d/99auto-restart << EOF
+DPkg::Post-Invoke { "systemctl restart feralfile-launcher.service || true"; };
+DPkg::Post-Invoke { "systemctl restart feralfile-chromium.service || true"; };
 EOF
