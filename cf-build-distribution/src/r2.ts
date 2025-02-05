@@ -7,6 +7,8 @@ interface FileInfo {
   zipSize?: string;
   debEtag?: string;
   zipEtag?: string;
+  lastUpdated?: number;  // timestamp in milliseconds
+  hasReleaseNotes?: boolean; 
 }
 
 interface VersionInfo {
@@ -57,7 +59,8 @@ export async function listFiles(bucket: R2Bucket): Promise<FileInfo[]> {
             debEtag: obj.etag?.replace(/['"]/g, ''),
             zipUrl: '',
             zipSize: undefined,
-            zipEtag: undefined
+            zipEtag: undefined,
+            lastUpdated: obj.uploaded?.getTime()
           });
         }
       }
@@ -78,9 +81,23 @@ export async function listFiles(bucket: R2Bucket): Promise<FileInfo[]> {
             debEtag: undefined,
             zipUrl: obj.key,
             zipSize: formatFileSize(obj.size),
-            zipEtag: obj.etag?.replace(/['"]/g, '')
+            zipEtag: obj.etag?.replace(/['"]/g, ''),
+            lastUpdated: obj.uploaded?.getTime()
           });
         }
+      }
+    }
+  }
+
+  // Scan for release notes
+  for (const obj of objects.objects) {
+    const match = obj.key.match(/release_notes_(.+?)\.md$/);
+    if (match) {
+      const version = match[1];
+      const branch = obj.key.split('/').slice(0, -1).join('/');
+      const file = files.find(f => f.branch === branch && f.version === version);
+      if (file) {
+        file.hasReleaseNotes = true;
       }
     }
   }
