@@ -132,48 +132,54 @@ class CECService {
 
   Future<void> _startCECMonitoring() async {
     try {
-      // Explicitly specify the CEC device path
       _cecProcess = await Process.start('cec-client', [
         '-d', '8', // debug level
         '-t', 'p', // playback device type
         '-p', '/dev/cec0', // explicit device path
+        '-m', // start in monitor-only mode
+        '-o', 'LauncherApp' // set device name
       ]);
 
-      // Handle stdout in background
-      _stdoutSubscription =
-          _cecProcess!.stdout.transform(const Utf8Decoder()).listen(
-        _handleCECEvent,
-        onError: (error) {
-          logger.severe('CEC stdout error: $error');
-        },
-        cancelOnError: false,
-      );
-
-      // Handle stderr in background
-      _stderrSubscription =
-          _cecProcess!.stderr.transform(const Utf8Decoder()).listen(
-        (data) => logger.warning('CEC Error: $data'),
-        onError: (error) {
-          logger.severe('CEC stderr error: $error');
-        },
-        cancelOnError: false,
-      );
-
-      // Handle process exit
-      _cecProcess!.exitCode.then((code) {
-        logger.warning('CEC process exited with code: $code');
-        _isInitialized = false;
-        // Attempt to restart if not intentionally disposed
-        if (_cecProcess != null) {
-          logger.info('Attempting to restart CEC monitoring...');
-          _startCECMonitoring();
+      // Set up periodic connection check
+      Timer.periodic(Duration(seconds: 30), (timer) {
+        if (_cecProcess == null) {
+          timer.cancel();
+          _restartCECMonitoring();
         }
       });
+
+      _cecProcess!.stdout.transform(utf8.decoder).listen(
+        (data) {
+          _handleCECEvent(data);
+        },
+        onDone: () {
+          logger.warning(
+              'CEC process stdout stream closed. Attempting restart...');
+          _restartCECMonitoring();
+        },
+        onError: (error) {
+          logger.severe('Error in CEC stdout stream: $error');
+          _restartCECMonitoring();
+        },
+      );
+
+      _cecProcess!.stderr.transform(utf8.decoder).listen(
+        (data) {
+          logger.warning('CEC Error: $data');
+        },
+      );
     } catch (e) {
       logger.severe('Error starting CEC monitoring: $e');
       await dispose();
       rethrow;
     }
+  }
+
+  Future<void> _restartCECMonitoring() async {
+    logger.info('Attempting to restart CEC monitoring...');
+    await dispose();
+    await Future.delayed(Duration(seconds: 2)); // Wait before reconnecting
+    await _startCECMonitoring();
   }
 
   Future<void> dispose() async {
@@ -201,17 +207,20 @@ class CECService {
 
   void _handleCECEvent(String event) {
     try {
-      // Log all CEC events
       logger.info('CEC Raw Event: $event');
 
-      // Handle TRAFFIC messages
+      // Handle TRAFFIC messages with more specific parsing
       if (event.contains('TRAFFIC:')) {
         final trafficMatch =
             RegExp(r'TRAFFIC:.*<<\s+([0-9a-fA-F:]+)').firstMatch(event);
         if (trafficMatch != null) {
           final hexData = trafficMatch.group(1)!;
           logger.info('CEC Traffic Data: $hexData');
-          _handleTrafficData(hexData);
+
+          // Filter out known system messages
+          if (!['f0', '40'].contains(hexData)) {
+            _handleTrafficData(hexData);
+          }
         }
       }
       // Keep existing event handling
@@ -219,13 +228,11 @@ class CECService {
         _handleKeyPress(event);
       } else if (event.contains('key released:')) {
         _handleKeyRelease(event);
-      } else if (event.contains('standby')) {
-        _handleStandby();
-      } else if (event.contains('on')) {
-        _handlePowerOn();
+      } else if (event.contains('waiting for input')) {
+        logger.info('CEC client waiting for input - connection active');
       }
     } catch (e) {
-      logger.severe('Error handling CEC event: $e');
+      logger.severe('Error handling CEC event: $e', e);
     }
   }
 
