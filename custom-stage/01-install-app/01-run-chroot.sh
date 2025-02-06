@@ -27,6 +27,7 @@ chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 644 /etc/apt/trusted.gpg.d/feralfile.asc
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
 chmod 755 /home/feralfile/feralfile/feralfile-switcher.sh
+chmod 755 /home/feralfile/feralfile/feralfile-install-deps.sh
 
 # Create autostart
 mkdir -p /home/feralfile/.config/openbox
@@ -49,6 +50,10 @@ fi
 if ! sudo systemctl is-enabled feralfile-switcher.service >/dev/null 2>&1; then
     sudo systemctl enable feralfile-switcher.service
     sudo systemctl start feralfile-switcher.service
+fi
+if ! sudo systemctl is-enabled feralfile-install-deps.service >/dev/null 2>&1; then
+    sudo systemctl enable feralfile-install-deps.service
+    sudo systemctl start feralfile-install-deps.service
 fi
 EOF
 
@@ -132,6 +137,27 @@ Environment=XDG_RUNTIME_DIR=/run/user/1000
 
 [Install]
 WantedBy=default.target
+EOF
+
+cat > /etc/systemd/system/feralfile-install-deps.service << EOF
+[Unit]
+Description=Install feralfile-launcher dependencies before daily upgrade
+Before=apt-daily-upgrade.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/feralfile/feralfile/feralfile-install-deps.sh
+
+[Install]
+WantedBy=apt-daily-upgrade.service
+EOF
+
+mkdir -p /etc/systemd/system/apt-daily-upgrade.service.d
+cat > /etc/systemd/system/apt-daily-upgrade.service.d/override.conf << EOF
+[Unit]
+# Require our dependency installation service before upgrading.
+Requires=feralfile-install-deps.service
+After=feralfile-install-deps.service
 EOF
 
 # Install feralfile launcher app
