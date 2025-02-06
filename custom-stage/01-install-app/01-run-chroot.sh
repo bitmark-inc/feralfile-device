@@ -66,7 +66,6 @@ EOF
 mkdir -p /etc/bluetooth
 cat > /etc/bluetooth/main.conf <<EOF
 [General]
-Experimental = true
 JustWorksRepairing = always
 EOF
 
