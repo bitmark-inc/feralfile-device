@@ -2,13 +2,16 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 import 'package:feralfile/services/logger.dart';
+import 'package:logging/logging.dart';
 
 class CECService {
   static final CECService _instance = CECService._internal();
+  final logger = Logger('CECService');
   Process? _cecProcess;
   StreamSubscription? _stdoutSubscription;
   StreamSubscription? _stderrSubscription;
   bool _isInitialized = false;
+  String? _deviceAddress; // Store our device address after scanning
 
   // CEC Remote Control Key Mapping
   static const Map<String, String> keyMapping = {
@@ -99,28 +102,18 @@ class CECService {
   CECService._internal();
 
   Future<void> initialize() async {
-    if (_isInitialized) {
-      logger.info('CEC service already initialized');
-      return;
-    }
+    if (_isInitialized) return;
 
     try {
       // Check if cec-client is available
       final cecClientResult = await Process.run('which', ['cec-client']);
       if (cecClientResult.exitCode != 0) {
-        logger.warning('cec-client not found. CEC support will be disabled.');
+        logger.warning('cec-client not found. Please install cec-utils.');
         return;
       }
 
-      // Check if CEC device exists
-      final cecDevice = File('/dev/cec0');
-      if (!await cecDevice.exists()) {
-        logger.warning(
-            'CEC device /dev/cec0 not found. CEC support will be disabled.');
-        return;
-      }
-
-      // Start CEC monitoring with verbose output
+      // First scan for devices to get our address
+      await _scanDevices();
       await _startCECMonitoring();
       _isInitialized = true;
       logger.info('CEC service initialized');
@@ -130,79 +123,88 @@ class CECService {
     }
   }
 
+  Future<void> _scanDevices() async {
+    try {
+      final scanProcess = await Process.run(
+          'sh', ['-c', 'echo "scan" | cec-client RPI -s -d 1']);
+
+      final output = scanProcess.stdout.toString();
+      logger.info('Device scan output: $output');
+
+      // Parse the output to find our device address
+      final lines = output.split('\n');
+      for (final line in lines) {
+        if (line.contains('Recorder') || line.contains('Playback')) {
+          final addressMatch =
+              RegExp(r'address:\s+(\d+)\.0\.0\.0').firstMatch(line);
+          if (addressMatch != null) {
+            _deviceAddress = addressMatch.group(1);
+            logger.info('Found our device address: $_deviceAddress');
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      logger.severe('Error scanning CEC devices: $e');
+    }
+  }
+
   Future<void> _startCECMonitoring() async {
     try {
       _cecProcess = await Process.start('cec-client', [
-        '-d', '8', // debug level
-        '-t', 'p', // playback device type
-        '-p', '/dev/cec0', // explicit device path
-        '-m', // start in monitor-only mode
-        '-o', 'LauncherApp' // set device name
+        'RPI',
+        '-d', '4', // Debug level
+        '-t', 'p', // Playback device
+        '-o', 'LauncherApp'
       ]);
 
-      // Set up periodic connection check
-      Timer.periodic(Duration(seconds: 30), (timer) {
-        if (_cecProcess == null) {
-          timer.cancel();
-          _restartCECMonitoring();
-        }
-      });
-
       _cecProcess!.stdout.transform(utf8.decoder).listen(
-        (data) {
-          _handleCECEvent(data);
-        },
-        onDone: () {
-          logger.warning(
-              'CEC process stdout stream closed. Attempting restart...');
-          _restartCECMonitoring();
-        },
+        _handleCECEvent,
+        onDone: _restartCECMonitoring,
         onError: (error) {
           logger.severe('Error in CEC stdout stream: $error');
           _restartCECMonitoring();
         },
       );
-
-      _cecProcess!.stderr.transform(utf8.decoder).listen(
-        (data) {
-          logger.warning('CEC Error: $data');
-        },
-      );
     } catch (e) {
       logger.severe('Error starting CEC monitoring: $e');
-      await dispose();
       rethrow;
     }
   }
 
-  Future<void> _restartCECMonitoring() async {
-    logger.info('Attempting to restart CEC monitoring...');
-    await dispose();
-    await Future.delayed(Duration(seconds: 2)); // Wait before reconnecting
-    await _startCECMonitoring();
+  Future<void> sendCECCommand(String command) async {
+    if (_cecProcess == null) return;
+
+    try {
+      _cecProcess!.stdin.writeln('tx $command');
+      await _cecProcess!.stdin.flush();
+      logger.info('Sent CEC command: $command');
+    } catch (e) {
+      logger.severe('Error sending CEC command: $e');
+    }
   }
 
-  Future<void> dispose() async {
-    logger.info('Disposing CEC service...');
-    _isInitialized = false;
+  // CEC Commands using proper frames
+  Future<void> turnTVOn() async {
+    // Image View On command
+    await sendCECCommand('${_deviceAddress}0:04');
+  }
 
-    // Cancel stream subscriptions
-    await _stdoutSubscription?.cancel();
-    _stdoutSubscription = null;
+  Future<void> turnTVOff() async {
+    // Standby command
+    await sendCECCommand('${_deviceAddress}0:36');
+  }
 
-    await _stderrSubscription?.cancel();
-    _stderrSubscription = null;
+  Future<void> makeActiveSource() async {
+    if (_deviceAddress == null) return;
+    // Active Source command with our address
+    await sendCECCommand('${_deviceAddress}F:82:${_deviceAddress}0:00');
+  }
 
-    // Kill the process if it's still running
-    if (_cecProcess != null) {
-      try {
-        _cecProcess!.kill();
-        await _cecProcess!.exitCode;
-      } catch (e) {
-        logger.warning('Error killing CEC process: $e');
-      }
-      _cecProcess = null;
-    }
+  Future<void> makeInactiveSource() async {
+    if (_deviceAddress == null) return;
+    // Inactive Source command with our address
+    await sendCECCommand('${_deviceAddress}F:9D:${_deviceAddress}0:00');
   }
 
   void _handleCECEvent(String event) {
@@ -324,21 +326,33 @@ class CECService {
     }
   }
 
-  Future<void> _handleStandby() async {
-    logger.info('CEC: Handling standby command');
-    try {
-      await Process.run('xset', ['dpms', 'force', 'off']);
-    } catch (e) {
-      logger.severe('Failed to handle CEC standby: $e');
-    }
+  Future<void> _restartCECMonitoring() async {
+    logger.info('Attempting to restart CEC monitoring...');
+    await dispose();
+    await Future.delayed(Duration(seconds: 2)); // Wait before reconnecting
+    await _startCECMonitoring();
   }
 
-  Future<void> _handlePowerOn() async {
-    logger.info('CEC: Handling power on command');
-    try {
-      await Process.run('xset', ['dpms', 'force', 'on']);
-    } catch (e) {
-      logger.severe('Failed to handle CEC power on: $e');
+  Future<void> dispose() async {
+    logger.info('Disposing CEC service...');
+    _isInitialized = false;
+
+    // Cancel stream subscriptions
+    await _stdoutSubscription?.cancel();
+    _stdoutSubscription = null;
+
+    await _stderrSubscription?.cancel();
+    _stderrSubscription = null;
+
+    // Kill the process if it's still running
+    if (_cecProcess != null) {
+      try {
+        _cecProcess!.kill();
+        await _cecProcess!.exitCode;
+      } catch (e) {
+        logger.warning('Error killing CEC process: $e');
+      }
+      _cecProcess = null;
     }
   }
 }
