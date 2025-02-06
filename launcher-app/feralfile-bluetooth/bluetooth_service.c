@@ -539,7 +539,6 @@ static void* bluetooth_thread_func(void* arg) {
     }
 
     // Step 9: Parse advertisement XML
-    snprintf(advertisement_path, MAX_ADV_PATH_LENGTH, "/com/feralfile/display/advertisement_%ld", time(NULL));
     char *adv_introspection_xml = g_strdup_printf(
         "<node>"
         "  <interface name='org.bluez.LEAdvertisement1'>"
