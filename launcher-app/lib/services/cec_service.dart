@@ -106,9 +106,17 @@ class CECService {
 
     try {
       // Check if cec-client is available
-      final result = await Process.run('which', ['cec-client']);
-      if (result.exitCode != 0) {
+      final cecClientResult = await Process.run('which', ['cec-client']);
+      if (cecClientResult.exitCode != 0) {
         logger.warning('cec-client not found. CEC support will be disabled.');
+        return;
+      }
+
+      // Check if CEC device exists
+      final cecDevice = File('/dev/cec0');
+      if (!await cecDevice.exists()) {
+        logger.warning(
+            'CEC device /dev/cec0 not found. CEC support will be disabled.');
         return;
       }
 
@@ -124,8 +132,12 @@ class CECService {
 
   Future<void> _startCECMonitoring() async {
     try {
-      // Use -d 8 for debug level to show all messages including key presses
-      _cecProcess = await Process.start('cec-client', ['-d', '8', '-t', 'p']);
+      // Explicitly specify the CEC device path
+      _cecProcess = await Process.start('cec-client', [
+        '-d', '8', // debug level
+        '-t', 'p', // playback device type
+        '-p', '/dev/cec0', // explicit device path
+      ]);
 
       // Handle stdout in background
       _stdoutSubscription =
@@ -192,8 +204,18 @@ class CECService {
       // Log all CEC events
       logger.info('CEC Raw Event: $event');
 
-      // Handle specific key events
-      if (event.contains('key pressed:')) {
+      // Handle TRAFFIC messages
+      if (event.contains('TRAFFIC:')) {
+        final trafficMatch =
+            RegExp(r'TRAFFIC:.*<<\s+([0-9a-fA-F:]+)').firstMatch(event);
+        if (trafficMatch != null) {
+          final hexData = trafficMatch.group(1)!;
+          logger.info('CEC Traffic Data: $hexData');
+          _handleTrafficData(hexData);
+        }
+      }
+      // Keep existing event handling
+      else if (event.contains('key pressed:')) {
         _handleKeyPress(event);
       } else if (event.contains('key released:')) {
         _handleKeyRelease(event);
@@ -204,6 +226,26 @@ class CECService {
       }
     } catch (e) {
       logger.severe('Error handling CEC event: $e');
+    }
+  }
+
+  void _handleTrafficData(String hexData) {
+    try {
+      // Split the hex data if it contains multiple values
+      final parts = hexData.split(':');
+      for (final part in parts) {
+        final cleanPart = part.trim();
+        if (cleanPart.length == 2) {
+          // Single byte command
+          // Convert hex to decimal for key mapping
+          final keyCode = int.parse(cleanPart, radix: 16).toString();
+          final mappedKey = _getKeyName(keyCode);
+          logger.info(
+              'CEC Traffic Key - Hex: $cleanPart, Mapped Name: $mappedKey');
+        }
+      }
+    } catch (e) {
+      logger.warning('Error parsing traffic data: $e');
     }
   }
 
