@@ -50,6 +50,22 @@ export default {
       });
     }
 
+    if (url.pathname.startsWith('/pool/')) {
+      const key = url.pathname.replace('/pool/', '');
+      const object = await env.BUCKET.get(key);
+      
+      if (!object) {
+        return new Response('File not found', { status: 404 });
+      }
+
+      return new Response(object.body, {
+        headers: {
+          'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+          'Content-Disposition': `attachment; filename="${key.split('/').pop()}"`,
+        },
+      });
+    }
+
     // Handle release notes
     if (url.pathname.startsWith('/api/release-notes/')) {
       const fullPath = decodeURIComponent(url.pathname.replace('/api/release-notes/', ''));
@@ -72,6 +88,62 @@ export default {
       return new Response(await object.text(), {
         headers: { 'Content-Type': 'text/markdown' }
       });
+    }
+
+    // Handle apt request
+    if (url.pathname.startsWith('/dists/')) {
+      const key = url.pathname.replace('/dists/', '');
+      if (key.endsWith('/Release') || key.endsWith('/InRelease')) {
+        // Serve the Release file
+        const object = await env.BUCKET.get(key);
+        if (!object) {
+          return new Response(`${key} not found`, { status: 404 });
+        }
+        
+        return new Response(object.body, {
+          headers: {
+            'Content-Type': 'text/plain',
+            'Content-Length': object.size.toString(),
+            'Cache-Control': 'max-age=3600, public',
+          },
+        });
+      }
+
+      if (key.endsWith('main/binary-arm64/Packages')) {
+        const branch = key.replace('main/binary-arm64/Packages', '');
+        // Serve the Packages file
+        const object = await env.BUCKET.get(branch+'Packages');
+        if (!object) {
+          return new Response(`${branch+'Packages'} not found`, { status: 404 });
+        }
+    
+        return new Response(object.body, {
+          headers: {
+            'Content-Type': 'text/plain',
+            'Content-Length': object.size.toString(),
+            'Cache-Control': 'max-age=3600, public',
+          },
+        });
+      }
+    
+      if (key.endsWith('main/binary-arm64/Packages.gz')) {
+        const branch = key.replace('main/binary-arm64/Packages.gz', '');
+        // Serve the Packages file
+        const object = await env.BUCKET.get(branch+'Packages.gz');
+        if (!object) {
+          return new Response(`${branch+'Packages.gz'} not found`, { status: 404 });
+        }
+    
+        return new Response(object.body, {
+          headers: {
+            'Content-Type': 'application/gzip',
+            'Content-Length': object.size.toString(),
+            'Cache-Control': 'max-age=3600, public',
+          },
+        });
+      }
+    
+      return new Response('Path not found', { status: 404 });
     }
 
     // List files and generate HTML
