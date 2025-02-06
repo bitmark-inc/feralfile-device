@@ -19,9 +19,10 @@ start_chromium() {
         --disable-infobars \
         --disable-session-crashed-bubble \
         --disable-features=TranslateUI \
-        --enable-gpu \
-        --enable-webgl \
-        --ignore-gpu-blocklist \
+        --use-angle=gles \
+        --enable-gpu-rasterization \
+        --force-renderer-accessibility \
+        --media-router=0 \
         https://support-feralfile-device.feralfile-display-prod.pages.dev?platform=ff-device >/dev/null 2>&1 
 }
 
