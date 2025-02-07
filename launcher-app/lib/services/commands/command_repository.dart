@@ -1,8 +1,10 @@
 import 'dart:convert';
 
-import '../bluetooth_service.dart';
 import 'package:feralfile/services/commands/send_log_handler.dart';
+import 'package:feralfile/services/commands/update_orientation_handler.dart';
+import 'package:feralfile/services/commands/version_handler.dart';
 
+import '../bluetooth_service.dart';
 import '../logger.dart';
 import 'cursor_handler.dart';
 import 'javascript_handler.dart';
@@ -33,6 +35,8 @@ class CommandRepository {
     _handlers['dragGesture'] = CursorHandler();
     _handlers['tapGesture'] = CursorHandler();
     _handlers['sendLog'] = SendLogHandler();
+    _handlers['getVersion'] = VersionHandler();
+    _handlers['updateOrientation'] = UpdateOrientationHandler();
   }
 
   Future<void> executeCommand(String command, String data,
