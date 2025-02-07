@@ -15,6 +15,7 @@ enum Command {
   getCursorOffset,
   sendKeyboardEvent,
   rotate,
+  updateArtFraming,
   tapGesture,
   dragGesture,
   castDaily;
@@ -55,6 +56,8 @@ enum Command {
         return Command.sendKeyboardEvent;
       case 'rotate':
         return Command.rotate;
+      case 'updateArtFraming':
+        return Command.updateArtFraming;
       case 'tapGesture':
         return Command.tapGesture;
       case 'dragGesture':
