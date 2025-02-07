@@ -1,16 +1,16 @@
 // lib/services/bluetooth_service.dart
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:isolate';
+
+import 'package:crypto/crypto.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:ffi/ffi.dart';
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
 import '../services/command_service.dart';
 import '../utils/varint_parser.dart';
-import '../services/config_service.dart';
 
 class BluetoothService {
   final BluetoothBindings _bindings = BluetoothBindings();
@@ -98,6 +98,8 @@ class BluetoothService {
       calloc.free(data);
 
       final strings = VarintParser.parseToStringArray(dataCopy, 0);
+
+      logger.info('Received command data: $strings');
 
       // First string is always the command
       final command = strings[0];

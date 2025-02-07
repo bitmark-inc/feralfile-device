@@ -81,7 +81,7 @@ class WebSocketService {
   }
 
   // Send message to website
-  void sendMessage(WebSocketRequestMessage message,
+  void _sendMessage(WebSocketRequestMessage message,
       {Function(WebSocketResponseMessage)? callback}) {
     if (_socket != null) {
       if (callback != null) {
@@ -90,15 +90,22 @@ class WebSocketService {
 
       logger.info('Sending message: ${jsonEncode(message.toJson())}');
       _socket!.add(jsonEncode(message.toJson()));
+      logger.info('Message sent');
     } else {
       logger.warning(
           'Sending message failed. WebSocket connection not available');
     }
   }
 
+  void sendMessage(
+    WebSocketRequestMessage message,
+  ) {
+    _sendMessage(message);
+  }
+
   void sendMessageWithCallback(WebSocketRequestMessage message,
       Function(WebSocketResponseMessage) callback) {
-    sendMessage(message, callback: callback);
+    _sendMessage(message, callback: callback);
   }
 
   // Add/remove listener
