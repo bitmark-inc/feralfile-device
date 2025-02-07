@@ -126,7 +126,7 @@ class CECService {
   Future<void> _scanDevices() async {
     try {
       final scanProcess = await Process.run(
-          'sh', ['-c', 'echo "scan" | cec-client RPI -s -d 1']);
+          'sh', ['-c', 'echo "scan" | cec-client -d 1 -p /dev/cec0']);
 
       final output = scanProcess.stdout.toString();
       logger.info('Device scan output: $output');
@@ -152,8 +152,8 @@ class CECService {
   Future<void> _startCECMonitoring() async {
     try {
       _cecProcess = await Process.start('cec-client', [
-        'RPI',
         '-d', '4', // Debug level
+        '-p', '/dev/cec0', // Explicit device path
         '-t', 'p', // Playback device
         '-o', 'LauncherApp'
       ]);
