@@ -21,6 +21,7 @@ class BluetoothService {
   final CommandService _commandService = CommandService();
   static void Function(WifiCredentials)? _onCredentialsReceived;
   static final _commandPort = ReceivePort();
+  static final Map<String, Map<int, List<int>>> _chunkCommands = {};
 
   // Store both callbacks
   late final NativeCallable<ConnectionResultCallbackNative> _setupCallback;
@@ -103,28 +104,72 @@ class BluetoothService {
       // Release the FFI data
       calloc.free(data);
 
-      final strings = VarintParser.parseToStringArray(dataCopy, 0);
+      final (chunkStrings, chunkCommand) =
+          VarintParser.parseToStringArray(dataCopy, 0, maxStrings: 3);
 
-      logger.info('Received command data: $strings');
+      // Parse chunk information
+      final chunkIndex = int.parse(chunkStrings[0]);
+      final totalChunks = int.parse(chunkStrings[1]);
+      final ackReplyId = chunkStrings[2];
 
-      // First string is always the command
-      final command = strings[0];
-      // Second string is the data
-      final commandData = strings[1];
+      if (chunkIndex < 0 || totalChunks <= 0 || chunkIndex >= totalChunks) {
+        throw Exception(
+            'Invalid chunk indices: index=$chunkIndex, total=$totalChunks');
+      }
 
-      logger.info('Parsed command: "$command" with data: "$commandData"');
+      logger.info('Processing chunk $chunkIndex of $totalChunks');
 
-      // Send metric with cached device ID
-      MetricService().sendEvent(
-        'command_received',
-        stringData: [command, commandData],
-      );
+      // Initialize chunk storage
+      _chunkCommands[ackReplyId] ??= {};
+      _chunkCommands[ackReplyId]![chunkIndex] = chunkCommand;
 
-      CommandService().handleCommand(command, commandData);
+      // Notify back for this chunk
+      logger.info('Notifying back for chunk $chunkIndex');
+      _instance.notify(ackReplyId, {'success': true, 'chunkIndex': chunkIndex});
+
+      // Check if we have all chunks
+      if (_chunkCommands[ackReplyId]!.length == totalChunks) {
+        _processCompleteCommand(ackReplyId, totalChunks);
+      }
     } catch (e, stackTrace) {
       logger.severe('Error parsing command data: $e');
       logger.severe('Stack trace: $stackTrace');
     }
+  }
+
+  static void _processCompleteCommand(String ackReplyId, int totalChunks) {
+    // Combine all chunks in order
+    final completeCommand =
+        _chunkCommands[ackReplyId]!.values.expand((chunk) => chunk).toList();
+
+    // Clean up the chunks map
+    _chunkCommands.remove(ackReplyId);
+
+    final (commandStrings, _) =
+        VarintParser.parseToStringArray(completeCommand, 0);
+
+    if (commandStrings.length < 2) {
+      throw Exception(
+          'Invalid command format: expected at least command and data');
+    }
+
+    final command = commandStrings[0];
+    final commandData = commandStrings[1];
+    final replyId = commandStrings.length > 2 ? commandStrings[2] : null;
+
+    logger
+        .info('Parsed complete command: "$command" with data: "$commandData"');
+    if (replyId != null) {
+      logger.info('Reply ID: "$replyId"');
+    }
+
+    // Send metric with cached device ID
+    MetricService().sendEvent(
+      'command_received',
+      stringData: [command, commandData],
+    );
+
+    CommandService().handleCommand(command, commandData, replyId);
   }
 
   // Static callback that can be used with FFI
@@ -146,7 +191,7 @@ class BluetoothService {
       logger.info('Raw bytes (hex): $hexString');
 
       // Now safely parse varint-encoded strings out of rawBytes
-      final strings = VarintParser.parseToStringArray(rawBytes, 0);
+      final (strings, _) = VarintParser.parseToStringArray(rawBytes, 0);
       if (strings.length < 2) {
         throw Exception(
             'Invalid WiFi credentials format: expected SSID and password');
