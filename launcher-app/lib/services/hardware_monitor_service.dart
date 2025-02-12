@@ -10,6 +10,7 @@ class HardwareMonitorService {
   Timer? _monitorTimer;
   static const _monitorInterval = Duration(minutes: 2);
   final BluetoothService _bluetoothService = BluetoothService();
+  bool _hasReportedSpecs = false;
 
   factory HardwareMonitorService() => _instance;
 
@@ -17,6 +18,7 @@ class HardwareMonitorService {
 
   void startMonitoring() {
     _monitorTimer?.cancel();
+    _reportHardwareSpecs();
     _monitorTimer =
         Timer.periodic(_monitorInterval, (_) => _checkHardwareUsage());
     logger.info(
@@ -151,9 +153,117 @@ class HardwareMonitorService {
     }
   }
 
+  Future<void> _reportHardwareSpecs() async {
+    if (_hasReportedSpecs) return;
+
+    try {
+      final totalRam = await _getTotalRAM();
+      final screenInfo = await _getScreenInfo();
+
+      logger.info('Hardware specs - '
+          'Total RAM: ${(totalRam / 1024).toStringAsFixed(2)}GB, '
+          'Screen: ${screenInfo.width}x${screenInfo.height} '
+          '(${screenInfo.connected ? "connected" : "disconnected"})');
+
+      // Send hardware specs as a separate metric event
+      MetricService().sendEvent(
+        'hardware_specs',
+        _bluetoothService.getDeviceId(),
+        doubleData: [
+          totalRam,
+          screenInfo.width,
+          screenInfo.height,
+          screenInfo.connected ? 1.0 : 0.0,
+        ],
+      );
+
+      _hasReportedSpecs = true;
+    } catch (e) {
+      logger.severe('Error reporting hardware specs: $e');
+    }
+  }
+
+  Future<double> _getTotalRAM() async {
+    try {
+      final ProcessResult result = await Process.run('free', ['-m']);
+      final lines = result.stdout.toString().split('\n');
+
+      for (var line in lines) {
+        if (line.startsWith('Mem:')) {
+          final parts =
+              line.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+          if (parts.length >= 2) {
+            return double.parse(parts[1]); // Returns total RAM in MB
+          }
+        }
+      }
+      return 0.0;
+    } catch (e) {
+      logger.warning('Error getting total RAM: $e');
+      return 0.0;
+    }
+  }
+
+  Future<ScreenInfo> _getScreenInfo() async {
+    try {
+      final result = await Process.run('xrandr', ['--current']);
+      if (result.exitCode == 0) {
+        final output = result.stdout.toString();
+        final lines = output.split('\n');
+
+        for (final line in lines) {
+          // Look for connected HDMI output
+          if (line.contains('HDMI') && line.contains(' connected ')) {
+            // Parse current resolution
+            final match = RegExp(r'(\d+)x(\d+)').firstMatch(line);
+            if (match != null) {
+              return ScreenInfo(
+                width: double.parse(match.group(1)!),
+                height: double.parse(match.group(2)!),
+                connected: true,
+              );
+            }
+          }
+        }
+
+        // If no HDMI display found, look for any connected display
+        for (final line in lines) {
+          if (line.contains(' connected ')) {
+            final match = RegExp(r'(\d+)x(\d+)').firstMatch(line);
+            if (match != null) {
+              return ScreenInfo(
+                width: double.parse(match.group(1)!),
+                height: double.parse(match.group(2)!),
+                connected: true,
+              );
+            }
+          }
+        }
+      }
+
+      // Return default values if no display info found
+      return ScreenInfo(width: 0, height: 0, connected: false);
+    } catch (e) {
+      logger.warning('Error getting screen information: $e');
+      return ScreenInfo(width: 0, height: 0, connected: false);
+    }
+  }
+
   void dispose() {
     _monitorTimer?.cancel();
     _monitorTimer = null;
     logger.info('Hardware monitoring stopped');
   }
+}
+
+class ScreenInfo {
+  final double width;
+  final double height;
+  final bool connected;
+
+  ScreenInfo({
+    required this.width,
+    required this.height,
+    required this.connected,
+  });
 }
