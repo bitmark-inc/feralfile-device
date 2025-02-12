@@ -1,10 +1,10 @@
 import 'package:feralfile/services/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+
 import '../cubits/ble_connection_cubit.dart';
 import '../cubits/ble_connection_state.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -12,166 +12,111 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Left panel
-              Expanded(
-                flex: 2,
-                child: Container(
-                  color: Colors.black,
-                  padding: const EdgeInsets.all(80),
-                  child: Column(
+              BlocBuilder<BLEConnectionCubit, BLEConnectionState>(
+                builder: (context, state) {
+                  String instructionText = '';
+                  bool showLogInfo = false;
+                  switch (state.status) {
+                    case BLEConnectionStatus.initial:
+                      instructionText = '';
+                    case BLEConnectionStatus.connecting:
+                      instructionText = 'Received Wi-Fi credentials.\n'
+                          'Connecting to network "${state.ssid}"...';
+                    case BLEConnectionStatus.connected:
+                      instructionText = 'Connected successfully!\n'
+                          'Launching display interface...';
+                      showLogInfo = true;
+                    case BLEConnectionStatus.failed:
+                      instructionText =
+                          'Failed to connect to network "${state.ssid}".\n\n'
+                          'Please check your Wi-Fi credentials and try again.\n'
+                          'Make sure the network is available and within range.';
+                  }
+
+                  return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SvgPicture.asset(
-                        'assets/images/ff-logo.svg',
-                        height: 60,
-                      ),
-                      const SizedBox(height: 120),
-                      const Text(
-                        'Display exhibitions\nand your collection\nto any screen',
-                        style: TextStyle(
-                          fontFamily: 'PPMori',
-                          fontSize: 72,
-                          fontWeight: FontWeight.w400,
-                          height: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 100),
-                      BlocBuilder<BLEConnectionCubit, BLEConnectionState>(
-                        builder: (context, state) {
-                          String instructionText = '';
-                          bool showLogInfo = false;
-
-                          switch (state.status) {
-                            case BLEConnectionStatus.initial:
-                              instructionText =
-                                  'Open the Feral File app, go to the Profile tab,\n'
-                                  'and select Wi-Fi. Wait until it finds a\n'
-                                  'Feral File Display device and tap to connect.';
-                            case BLEConnectionStatus.connecting:
-                              instructionText = 'Received Wi-Fi credentials.\n'
-                                  'Connecting to network "${state.ssid}"...';
-                            case BLEConnectionStatus.connected:
-                              instructionText = 'Connected successfully!\n'
-                                  'Launching display interface...';
-                              showLogInfo = true;
-                            case BLEConnectionStatus.failed:
-                              instructionText =
-                                  'Failed to connect to network "${state.ssid}".\n\n'
-                                  'Please check your Wi-Fi credentials and try again.\n'
-                                  'Make sure the network is available and within range.';
-                          }
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Feral File Display',
+                      if (state.isProcessing) ...[
+                        const SizedBox(height: 20),
+                        const CircularProgressIndicator(),
+                      ],
+                      // Right panel instruction text moved here
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              instructionText,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: 'PPMori',
+                                fontSize: 42,
+                                color: Colors.grey[300],
+                                height: 1.4,
+                              ),
+                            ),
+                            if (state.status ==
+                                BLEConnectionStatus.initial) ...[
+                              const SizedBox(height: 60),
+                              Container(
+                                padding: const EdgeInsets.all(40),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: QrImageView(
+                                  data:
+                                      'feralfile://device_connect/${state.deviceId}',
+                                  version: QrVersions.auto,
+                                  size: 600,
+                                  backgroundColor: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              Text(
+                                'Device ID: ${state.deviceId}',
                                 style: TextStyle(
                                   fontFamily: 'PPMori',
-                                  fontSize: 28,
-                                  color: Colors.grey,
+                                  fontSize: 24,
+                                  color: Colors.grey[500],
                                 ),
+                                textAlign: TextAlign.center,
                               ),
-                              if (state.isProcessing) ...[
-                                const SizedBox(height: 20),
-                                const CircularProgressIndicator(),
-                              ],
-                              // Right panel instruction text moved here
-                              Expanded(
-                                flex: 3,
-                                child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        instructionText,
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontFamily: 'PPMori',
-                                          fontSize: 42,
-                                          color: Colors.grey[300],
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                      if (state.status ==
-                                          BLEConnectionStatus.initial) ...[
-                                        const SizedBox(height: 60),
-                                        Container(
-                                          padding: const EdgeInsets.all(40),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(20),
-                                          ),
-                                          child: QrImageView(
-                                            data:
-                                                'feralfile://device_connect/${state.deviceId}',
-                                            version: QrVersions.auto,
-                                            size: 600,
-                                            backgroundColor: Colors.white,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 40),
-                                        Text(
-                                          'Scan this QR code with the\nFeral File mobile app to connect',
-                                          style: TextStyle(
-                                            fontFamily: 'PPMori',
-                                            fontSize: 28,
-                                            color: Colors.grey[300],
-                                            height: 1.5,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 20),
-                                        Text(
-                                          'Device ID: ${state.deviceId}',
-                                          style: TextStyle(
-                                            fontFamily: 'PPMori',
-                                            fontSize: 24,
-                                            color: Colors.grey[500],
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const Spacer(),
-                              if (showLogInfo) ...[
-                                const Divider(color: Colors.grey),
-                                const SizedBox(height: 20),
-                                Text(
-                                  'To access device logs, visit:',
-                                  style: TextStyle(
-                                    fontFamily: 'PPMori',
-                                    fontSize: 16,
-                                    color: Colors.grey[400],
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'http://${state.localIp}:8080/logs.html',
-                                  style: const TextStyle(
-                                    fontFamily: 'PPMori',
-                                    fontSize: 20,
-                                    color: Colors.blue,
-                                  ),
-                                ),
-                              ],
                             ],
-                          );
-                        },
+                          ],
+                        ),
                       ),
+                      if (showLogInfo) ...[
+                        const Divider(color: Colors.grey),
+                        const SizedBox(height: 20),
+                        Text(
+                          'To access device logs, visit:',
+                          style: TextStyle(
+                            fontFamily: 'PPMori',
+                            fontSize: 16,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'http://${state.localIp}:8080/logs.html',
+                          style: const TextStyle(
+                            fontFamily: 'PPMori',
+                            fontSize: 20,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ],
                     ],
-                  ),
-                ),
+                  );
+                },
               ),
-              // Right panel remains the same
             ],
           ),
           // Log output overlay in bottom left
