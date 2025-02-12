@@ -8,6 +8,10 @@ class Environment {
 
   static String get appVersion => dotenv.env['APP_VERSION'] ?? 'unknown';
 
+  static String get metricsURL => dotenv.env['METRICS_URL'] ?? '';
+
+  static String get metricsApiKey => dotenv.env['METRICS_API_KEY'] ?? '';
+
   static Future<void> load() async {
     try {
       await dotenv.load(fileName: ".env");

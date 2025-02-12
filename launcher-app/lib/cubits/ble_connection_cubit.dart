@@ -15,7 +15,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
   BLEConnectionCubit() : super(BLEConnectionState());
 
   Future<String> _getDeviceName() async {
-    return _bluetoothService.generateDeviceId();
+    return _bluetoothService.getDeviceId();
   }
 
   Future<void> initialize() async {
