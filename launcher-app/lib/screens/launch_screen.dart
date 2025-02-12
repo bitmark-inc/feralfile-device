@@ -51,6 +51,9 @@ class _LaunchScreenState extends State<LaunchScreen>
         await startLogServer();
         logger.info('Starting WebSocket server...');
         await WebSocketService().initServer();
+
+        logger.info('Starting hardware monitoring...');
+        HardwareMonitorService().startMonitoring();
       }
 
       // Navigate to home screen

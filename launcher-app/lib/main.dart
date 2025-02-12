@@ -18,12 +18,14 @@ void main() async {
 
   await Environment.load();
 
-  final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit()..startListening();
+  final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit()
+    ..startListening();
 
   // Listen for SIGTERM and cleanup
   ProcessSignal.sigterm.watch().listen((_) async {
     logger.info('[App] Received SIGTERM');
     await bleConnectionCubit.close();
+    HardwareMonitorService().dispose();
     logger.info('[App] Cleanup complete. Exiting...');
     exit(0);
   });
