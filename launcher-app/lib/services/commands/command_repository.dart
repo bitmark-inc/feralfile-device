@@ -38,7 +38,7 @@ class CommandRepository {
     _handlers['sendLog'] = SendLogHandler();
     _handlers['getVersion'] = VersionHandler();
     _handlers['updateOrientation'] = UpdateOrientationHandler();
-    _handlers['deviceInfo'] = DeviceInfoHandler();
+    _handlers['getBluetoothDeviceStatus'] = DeviceStatusHandler();
   }
 
   Future<void> executeCommand(String command, String data,

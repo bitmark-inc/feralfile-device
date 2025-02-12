@@ -32,7 +32,7 @@ class DeviceInfo {
   }
 }
 
-class DeviceInfoHandler implements CommandHandler {
+class DeviceStatusHandler implements CommandHandler {
   String _loadVersion() {
     return Environment.appVersion;
   }

@@ -43,6 +43,7 @@ class HomeScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Spacer(),
                         if (state.isProcessing) ...[
                           const SizedBox(height: 20),
                           const CircularProgressIndicator(),
@@ -114,6 +115,7 @@ class HomeScreen extends StatelessWidget {
                             ),
                           ),
                         ],
+                        Spacer(),
                       ],
                     ),
                   );
