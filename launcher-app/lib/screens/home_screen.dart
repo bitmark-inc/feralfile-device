@@ -39,81 +39,83 @@ class HomeScreen extends StatelessWidget {
                           'Make sure the network is available and within range.';
                   }
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (state.isProcessing) ...[
-                        const SizedBox(height: 20),
-                        const CircularProgressIndicator(),
-                      ],
-                      // Right panel instruction text moved here
-                      Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              instructionText,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontFamily: 'PPMori',
-                                fontSize: 42,
-                                color: Colors.grey[300],
-                                height: 1.4,
-                              ),
-                            ),
-                            if (state.status ==
-                                BLEConnectionStatus.initial) ...[
-                              const SizedBox(height: 60),
-                              Container(
-                                padding: const EdgeInsets.all(40),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: QrImageView(
-                                  data:
-                                      'feralfile://device_connect/${state.deviceId}',
-                                  version: QrVersions.auto,
-                                  size: 600,
-                                  backgroundColor: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
+                  return Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (state.isProcessing) ...[
+                          const SizedBox(height: 20),
+                          const CircularProgressIndicator(),
+                        ],
+                        // Right panel instruction text moved here
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
                               Text(
-                                'Device ID: ${state.deviceId}',
+                                instructionText,
+                                textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontFamily: 'PPMori',
-                                  fontSize: 24,
-                                  color: Colors.grey[500],
+                                  fontSize: 42,
+                                  color: Colors.grey[300],
+                                  height: 1.4,
                                 ),
-                                textAlign: TextAlign.center,
                               ),
+                              if (state.status ==
+                                  BLEConnectionStatus.initial) ...[
+                                const SizedBox(height: 60),
+                                Container(
+                                  padding: const EdgeInsets.all(40),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: QrImageView(
+                                    data:
+                                        'feralfile://device_connect/${state.deviceId}',
+                                    version: QrVersions.auto,
+                                    size: 600,
+                                    backgroundColor: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                Text(
+                                  'Device ID: ${state.deviceId}',
+                                  style: TextStyle(
+                                    fontFamily: 'PPMori',
+                                    fontSize: 24,
+                                    color: Colors.grey[500],
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                             ],
-                          ],
-                        ),
-                      ),
-                      if (showLogInfo) ...[
-                        const Divider(color: Colors.grey),
-                        const SizedBox(height: 20),
-                        Text(
-                          'To access device logs, visit:',
-                          style: TextStyle(
-                            fontFamily: 'PPMori',
-                            fontSize: 16,
-                            color: Colors.grey[400],
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'http://${state.localIp}:8080/logs.html',
-                          style: const TextStyle(
-                            fontFamily: 'PPMori',
-                            fontSize: 20,
-                            color: Colors.blue,
+                        if (showLogInfo) ...[
+                          const Divider(color: Colors.grey),
+                          const SizedBox(height: 20),
+                          Text(
+                            'To access device logs, visit:',
+                            style: TextStyle(
+                              fontFamily: 'PPMori',
+                              fontSize: 16,
+                              color: Colors.grey[400],
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'http://${state.localIp}:8080/logs.html',
+                            style: const TextStyle(
+                              fontFamily: 'PPMori',
+                              fontSize: 20,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   );
                 },
               ),

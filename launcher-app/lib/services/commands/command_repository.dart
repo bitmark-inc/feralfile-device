@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:feralfile/services/commands/device_info_handler.dart';
 import 'package:feralfile/services/commands/send_log_handler.dart';
 import 'package:feralfile/services/commands/update_orientation_handler.dart';
 import 'package:feralfile/services/commands/version_handler.dart';
@@ -37,6 +38,7 @@ class CommandRepository {
     _handlers['sendLog'] = SendLogHandler();
     _handlers['getVersion'] = VersionHandler();
     _handlers['updateOrientation'] = UpdateOrientationHandler();
+    _handlers['deviceInfo'] = DeviceInfoHandler();
   }
 
   Future<void> executeCommand(String command, String data,

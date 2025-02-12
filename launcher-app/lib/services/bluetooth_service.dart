@@ -101,6 +101,11 @@ class BluetoothService {
 
       logger.info('Received command data: $strings');
 
+      if (strings.length < 2) {
+        logger.severe('Invalid command data: $strings');
+        return;
+      }
+
       // First string is always the command
       final command = strings[0];
       // Second string is the data
