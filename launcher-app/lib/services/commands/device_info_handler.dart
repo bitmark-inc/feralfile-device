@@ -28,6 +28,7 @@ class DeviceInfo {
       'ipAddress': ipAddress,
       'connectedWifi': connectedWifi,
       'screenRotation': screenRotation.name,
+      'isConnectedToWifi': isConnectedToWifi,
     };
   }
 }
