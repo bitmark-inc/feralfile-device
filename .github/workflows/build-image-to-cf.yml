@@ -36,6 +36,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       SUPPORT_URL: ${{ secrets.SUPPORT_URL }}
       SUPPORT_API_KEY: ${{ secrets.SUPPORT_API_KEY }}
+      METRICS_URL: ${{ secrets.METRICS_URL }}
+      METRICS_API_KEY: ${{ secrets.METRICS_API_KEY }}
       APT_GPG_SIGN_KEY_PASSPHRASE: ${{ secrets.APT_GPG_SIGN_KEY_PASSPHRASE }}
       APT_GPG_SIGN_KEY_ID: ${{ secrets.APT_GPG_SIGN_KEY_ID }}
 
