@@ -104,37 +104,55 @@ class BluetoothService {
       // Release the FFI data
       calloc.free(data);
 
-      final (chunkStrings, chunkCommand) =
-          VarintParser.parseToStringArray(dataCopy, 0, maxStrings: 3);
+      final chunkInfo = _parseChunkInfo(dataCopy);
+      _validateChunkIndices(chunkInfo);
 
-      // Parse chunk information
-      final chunkIndex = int.parse(chunkStrings[0]);
-      final totalChunks = int.parse(chunkStrings[1]);
-      final ackReplyId = chunkStrings[2];
+      logger.info('Processing chunk ${chunkInfo.index} of ${chunkInfo.total}');
 
-      if (chunkIndex < 0 || totalChunks <= 0 || chunkIndex >= totalChunks) {
-        throw Exception(
-            'Invalid chunk indices: index=$chunkIndex, total=$totalChunks');
-      }
-
-      logger.info('Processing chunk $chunkIndex of $totalChunks');
-
-      // Initialize chunk storage
-      _chunkCommands[ackReplyId] ??= {};
-      _chunkCommands[ackReplyId]![chunkIndex] = chunkCommand;
-
-      // Notify back for this chunk
-      logger.info('Notifying back for chunk $chunkIndex');
-      _instance.notify(ackReplyId, {'success': true, 'chunkIndex': chunkIndex});
+      _storeChunk(chunkInfo);
+      _sendChunkAcknowledgement(chunkInfo);
 
       // Check if we have all chunks
-      if (_chunkCommands[ackReplyId]!.length == totalChunks) {
-        _processCompleteCommand(ackReplyId, totalChunks);
+      if (_chunkCommands[chunkInfo.ackReplyId]!.length == chunkInfo.total) {
+        _processCompleteCommand(chunkInfo.ackReplyId, chunkInfo.total);
       }
     } catch (e, stackTrace) {
       logger.severe('Error parsing command data: $e');
       logger.severe('Stack trace: $stackTrace');
     }
+  }
+
+  static ({int index, int total, String ackReplyId, List<int> command})
+      _parseChunkInfo(List<int> data) {
+    final (chunkStrings, chunkCommand) =
+        VarintParser.parseToStringArray(data, 0, maxStrings: 3);
+    return (
+      index: int.parse(chunkStrings[0]),
+      total: int.parse(chunkStrings[1]),
+      ackReplyId: chunkStrings[2],
+      command: chunkCommand
+    );
+  }
+
+  static void _validateChunkIndices(
+      ({int index, int total, String ackReplyId, List<int> command}) info) {
+    if (info.index < 0 || info.total <= 0 || info.index >= info.total) {
+      throw Exception(
+          'Invalid chunk indices: index=${info.index}, total=${info.total}');
+    }
+  }
+
+  static void _storeChunk(
+      ({int index, int total, String ackReplyId, List<int> command}) info) {
+    _chunkCommands[info.ackReplyId] ??= {};
+    _chunkCommands[info.ackReplyId]![info.index] = info.command;
+  }
+
+  static void _sendChunkAcknowledgement(
+      ({int index, int total, String ackReplyId, List<int> command}) info) {
+    logger.info('Notifying back for chunk ${info.index}');
+    _instance
+        .notify(info.ackReplyId, {'success': true, 'chunkIndex': info.index});
   }
 
   static void _processCompleteCommand(String ackReplyId, int totalChunks) {
