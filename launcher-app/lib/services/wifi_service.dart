@@ -22,7 +22,7 @@ class WifiService {
       // Retry mechanism to allow Wi-Fi scan to update, up to 10s
       List<String> availableSSIDs = [];
       for (int i = 0; i < 5; i++) {
-        await Future.delayed(Duration(seconds: 2));
+        await Future.delayed(const Duration(seconds: 2));
 
         ProcessResult scanResult = await Process.run(
           'nmcli',
@@ -56,11 +56,13 @@ class WifiService {
         runInShell: true,
       );
       if (initialConnect.exitCode == 0) {
-        logger.info('Connected to Wi-Fi using existing credentials: ${credentials.ssid}');
+        logger.info(
+            'Connected to Wi-Fi using existing credentials: ${credentials.ssid}');
         return true;
       }
 
-      logger.info('Failed to connect with existing credentials, trying new ones...');
+      logger.info(
+          'Failed to connect with existing credentials, trying new ones...');
 
       // Delete existing connection profile if the first attempt fails
       await Process.run('nmcli', ['connection', 'delete', credentials.ssid]);
@@ -68,15 +70,24 @@ class WifiService {
       // Attempt to connect with new credentials
       ProcessResult newConnect = await Process.run(
         'nmcli',
-        ['dev', 'wifi', 'connect', credentials.ssid, 'password', credentials.password],
+        [
+          'dev',
+          'wifi',
+          'connect',
+          credentials.ssid,
+          'password',
+          credentials.password
+        ],
         runInShell: true,
       );
       if (newConnect.exitCode == 0) {
-        logger.info('Connected to Wi-Fi using new credentials: ${credentials.ssid}');
+        logger.info(
+            'Connected to Wi-Fi using new credentials: ${credentials.ssid}');
         await _saveCredentials(credentials);
         return true;
       } else {
-        logger.info('Failed to connect with new credentials: ${newConnect.stderr}');
+        logger.info(
+            'Failed to connect with new credentials: ${newConnect.stderr}');
         return false;
       }
     } catch (e) {

@@ -13,7 +13,7 @@ final Logger logger = Logger('FeralFileApp');
 late File _logFile;
 HttpServer? _logServer;
 final _logBuffer = <String>[];
-final int _maxBufferSize = 1000; // Keep last 1000 log entries
+const int _maxBufferSize = 1000; // Keep last 1000 log entries
 
 String get logFilePath => _logFile.path;
 

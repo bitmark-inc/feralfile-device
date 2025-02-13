@@ -11,6 +11,7 @@ import 'cursor_handler.dart';
 import 'javascript_handler.dart';
 import 'keyboard_handler.dart';
 import 'screen_rotation_handler.dart';
+import 'set_time_handler.dart';
 
 abstract class CommandHandler {
   Future<void> execute(
@@ -39,6 +40,7 @@ class CommandRepository {
     _handlers['getVersion'] = VersionHandler();
     _handlers['updateOrientation'] = UpdateOrientationHandler();
     _handlers['getBluetoothDeviceStatus'] = DeviceStatusHandler();
+    _handlers['setTimezone'] = SetTimezoneHandler();
   }
 
   Future<void> executeCommand(String command, String data,
