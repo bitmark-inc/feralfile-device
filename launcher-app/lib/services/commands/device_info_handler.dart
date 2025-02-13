@@ -1,4 +1,5 @@
 import 'package:feralfile/environment.dart';
+import 'package:feralfile/models/app_config.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/config_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
@@ -12,6 +13,7 @@ class DeviceInfo {
   final String? ipAddress;
   final String? connectedWifi;
   final ScreenRotation screenRotation;
+  final ArtFraming? artFraming;
   final bool isConnectedToWifi;
 
   DeviceInfo({
@@ -20,6 +22,7 @@ class DeviceInfo {
     this.connectedWifi,
     this.isConnectedToWifi = false,
     required this.screenRotation,
+    this.artFraming,
   });
 
   Map<String, dynamic> toJson() {
@@ -29,6 +32,7 @@ class DeviceInfo {
       'connectedWifi': connectedWifi,
       'screenRotation': screenRotation.name,
       'isConnectedToWifi': isConnectedToWifi,
+      'artFraming': artFraming?.value,
     };
   }
 }
