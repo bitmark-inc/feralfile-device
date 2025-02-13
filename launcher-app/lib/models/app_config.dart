@@ -23,8 +23,8 @@ class AppConfig {
           : null,
       screenRotation: data['screenRotation'],
       deviceName: data['deviceName'] ?? '',
-      artFraming: data['artFraming'] != null
-          ? ArtFraming.fromValue(data['artFraming'] as int)
+      artFraming: int.tryParse(data['artFraming'] ?? '') != null
+          ? ArtFraming.fromValue(int.parse(data['artFraming']))
           : null,
     );
   }
@@ -36,7 +36,7 @@ class AppConfig {
           : null,
       'screenRotation': screenRotation,
       'deviceName': deviceName,
-      'artFraming': artFraming?.value,
+      'artFraming': artFraming?.value.toString(),
     });
   }
 
