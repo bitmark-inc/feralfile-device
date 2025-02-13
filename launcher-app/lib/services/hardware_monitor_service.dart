@@ -7,7 +7,7 @@ class HardwareMonitorService {
   static final HardwareMonitorService _instance =
       HardwareMonitorService._internal();
   Timer? _monitorTimer;
-  static const _monitorInterval = Duration(minutes: 2);
+  static const _monitorInterval = Duration(minutes: 1);
   bool _hasReportedSpecs = false;
 
   factory HardwareMonitorService() => _instance;
