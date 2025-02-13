@@ -75,8 +75,8 @@ class WebSocketService {
       for (var listener in _messageListeners) {
         listener(data);
       }
-    } catch (e) {
-      logger.warning('Error handling message: $e');
+    } catch (e, s) {
+      logger.warning('Error handling message: $e \n stack: $s');
     }
   }
 

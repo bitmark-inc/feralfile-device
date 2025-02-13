@@ -57,8 +57,8 @@ class SetTimezoneHandler implements CommandHandler {
         interface: 'org.freedesktop.DBus.Properties',
         name: 'Get',
         values: [
-          DBusString('org.freedesktop.timedate1'),
-          DBusString('Timezone'),
+          const DBusString('org.freedesktop.timedate1'),
+          const DBusString('Timezone'),
         ],
       );
 
@@ -97,7 +97,10 @@ class SetTimezoneHandler implements CommandHandler {
           path: path,
           interface: 'org.freedesktop.timedate1',
           name: 'SetTimezone',
-          values: [DBusString(timezone), DBusBoolean(false)],
+          values: <DBusValue>[
+            DBusString(timezone),
+            const DBusBoolean(false),
+          ],
         );
 
         try {

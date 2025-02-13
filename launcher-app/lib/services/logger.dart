@@ -162,9 +162,9 @@ Future<void> sendLog(String? userID, String? title) async {
     }
 
     const deviceID = 'unknown';
-    const deviceName = 'FF Device';
-    final ticketTitle = title ??
-        '${deviceName}_${deviceID}_${DateTime.now().toIso8601String()}';
+    const deviceName = 'FF-X1 Pilot';
+    final ticketTitle =
+        "${deviceName}_${title ?? '${deviceID}_${DateTime.now().toIso8601String()}'}";
 
     var submitMessage = '';
     submitMessage += '**Version:** ${Environment.appVersion}\n';
