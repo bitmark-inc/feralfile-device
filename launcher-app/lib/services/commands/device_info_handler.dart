@@ -53,12 +53,14 @@ class DeviceStatusHandler implements CommandHandler {
     final connectedWifi = config?.wifiCredentials?.ssid;
     final screenRotation = ScreenRotation.fromString(
         config?.screenRotation ?? ScreenRotation.normal.name);
+    final artFraming = config?.artFraming;
     final deviceInfo = DeviceInfo(
       version: version,
       ipAddress: ipAddress,
       connectedWifi: connectedWifi,
       screenRotation: screenRotation,
       isConnectedToWifi: isConnectedToWifi,
+      artFraming: artFraming,
     );
 
     if (replyId == null) {
