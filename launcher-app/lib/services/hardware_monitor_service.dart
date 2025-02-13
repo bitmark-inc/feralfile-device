@@ -2,14 +2,12 @@ import 'dart:async';
 import 'dart:io';
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/metric_service.dart';
-import 'package:feralfile/services/bluetooth_service.dart';
 
 class HardwareMonitorService {
   static final HardwareMonitorService _instance =
       HardwareMonitorService._internal();
   Timer? _monitorTimer;
   static const _monitorInterval = Duration(minutes: 2);
-  final BluetoothService _bluetoothService = BluetoothService();
   bool _hasReportedSpecs = false;
 
   factory HardwareMonitorService() => _instance;
@@ -44,7 +42,6 @@ class HardwareMonitorService {
       // Send metrics
       MetricService().sendEvent(
         'hardware_usage',
-        _bluetoothService.getDeviceId(),
         doubleData: [
           cpuUsage,
           ramUsage,
@@ -178,7 +175,6 @@ class HardwareMonitorService {
       // Send hardware specs as a separate metric event
       MetricService().sendEvent(
         'hardware_specs',
-        _bluetoothService.getDeviceId(),
         doubleData: [
           totalRam,
           screenInfo.width,

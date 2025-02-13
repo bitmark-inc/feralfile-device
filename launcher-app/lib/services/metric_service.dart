@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../environment.dart';
 import 'logger.dart';
+import 'bluetooth_service.dart';
 
 class MetricEvent {
   final String eventName;
@@ -40,6 +41,7 @@ class MetricService {
   final List<MetricEvent> _eventCache = [];
   Timer? _flushTimer;
   static const _flushInterval = Duration(minutes: 1);
+  final BluetoothService _bluetoothService = BluetoothService();
 
   factory MetricService() => _instance;
 
@@ -57,8 +59,8 @@ class MetricService {
   }
 
   void sendEvent(
-    String eventName,
-    String deviceId, {
+    String eventName, {
+    String? deviceId,
     List<String>? stringData,
     List<double>? doubleData,
   }) {
@@ -68,7 +70,7 @@ class MetricService {
 
     final event = MetricEvent(
       eventName: eventName,
-      deviceId: deviceId,
+      deviceId: deviceId ?? _bluetoothService.getDeviceId(),
       stringData: strings,
       doubleData: doubles,
     );
@@ -110,6 +112,14 @@ class MetricService {
     } catch (e) {
       logger.warning('Error flushing metrics: $e');
     }
+  }
+
+  void trackError(String errorMessage) {
+    sendEvent(
+      'app_error',
+      stringData: [errorMessage],
+      doubleData: [1.0],
+    );
   }
 
   void dispose() {

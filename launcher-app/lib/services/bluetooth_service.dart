@@ -115,10 +115,8 @@ class BluetoothService {
       logger.info('Parsed command: "$command" with data: "$commandData"');
 
       // Send metric with cached device ID
-      final deviceId = BluetoothService().getDeviceId();
       MetricService().sendEvent(
         'command_received',
-        deviceId,
         stringData: [command, commandData],
       );
 
