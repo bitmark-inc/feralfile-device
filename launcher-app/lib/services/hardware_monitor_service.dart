@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/metric_service.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
-import 'package:feralfile/services/command_service.dart';
 
 class HardwareMonitorService {
   static final HardwareMonitorService _instance =
@@ -11,14 +10,11 @@ class HardwareMonitorService {
   Timer? _monitorTimer;
   static const _monitorInterval = Duration(minutes: 2);
   final BluetoothService _bluetoothService = BluetoothService();
-  final CommandService _commandService = CommandService();
   bool _hasReportedSpecs = false;
 
   factory HardwareMonitorService() => _instance;
 
-  HardwareMonitorService._internal() {
-    _commandService.initialize(_bluetoothService);
-  }
+  HardwareMonitorService._internal();
 
   void startMonitoring() {
     _monitorTimer?.cancel();
