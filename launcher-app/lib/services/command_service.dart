@@ -10,7 +10,7 @@ class CommandService {
   factory CommandService() => _instance;
 
   final _commandController = StreamController<CommandData>.broadcast();
-  late final CommandRepository _commandRepository;
+  CommandRepository? _commandRepository;
 
   Stream<CommandData> get commandStream => _commandController.stream;
 
@@ -19,7 +19,7 @@ class CommandService {
   }
 
   void initialize(BluetoothService bluetoothService) {
-    _commandRepository = CommandRepository(bluetoothService);
+    _commandRepository ??= CommandRepository(bluetoothService);
   }
 
   void _processCommand(CommandData cmdData) async {
@@ -30,8 +30,8 @@ class CommandService {
     }
 
     try {
-      await _commandRepository.executeCommand(
-          cmdData.command, cmdData.data, cmdData.replyId);
+      await _commandRepository!
+          .executeCommand(cmdData.command, cmdData.data, cmdData.replyId);
       logger.info('Command processed successfully: ${cmdData.command}');
     } catch (e) {
       logger.severe('Error processing command ${cmdData.command}: $e');

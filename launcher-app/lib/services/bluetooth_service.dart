@@ -14,6 +14,9 @@ import '../utils/varint_parser.dart';
 import '../services/metric_service.dart';
 
 class BluetoothService {
+  static final BluetoothService _instance = BluetoothService._internal();
+  factory BluetoothService() => _instance;
+
   final BluetoothBindings _bindings = BluetoothBindings();
   final CommandService _commandService = CommandService();
   static void Function(WifiCredentials)? _onCredentialsReceived;
@@ -25,7 +28,7 @@ class BluetoothService {
 
   String? _cachedDeviceId;
 
-  BluetoothService() {
+  BluetoothService._internal() {
     _commandService.initialize(this);
   }
 
