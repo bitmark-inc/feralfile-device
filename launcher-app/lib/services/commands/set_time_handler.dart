@@ -47,12 +47,47 @@ class SetTimeHandler implements CommandHandler {
 }
 
 class SetTimezoneHandler implements CommandHandler {
+  Future<Map<String, dynamic>> _verifyTimezone(
+      DBusClient client, String expectedTimezone) async {
+    try {
+      final path = DBusObjectPath('/org/freedesktop/timedate1');
+      final result = await client.callMethod(
+        destination: 'org.freedesktop.timedate1',
+        path: path,
+        interface: 'org.freedesktop.DBus.Properties',
+        name: 'Get',
+        values: [
+          DBusString('org.freedesktop.timedate1'),
+          DBusString('Timezone'),
+        ],
+      );
+
+      final currentTimezone =
+          (result.values.first as DBusVariant).value.asString();
+      final now = DateTime.now();
+      final offset = now.timeZoneOffset.inHours;
+      final currentOffset = offset >= 0 ? '+$offset' : '$offset';
+
+      return {
+        'success': currentTimezone == expectedTimezone,
+        'current_timezone': currentTimezone,
+        'expected_timezone': expectedTimezone,
+        'offset': currentOffset,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Failed to verify timezone: ${e.toString()}'
+      };
+    }
+  }
+
   @override
   Future<void> execute(
       Map<String, dynamic> data, BluetoothService bluetoothService,
       [String? replyId]) async {
     try {
-      final timezone = data['timezone'] as String;
+      final timezone = 'Asia/Ho_Chi_Minh'; //data['timezone'] as String;
       final path = DBusObjectPath('/org/freedesktop/timedate1');
 
       final client = DBusClient.system();
@@ -62,8 +97,16 @@ class SetTimezoneHandler implements CommandHandler {
           path: path,
           interface: 'org.freedesktop.timedate1',
           name: 'SetTimezone',
-          values: [DBusString(timezone)],
+          values: [DBusString(timezone), DBusBoolean(false)],
         );
+
+        try {
+          logger.info('Verifying timezone');
+          final result = await _verifyTimezone(client, timezone);
+          logger.info('Timezone verification result: $result');
+        } catch (e) {
+          logger.severe('Error verifying timezone: $e');
+        }
 
         if (replyId != null) {
           bluetoothService.notify(replyId, {'success': true});
