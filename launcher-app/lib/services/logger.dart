@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:http/http.dart' as http;
 
 import '../environment.dart';
+import '../services/metric_service.dart';
 
 final Logger logger = Logger('FeralFileApp');
 late File _logFile;
@@ -39,6 +40,11 @@ Future<void> setupLogging() async {
     _logBuffer.add(logMessage);
     if (_logBuffer.length > _maxBufferSize) {
       _logBuffer.removeAt(0);
+    }
+
+    // Track warnings and errors as metrics
+    if (record.level == Level.WARNING || record.level == Level.SEVERE) {
+      MetricService().trackError('${record.level.name}: ${record.message}');
     }
   });
 }

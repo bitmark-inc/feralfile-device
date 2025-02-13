@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'dart:io';
+import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'environment.dart';
@@ -18,12 +19,14 @@ void main() async {
 
   await Environment.load();
 
-  final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit()..startListening();
+  final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit()
+    ..startListening();
 
   // Listen for SIGTERM and cleanup
   ProcessSignal.sigterm.watch().listen((_) async {
     logger.info('[App] Received SIGTERM');
     await bleConnectionCubit.close();
+    HardwareMonitorService().dispose();
     logger.info('[App] Cleanup complete. Exiting...');
     exit(0);
   });

@@ -11,8 +11,12 @@ import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
 import '../services/command_service.dart';
 import '../utils/varint_parser.dart';
+import '../services/metric_service.dart';
 
 class BluetoothService {
+  static final BluetoothService _instance = BluetoothService._internal();
+  factory BluetoothService() => _instance;
+
   final BluetoothBindings _bindings = BluetoothBindings();
   final CommandService _commandService = CommandService();
   static void Function(WifiCredentials)? _onCredentialsReceived;
@@ -22,7 +26,9 @@ class BluetoothService {
   late final NativeCallable<ConnectionResultCallbackNative> _setupCallback;
   late final NativeCallable<CommandCallbackNative> _cmdCallback;
 
-  BluetoothService() {
+  String? _cachedDeviceId;
+
+  BluetoothService._internal() {
     _commandService.initialize(this);
   }
 
@@ -105,15 +111,16 @@ class BluetoothService {
       final command = strings[0];
       // Second string is the data
       final commandData = strings[1];
-      // Third string is optional reply_id
-      final replyId = strings.length > 2 ? strings[2] : null;
 
       logger.info('Parsed command: "$command" with data: "$commandData"');
-      if (replyId != null) {
-        logger.info('Reply ID: "$replyId"');
-      }
 
-      CommandService().handleCommand(command, commandData, replyId);
+      // Send metric with cached device ID
+      MetricService().sendEvent(
+        'command_received',
+        stringData: [command, commandData],
+      );
+
+      CommandService().handleCommand(command, commandData);
     } catch (e, stackTrace) {
       logger.severe('Error parsing command data: $e');
       logger.severe('Stack trace: $stackTrace');
@@ -196,9 +203,15 @@ class BluetoothService {
     return macAddress;
   }
 
-  String generateDeviceId() {
+  String getDeviceId() {
+    // Return cached device ID if available
+    if (_cachedDeviceId != null) return _cachedDeviceId!;
+
     final mac = getMacAddress();
-    if (mac == null) return 'FF-X1-000000';
+    if (mac == null) {
+      _cachedDeviceId = 'FF-X1-000000';
+      return _cachedDeviceId!;
+    }
 
     // Generate MD5 hash of MAC address
     final bytes = utf8.encode(mac);
@@ -215,6 +228,7 @@ class BluetoothService {
         .map((charCode) => String.fromCharCode(charCode))
         .join();
 
-    return 'FF-X1-$hashStr';
+    _cachedDeviceId = 'FF-X1-$hashStr';
+    return _cachedDeviceId!;
   }
 }
