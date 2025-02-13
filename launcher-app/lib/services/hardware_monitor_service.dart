@@ -32,18 +32,27 @@ class HardwareMonitorService {
       final gpuUsage = await _getGPUUsage();
       final cpuTemp = await _getCPUTemperature();
       final gpuTemp = await _getGPUTemperature();
+      final isChromiumRunning = await _isChromiumRunning();
 
       logger.info('Hardware usage - CPU: ${cpuUsage.toStringAsFixed(2)}%, '
           'RAM: ${ramUsage.toStringAsFixed(2)}%, '
-          'GPU: ${gpuUsage.toStringAsFixed(2)}%, '
+          'GPU Clock: ${gpuUsage.toStringAsFixed(2)}MHz, '
           'CPU Temp: ${cpuTemp.toStringAsFixed(1)}°C, '
-          'GPU Temp: ${gpuTemp.toStringAsFixed(1)}°C');
+          'GPU Temp: ${gpuTemp.toStringAsFixed(1)}°C, '
+          'Chromium: ${isChromiumRunning ? "running" : "not running"}');
 
       // Send metrics
       MetricService().sendEvent(
         'hardware_usage',
         _bluetoothService.getDeviceId(),
-        doubleData: [cpuUsage, ramUsage, gpuUsage, cpuTemp, gpuTemp],
+        doubleData: [
+          cpuUsage,
+          ramUsage,
+          gpuUsage,
+          cpuTemp,
+          gpuTemp,
+          isChromiumRunning ? 1.0 : 0.0
+        ],
       );
     } catch (e) {
       logger.severe('Error checking hardware usage: $e');
@@ -59,7 +68,7 @@ class HardwareMonitorService {
       for (var line in lines) {
         if (line.contains('%Cpu(s)')) {
           // Extract the idle percentage
-          final idleMatch = RegExp(r'(\d+[.,]\d+)\s*ni').firstMatch(line);
+          final idleMatch = RegExp(r'(\d+[.,]\d+)\s*id').firstMatch(line);
           if (idleMatch != null) {
             final idle = double.parse(idleMatch.group(1)!.replaceAll(',', '.'));
             return 100 - idle; // Convert idle to usage percentage
@@ -98,24 +107,25 @@ class HardwareMonitorService {
 
   Future<double> _getGPUUsage() async {
     try {
-      // For Raspberry Pi, we can check GPU temperature as a proxy for usage
+      // Get GPU clock frequency
       final ProcessResult result = await Process.run(
         'vcgencmd',
-        ['measure_temp'],
+        ['measure_clock', 'v3d'],
       );
 
       if (result.exitCode == 0) {
-        final temp = result.stdout.toString();
-        final match = RegExp(r'temp=(\d+\.\d+)').firstMatch(temp);
+        final output = result.stdout.toString();
+        // Output format is "frequency(1)=XXXXX"
+        final match = RegExp(r'=(\d+)').firstMatch(output);
         if (match != null) {
-          final temperature = double.parse(match.group(1)!);
-          // Convert temperature to a percentage (assuming max temp is 85°C)
-          return (temperature / 85.0) * 100;
+          final clockSpeedHz = double.parse(match.group(1)!);
+          // Convert Hz to MHz
+          return clockSpeedHz / 1000000.0;
         }
       }
       return 0.0;
     } catch (e) {
-      logger.warning('Error getting GPU usage: $e');
+      logger.warning('Error getting GPU clock speed: $e');
       return 0.0;
     }
   }
@@ -246,6 +256,17 @@ class HardwareMonitorService {
     } catch (e) {
       logger.warning('Error getting screen information: $e');
       return ScreenInfo(width: 0, height: 0, connected: false);
+    }
+  }
+
+  Future<bool> _isChromiumRunning() async {
+    try {
+      final ProcessResult result =
+          await Process.run('pgrep', ['-f', 'chromium']);
+      return result.exitCode == 0;
+    } catch (e) {
+      logger.warning('Error checking Chromium status: $e');
+      return false;
     }
   }
 
