@@ -31,7 +31,7 @@ class JavaScriptHandler implements CommandHandler {
             logger.info('Received response: $response');
             logger.info('Sending response to Bluetooth: ${response.message}');
             bluetoothService.notify(replyId, response.message);
-            if (data['command'] == Command.updateArtFraming) {
+            if (requestMessageData.command == Command.updateArtFraming) {
               final artFramingString = data['request']['frameConfig'] as int?;
               if (artFramingString == null) {
                 logger.severe('Invalid art framing value: $artFramingString');
