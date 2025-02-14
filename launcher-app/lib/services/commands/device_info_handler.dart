@@ -4,6 +4,7 @@ import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/config_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/wifi_service.dart';
+import 'package:process_run/stdio.dart';
 
 import '../logger.dart';
 import 'command_repository.dart';
@@ -15,6 +16,7 @@ class DeviceInfo {
   final ScreenRotation screenRotation;
   final ArtFraming? artFraming;
   final bool isConnectedToWifi;
+  final String? timezone;
 
   DeviceInfo({
     required this.version,
@@ -23,6 +25,7 @@ class DeviceInfo {
     this.isConnectedToWifi = false,
     required this.screenRotation,
     this.artFraming,
+    this.timezone,
   });
 
   Map<String, dynamic> toJson() {
@@ -33,6 +36,7 @@ class DeviceInfo {
       'screenRotation': screenRotation.name,
       'isConnectedToWifi': isConnectedToWifi,
       'artFraming': artFraming?.value,
+      'timezone': timezone,
     };
   }
 }
@@ -40,6 +44,24 @@ class DeviceInfo {
 class DeviceStatusHandler implements CommandHandler {
   String _loadVersion() {
     return Environment.appVersion;
+  }
+
+  Future<String> getTimeZone() async {
+    try {
+      ProcessResult result = await Process.run(
+          'timedatectl', ['show', '--property=Timezone', '--value']);
+
+      if (result.exitCode == 0) {
+        String timezone = result.stdout.toString().trim();
+        return timezone;
+      } else {
+        print("Error: ${result.stderr}");
+        return "Unknown";
+      }
+    } catch (e) {
+      print("Failed to get timezone: $e");
+      return "Unknown";
+    }
   }
 
   @override
@@ -54,6 +76,7 @@ class DeviceStatusHandler implements CommandHandler {
     final screenRotation = ScreenRotation.fromString(
         config?.screenRotation ?? ScreenRotation.normal.name);
     final artFraming = config?.artFraming;
+    final timezone = await getTimeZone();
     final deviceInfo = DeviceInfo(
       version: version,
       ipAddress: ipAddress,
@@ -61,6 +84,7 @@ class DeviceStatusHandler implements CommandHandler {
       screenRotation: screenRotation,
       isConnectedToWifi: isConnectedToWifi,
       artFraming: artFraming,
+      timezone: timezone,
     );
 
     if (replyId == null) {
