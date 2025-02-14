@@ -4,11 +4,11 @@ import 'package:process_run/stdio.dart';
 class VersionHelper {
   static Future<String?> getLatestVersion() async {
     try {
+      await updatePackageList();
       ProcessResult result =
           await Process.run('apt-cache', ['policy', 'feralfile-launcher']);
       if (result.exitCode == 0) {
         String output = result.stdout.toString();
-        logger.info('[getLatestVersion] Output: $output');
         RegExp regex = RegExp(r'Candidate:\s([^\s]+)');
         Match? match = regex.firstMatch(output);
         final version = match?.group(1);
@@ -30,7 +30,6 @@ class VersionHelper {
           await Process.run('apt-cache', ['policy', 'feralfile-launcher']);
       if (result.exitCode == 0) {
         String output = result.stdout.toString();
-        logger.info('[getInstalledVersion] Output: $output');
         RegExp regex = RegExp(r'Installed:\s([^\s]+)');
         Match? match = regex.firstMatch(output);
         final version = match?.group(1);
@@ -70,7 +69,7 @@ class VersionHelper {
       print("Installing feralfile-launcher version: $version");
       ProcessResult result = await Process.run(
         'sudo',
-        ['apt-get', 'install', '-y', 'feralfile-launcher=$version'],
+        ['apt-get', 'install', 'feralfile-launcher=$version'],
       );
 
       if (result.exitCode == 0) {
