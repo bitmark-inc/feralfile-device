@@ -4,6 +4,7 @@ import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/config_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/wifi_service.dart';
+import 'package:feralfile/utils/version_helper.dart';
 import 'package:process_run/stdio.dart';
 
 import '../logger.dart';
@@ -17,6 +18,8 @@ class DeviceInfo {
   final ArtFraming? artFraming;
   final bool isConnectedToWifi;
   final String? timezone;
+  final String? installedVersion;
+  final String? latestVersion;
 
   DeviceInfo({
     required this.version,
@@ -26,6 +29,8 @@ class DeviceInfo {
     required this.screenRotation,
     this.artFraming,
     this.timezone,
+    this.installedVersion,
+    this.latestVersion,
   });
 
   Map<String, dynamic> toJson() {
@@ -37,6 +42,8 @@ class DeviceInfo {
       'isConnectedToWifi': isConnectedToWifi,
       'artFraming': artFraming?.value,
       'timezone': timezone,
+      'installedVersion': installedVersion,
+      'latestVersion': latestVersion,
     };
   }
 }
@@ -77,6 +84,8 @@ class DeviceStatusHandler implements CommandHandler {
         config?.screenRotation ?? ScreenRotation.normal.name);
     final artFraming = config?.artFraming;
     final timezone = await getTimeZone();
+    final installedVersion = await VersionHelper.getInstalledVersion();
+    final latestVersion = await VersionHelper.getLatestVersion();
     final deviceInfo = DeviceInfo(
       version: version,
       ipAddress: ipAddress,
@@ -85,6 +94,8 @@ class DeviceStatusHandler implements CommandHandler {
       isConnectedToWifi: isConnectedToWifi,
       artFraming: artFraming,
       timezone: timezone,
+      installedVersion: installedVersion,
+      latestVersion: latestVersion,
     );
 
     if (replyId == null) {

@@ -41,6 +41,7 @@ class CommandRepository {
     _handlers['updateOrientation'] = UpdateOrientationHandler();
     _handlers['getBluetoothDeviceStatus'] = DeviceStatusHandler();
     _handlers['setTimezone'] = SetTimezoneHandler();
+    _handlers['updateToLatestVersion'] = VersionHandler();
   }
 
   Future<void> executeCommand(String command, String data,

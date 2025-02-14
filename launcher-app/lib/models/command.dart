@@ -16,6 +16,7 @@ enum Command {
   sendKeyboardEvent,
   rotate,
   updateArtFraming,
+  updateToLatestVersion,
   tapGesture,
   dragGesture,
   castDaily;
@@ -58,6 +59,8 @@ enum Command {
         return Command.rotate;
       case 'updateArtFraming':
         return Command.updateArtFraming;
+      case 'updateToLatestVersion':
+        return Command.updateToLatestVersion;
       case 'tapGesture':
         return Command.tapGesture;
       case 'dragGesture':
