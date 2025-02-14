@@ -4,6 +4,7 @@ import 'dart:ffi';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
+import 'package:feralfile/models/chunk.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:ffi/ffi.dart';
 
@@ -104,7 +105,7 @@ class BluetoothService {
       // Release the FFI data
       calloc.free(data);
 
-      final chunkInfo = _parseChunkInfo(dataCopy);
+      final chunkInfo = ChunkInfo.fromData(dataCopy);
       _validateChunkIndices(chunkInfo);
 
       logger.info('Processing chunk ${chunkInfo.index} of ${chunkInfo.total}');
@@ -114,7 +115,7 @@ class BluetoothService {
 
       // Check if we have all chunks
       if (_chunkCommands[chunkInfo.ackReplyId]!.length == chunkInfo.total) {
-        _processCompleteCommand(chunkInfo.ackReplyId, chunkInfo.total);
+        _processCompleteCommand(chunkInfo);
       }
     } catch (e, stackTrace) {
       logger.severe('Error parsing command data: $e');
@@ -122,46 +123,33 @@ class BluetoothService {
     }
   }
 
-  static ({int index, int total, String ackReplyId, List<int> command})
-      _parseChunkInfo(List<int> data) {
-    final (chunkStrings, chunkCommand) =
-        VarintParser.parseToStringArray(data, 0, maxStrings: 3);
-    return (
-      index: int.parse(chunkStrings[0]),
-      total: int.parse(chunkStrings[1]),
-      ackReplyId: chunkStrings[2],
-      command: chunkCommand
-    );
-  }
-
-  static void _validateChunkIndices(
-      ({int index, int total, String ackReplyId, List<int> command}) info) {
-    if (info.index < 0 || info.total <= 0 || info.index >= info.total) {
+  static void _validateChunkIndices(ChunkInfo info) {
+    if (!info.isValid()) {
       throw Exception(
           'Invalid chunk indices: index=${info.index}, total=${info.total}');
     }
   }
 
-  static void _storeChunk(
-      ({int index, int total, String ackReplyId, List<int> command}) info) {
+  static void _storeChunk(ChunkInfo info) {
     _chunkCommands[info.ackReplyId] ??= {};
     _chunkCommands[info.ackReplyId]![info.index] = info.command;
   }
 
-  static void _sendChunkAcknowledgement(
-      ({int index, int total, String ackReplyId, List<int> command}) info) {
+  static void _sendChunkAcknowledgement(ChunkInfo info) {
     logger.info('Notifying back for chunk ${info.index}');
     _instance
         .notify(info.ackReplyId, {'success': true, 'chunkIndex': info.index});
   }
 
-  static void _processCompleteCommand(String ackReplyId, int totalChunks) {
+  static void _processCompleteCommand(ChunkInfo info) {
     // Combine all chunks in order
-    final completeCommand =
-        _chunkCommands[ackReplyId]!.values.expand((chunk) => chunk).toList();
+    final completeCommand = _chunkCommands[info.ackReplyId]!
+        .values
+        .expand((chunk) => chunk)
+        .toList();
 
     // Clean up the chunks map
-    _chunkCommands.remove(ackReplyId);
+    _chunkCommands.remove(info.ackReplyId);
 
     final (commandStrings, _) =
         VarintParser.parseToStringArray(completeCommand, 0);
