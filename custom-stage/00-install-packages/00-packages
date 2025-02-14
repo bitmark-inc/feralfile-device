@@ -4,3 +4,5 @@ fonts-droid-fallback
 fonts-liberation2
 x11-xserver-utils
 xdotool
+sysstat
+procps

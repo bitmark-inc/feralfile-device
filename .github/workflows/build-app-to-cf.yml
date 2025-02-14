@@ -37,6 +37,10 @@ on:
         required: true
       SUPPORT_API_KEY:
         required: true
+      METRICS_URL:
+        required: true
+      METRICS_API_KEY:
+        required: true
       APT_GPG_SIGN_KEY_PASSPHRASE:
         required: true
       APT_GPG_SIGN_KEY_ID:
@@ -106,6 +110,8 @@ jobs:
           echo "SUPPORT_URL=${{ secrets.SUPPORT_URL }}" >> .env
           echo "SUPPORT_API_KEY=${{ secrets.SUPPORT_API_KEY }}" >> .env
           echo "APP_VERSION=${{ inputs.version }}" >> .env
+          echo "METRICS_URL=${{ secrets.METRICS_URL }}" >> .env
+          echo "METRICS_API_KEY=${{ secrets.METRICS_API_KEY }}" >> .env
           
           # Debug file contents (showing first 4 chars of values)
           echo "Contents of .env (first 4 chars of values):"

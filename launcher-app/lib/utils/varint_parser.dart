@@ -92,7 +92,9 @@ class VarintParser {
     return bytes;
   }
 
-  static List<String> parseToStringArray(List<int> bytes, int offset) {
+  static (List<String>, List<int>) parseToStringArray(
+      List<int> bytes, int offset,
+      {int? maxStrings}) {
     // Log incoming bytes
     final hexString =
         bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
@@ -107,6 +109,10 @@ class VarintParser {
         logger.info('String length: $strLength, new offset: $newOffset');
         offset = newOffset;
 
+        if (maxStrings != null && strings.length >= maxStrings) {
+          break;
+        }
+
         // Read string
         final str = ascii.decode(bytes.sublist(offset, offset + strLength));
         logger.info('Parsed string: "$str"');
@@ -114,11 +120,13 @@ class VarintParser {
 
         offset += strLength;
       }
+
+      List<int> remainingBytes = bytes.sublist(offset);
+      return (strings, remainingBytes);
     } catch (e) {
       logger.info('Finished parsing strings: ${e.toString()}');
+      return (strings, []);
     }
-
-    return strings;
   }
 
   static List<int> encodeStringArray(List<String> strings) {

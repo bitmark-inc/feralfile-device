@@ -1,6 +1,7 @@
 // lib/main.dart
 import 'dart:io';
 
+import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:window_manager/window_manager.dart';
@@ -27,6 +28,7 @@ void main() async {
   ProcessSignal.sigterm.watch().listen((signal) async {
     logger.info('[App] Received SIGTERM: ${signal.toString()}');
     await bleConnectionCubit.close();
+    HardwareMonitorService().dispose();
     logger.info('[App] Cleanup complete. Exiting...');
     exit(0);
   });

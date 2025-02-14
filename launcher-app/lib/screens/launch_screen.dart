@@ -1,5 +1,6 @@
 import 'package:after_layout/after_layout.dart';
 import 'package:feralfile/cubits/ble_connection_cubit.dart';
+import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/websocket_service.dart';
 import 'package:flutter/material.dart';
@@ -51,6 +52,9 @@ class _LaunchScreenState extends State<LaunchScreen>
         await startLogServer();
         logger.info('Starting WebSocket server...');
         await WebSocketService().initServer();
+
+        logger.info('Starting hardware monitoring...');
+        HardwareMonitorService().startMonitoring();
       }
 
       // Navigate to home screen
