@@ -60,8 +60,9 @@ export default {
 
       return new Response(object.body, {
         headers: {
-          'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
-          'Content-Disposition': `attachment; filename="${key.split('/').pop()}"`,
+          'Content-Type': 'application/x-debian-package',
+          'Content-Length': object.size.toString(),
+          'Cache-Control': 'max-age=3600, public',
         },
       });
     }
@@ -137,6 +138,7 @@ export default {
         return new Response(object.body, {
           headers: {
             'Content-Type': 'application/gzip',
+            'Content-Encoding': 'gzip',
             'Content-Length': object.size.toString(),
             'Cache-Control': 'max-age=3600, public',
           },
