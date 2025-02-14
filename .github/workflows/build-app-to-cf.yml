@@ -222,34 +222,8 @@ jobs:
 
       - name: Upload to Cloudflare R2
         run: |
-          # Upload with rclone using multiple threads and verbose logging
-          rclone copy feralfile-launcher_${{ inputs.version }}_arm64.deb r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=32 \
-            --verbose \
-            --stats=1s
-          rclone copy dist/Release r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=32 \
-            --verbose \
-            --stats=1s
-          rclone copy dist/Packages r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=32 \
-            --verbose \
-            --stats=1s
-          rclone copy dist/Packages.gz r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=32 \
-            --verbose \
-            --stats=1s
-          rclone copy dist/InRelease r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=32 \
-            --verbose \
-            --stats=1s
+          rclone copy feralfile-launcher_${{ inputs.version }}_arm64.deb r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}
+          rclone copy dist/Release r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}
+          rclone copy dist/Packages r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}
+          rclone copy dist/Packages.gz r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}
+          rclone copy dist/InRelease r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}
