@@ -222,13 +222,49 @@ jobs:
 
       - name: Upload to Cloudflare R2
         run: |
-          # Upload with rclone using multiple threads and verbose logging
+          # Calculate local checksum and size
+          LOCAL_MD5=$(md5sum feralfile-launcher_${{ inputs.version }}_arm64.deb | awk '{print $1}')
+          LOCAL_SIZE=$(stat -f %z feralfile-launcher_${{ inputs.version }}_arm64.deb)
+          LOCAL_PACKAGE_SIZE=$(grep "Size:" dist/Packages | awk '{print $2}')
+          
+          echo "Local file size: $LOCAL_SIZE"
+          echo "Size in Packages file: $LOCAL_PACKAGE_SIZE"
+          
+          if [ "$LOCAL_SIZE" != "$LOCAL_PACKAGE_SIZE" ]; then
+            echo "Warning: Size mismatch between actual file ($LOCAL_SIZE) and Packages entry ($LOCAL_PACKAGE_SIZE)"
+            exit 1
+          fi
+          
+          # Upload file
           rclone copy feralfile-launcher_${{ inputs.version }}_arm64.deb r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
             --s3-upload-cutoff=100M \
             --s3-chunk-size=100M \
             --transfers=32 \
             --verbose \
             --stats=1s
+
+          # Download and verify checksum and size
+          mkdir -p ./downloaded
+          rclone copy r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile-launcher_${{ inputs.version }}_arm64.deb ./downloaded/
+          REMOTE_MD5=$(md5sum ./downloaded/feralfile-launcher_${{ inputs.version }}_arm64.deb | awk '{print $1}')
+          REMOTE_SIZE=$(stat -f %z ./downloaded/feralfile-launcher_${{ inputs.version }}_arm64.deb)
+          
+          echo "Remote file size: $REMOTE_SIZE"
+          
+          if [ "$LOCAL_MD5" != "$REMOTE_MD5" ]; then
+            echo "Checksum mismatch!"
+            echo "Local MD5: $LOCAL_MD5"
+            echo "Remote MD5: $REMOTE_MD5"
+            exit 1
+          fi
+          
+          if [ "$LOCAL_SIZE" != "$REMOTE_SIZE" ]; then
+            echo "Size mismatch!"
+            echo "Local size: $LOCAL_SIZE"
+            echo "Remote size: $REMOTE_SIZE"
+            exit 1
+          fi
+
           rclone copy dist/Release r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
             --s3-upload-cutoff=100M \
             --s3-chunk-size=100M \
