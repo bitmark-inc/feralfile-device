@@ -5,10 +5,15 @@ interface PackageInfo {
   version: string;
   architecture: string;
   maintainer: string;
-  description: string;
-  size: number;
-  sha256: string;
+  depends: string;
   filename: string;
+  size: number;
+  md5sum: string | null;
+  sha1: string | null;
+  sha256: string | null;
+  section: string;
+  priority: string;
+  description: string;
 }
 
 // Add GPG signing functions
@@ -95,43 +100,70 @@ export async function handleAptRequest(url: URL, env: Env): Promise<Response> {
   return new Response('Path not found', { status: 404 });
 }
 
+function bufferToHex(buffer: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 async function generatePackagesContent(branch: string, env: Env): Promise<string> {
-  const objects = await env.BUCKET.list({ prefix: `${branch}/`, delimiter: '/' });
+  console.log(`Generating Packages content for branch: ${branch}`);
+  
+  const objects = await env.BUCKET.list({ prefix: branch, delimiter: '/' });
   const debFiles = objects.objects.filter(obj => obj.key.endsWith('.deb'));
+  
+  console.log(`Found ${debFiles.length} .deb files:`, debFiles.map(f => f.key));
 
   const packages: PackageInfo[] = [];
   
   for (const file of debFiles) {
-    const object = await env.BUCKET.get(file.key);
-    if (!object) continue;
+    const object = await env.BUCKET.head(file.key);
+    if (!object) {
+      console.log(`Could not get object for key: ${file.key}`);
+      continue;
+    }
 
     const size = object.size;
-    const sha256 = object.httpMetadata?.etag?.replace(/"/g, '') || '';
     const versionMatch = file.key.match(/_([0-9]+\.[0-9]+\.[0-9]+)_/);
     const version = versionMatch ? versionMatch[1] : 'unknown';
+
+    console.log(`Processing .deb file: ${file.key}, version: ${version}, size: ${size}`);
 
     packages.push({
       name: 'feralfile-launcher',
       version,
       architecture: 'arm64',
       maintainer: 'Bitmark Inc <support@feralfile.com>',
-      description: 'Feral File Connection Assistant',
+      depends: 'gldriver-test, chromium, rpi-chromium-mods, fonts-droid-fallback, fonts-liberation2, x11-xserver-utils, xdotool, xserver-xorg, xserver-xorg-video-fbdev, xinit, openbox, lightdm, bluez, zenity, jq, unattended-upgrades',
+      filename: `pool/${file.key}`,
       size,
-      sha256,
-      filename: file.key
+      md5sum: object.checksums?.md5 ? bufferToHex(object.checksums.md5) : null,
+      sha1: object.checksums?.sha1 ? bufferToHex(object.checksums.sha1) : null,
+      sha256: object.checksums?.sha256 ? bufferToHex(object.checksums.sha256) : null,
+      section: 'base',
+      priority: 'optional',
+      description: 'Feral File Connection Assistant'
     });
   }
 
-  return packages.map(pkg => `
+  const content = packages.map(pkg => `
 Package: ${pkg.name}
 Version: ${pkg.version}
 Architecture: ${pkg.architecture}
 Maintainer: ${pkg.maintainer}
-Description: ${pkg.description}
+Depends: ${pkg.depends}
+Filename: ${pkg.filename}
 Size: ${pkg.size}
-SHA256: ${pkg.sha256}
-Filename: pool/${pkg.filename}
+${pkg.md5sum ? `MD5sum: ${pkg.md5sum}` : ''}
+${pkg.sha1 ? `SHA1: ${pkg.sha1}` : ''}
+${pkg.sha256 ? `SHA256: ${pkg.sha256}` : ''}
+Section: ${pkg.section}
+Priority: ${pkg.priority}
+Description: ${pkg.description}
 `).join('\n').trim();
+
+  console.log(`Generated Packages content length: ${content.length}`);
+  return content;
 }
 
 async function gzip(content: string): Promise<ArrayBuffer> {
