@@ -4,7 +4,7 @@ import 'package:feralfile/utils/version_helper.dart';
 import '../logger.dart';
 import 'command_repository.dart';
 
-class VersionHandler implements CommandHandler {
+class VersionUpdateHandler implements CommandHandler {
   @override
   Future<void> execute(
       Map<String, dynamic> data, BluetoothService bluetoothService,

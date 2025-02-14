@@ -4,6 +4,7 @@ import 'package:feralfile/services/commands/device_info_handler.dart';
 import 'package:feralfile/services/commands/send_log_handler.dart';
 import 'package:feralfile/services/commands/update_orientation_handler.dart';
 import 'package:feralfile/services/commands/version_handler.dart';
+import 'package:feralfile/services/commands/version_update_handler.dart';
 
 import '../bluetooth_service.dart';
 import '../logger.dart';
@@ -41,7 +42,7 @@ class CommandRepository {
     _handlers['updateOrientation'] = UpdateOrientationHandler();
     _handlers['getBluetoothDeviceStatus'] = DeviceStatusHandler();
     _handlers['setTimezone'] = SetTimezoneHandler();
-    _handlers['updateToLatestVersion'] = VersionHandler();
+    _handlers['updateToLatestVersion'] = VersionUpdateHandler();
   }
 
   Future<void> executeCommand(String command, String data,
