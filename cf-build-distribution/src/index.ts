@@ -1,6 +1,7 @@
 import { handleAuth } from './auth';
 import { listFiles, getLatestVersion } from './r2';
 import { generateHtml } from './html';
+import { handleAptRequest, handleAptRefresh } from './apt';
 
 export interface Env {
   BUCKET: R2Bucket;
@@ -53,7 +54,9 @@ export default {
     if (url.pathname.startsWith('/pool/')) {
       const key = url.pathname.replace('/pool/', '');
       const object = await env.BUCKET.get(key);
-      
+
+      console.log('Object key:', key);
+      console.log('Object size:', object?.size);
       if (!object) {
         return new Response('File not found', { status: 404 });
       }
@@ -62,6 +65,8 @@ export default {
         headers: {
           'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
           'Content-Disposition': `attachment; filename="${key.split('/').pop()}"`,
+          'Content-Length': object.size.toString(),
+          'Cache-Control': 'public, max-age=3600',
         },
       });
     }
@@ -92,58 +97,7 @@ export default {
 
     // Handle apt request
     if (url.pathname.startsWith('/dists/')) {
-      const key = url.pathname.replace('/dists/', '');
-      if (key.endsWith('/Release') || key.endsWith('/InRelease')) {
-        // Serve the Release file
-        const object = await env.BUCKET.get(key);
-        if (!object) {
-          return new Response(`${key} not found`, { status: 404 });
-        }
-        
-        return new Response(object.body, {
-          headers: {
-            'Content-Type': 'text/plain',
-            'Content-Length': object.size.toString(),
-            'Cache-Control': 'max-age=3600, public',
-          },
-        });
-      }
-
-      if (key.endsWith('main/binary-arm64/Packages')) {
-        const branch = key.replace('main/binary-arm64/Packages', '');
-        // Serve the Packages file
-        const object = await env.BUCKET.get(branch+'Packages');
-        if (!object) {
-          return new Response(`${branch+'Packages'} not found`, { status: 404 });
-        }
-    
-        return new Response(object.body, {
-          headers: {
-            'Content-Type': 'text/plain',
-            'Content-Length': object.size.toString(),
-            'Cache-Control': 'max-age=3600, public',
-          },
-        });
-      }
-    
-      if (key.endsWith('main/binary-arm64/Packages.gz')) {
-        const branch = key.replace('main/binary-arm64/Packages.gz', '');
-        // Serve the Packages file
-        const object = await env.BUCKET.get(branch+'Packages.gz');
-        if (!object) {
-          return new Response(`${branch+'Packages.gz'} not found`, { status: 404 });
-        }
-    
-        return new Response(object.body, {
-          headers: {
-            'Content-Type': 'application/gzip',
-            'Content-Length': object.size.toString(),
-            'Cache-Control': 'max-age=3600, public',
-          },
-        });
-      }
-    
-      return new Response('Path not found', { status: 404 });
+      return handleAptRequest(url, env);
     }
 
     // List files and generate HTML

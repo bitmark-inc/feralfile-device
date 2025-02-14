@@ -196,22 +196,12 @@ jobs:
           no_check_bucket = true
           EOF
 
-      - name: Download all deb files from the same branch
-        run: |
-          mkdir -p dist/pool/${{ github.ref_name }}
-          cp feralfile-launcher_${{ inputs.version }}_arm64.deb dist/pool/${{ github.ref_name }}/feralfile-launcher_${{ inputs.version }}_arm64.deb
-          rclone copy "r2:${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}/${{ github.ref_name }}" "dist/pool/${{ github.ref_name }}" \
-            --include "*.deb" \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=32 \
-            --verbose \
-            --stats=1s      
-      
-      - name: Form the APT release files
+      - name: Generate Release files
         run: |
           cd dist
-          dpkg-scanpackages --arch arm64 --multiversion pool > Packages
+          # Generate dynamic Packages content for Release file
+          curl -s -u "${{ secrets.DISTRIBUTION_AUTH_USER }}:${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}" \
+            "https://feralfile-device-distribution.bitmark-development.workers.dev/dists/${{ github.ref_name }}/main/binary-arm64/Packages" > Packages
           cat Packages | gzip -9 > Packages.gz
           chmod +x ../../scripts/create-release.sh
           ../../scripts/create-release.sh ${{ github.ref_name }} ${{ inputs.version }} > Release
@@ -222,7 +212,7 @@ jobs:
 
       - name: Upload to Cloudflare R2
         run: |
-          # Upload with rclone using multiple threads and verbose logging
+          # Upload .deb file and Release files
           rclone copy feralfile-launcher_${{ inputs.version }}_arm64.deb r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
             --s3-upload-cutoff=100M \
             --s3-chunk-size=100M \
@@ -230,18 +220,6 @@ jobs:
             --verbose \
             --stats=1s
           rclone copy dist/Release r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=32 \
-            --verbose \
-            --stats=1s
-          rclone copy dist/Packages r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=32 \
-            --verbose \
-            --stats=1s
-          rclone copy dist/Packages.gz r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }} \
             --s3-upload-cutoff=100M \
             --s3-chunk-size=100M \
             --transfers=32 \
