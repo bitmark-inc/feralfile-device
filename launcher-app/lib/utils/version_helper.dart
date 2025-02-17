@@ -2,7 +2,24 @@ import 'package:feralfile/services/logger.dart';
 import 'package:process_run/stdio.dart';
 
 class VersionHelper {
+  static String? _latestVersion;
+  static String? _installedVersion;
+
   static Future<String?> getLatestVersion() async {
+    if (_latestVersion == null) {
+      _latestVersion = await _getLatestVersion();
+    }
+    return _latestVersion;
+  }
+
+  static Future<String?> getInstalledVersion() async {
+    if (_installedVersion == null) {
+      _installedVersion = await _getInstalledVersion();
+    }
+    return _installedVersion;
+  }
+
+  static Future<String?> _getLatestVersion() async {
     try {
       await updatePackageList();
       ProcessResult result =
@@ -24,7 +41,7 @@ class VersionHelper {
     }
   }
 
-  static Future<String?> getInstalledVersion() async {
+  static Future<String?> _getInstalledVersion() async {
     try {
       ProcessResult result =
           await Process.run('apt-cache', ['policy', 'feralfile-launcher']);
