@@ -1,8 +1,10 @@
 import 'dart:convert';
 
+import 'package:feralfile/services/commands/device_info_handler.dart';
 import 'package:feralfile/services/commands/send_log_handler.dart';
 import 'package:feralfile/services/commands/update_orientation_handler.dart';
 import 'package:feralfile/services/commands/version_handler.dart';
+import 'package:feralfile/services/commands/version_update_handler.dart';
 
 import '../bluetooth_service.dart';
 import '../logger.dart';
@@ -10,6 +12,7 @@ import 'cursor_handler.dart';
 import 'javascript_handler.dart';
 import 'keyboard_handler.dart';
 import 'screen_rotation_handler.dart';
+import 'set_time_handler.dart';
 
 abstract class CommandHandler {
   Future<void> execute(
@@ -37,6 +40,9 @@ class CommandRepository {
     _handlers['sendLog'] = SendLogHandler();
     _handlers['getVersion'] = VersionHandler();
     _handlers['updateOrientation'] = UpdateOrientationHandler();
+    _handlers['getBluetoothDeviceStatus'] = DeviceStatusHandler();
+    _handlers['setTimezone'] = SetTimezoneHandler();
+    _handlers['updateToLatestVersion'] = VersionUpdateHandler();
   }
 
   Future<void> executeCommand(String command, String data,

@@ -1,5 +1,7 @@
 import 'dart:io';
+
 import 'package:path_provider/path_provider.dart';
+
 import '../models/app_config.dart';
 import '../models/wifi_credentials.dart';
 import 'logger.dart';
@@ -48,19 +50,22 @@ class ConfigService {
 
   static Future<bool> updateWifiCredentials(WifiCredentials credentials) async {
     final currentConfig = await loadConfig();
-    final newConfig = AppConfig(
-      wifiCredentials: credentials,
-      screenRotation: currentConfig?.screenRotation,
-    );
+    final newConfig = currentConfig?.copyWith(wifiCredentials: credentials) ??
+        AppConfig(wifiCredentials: credentials);
     return saveConfig(newConfig);
   }
 
   static Future<bool> updateScreenRotation(String rotation) async {
     final currentConfig = await loadConfig();
-    final newConfig = AppConfig(
-      wifiCredentials: currentConfig?.wifiCredentials,
-      screenRotation: rotation,
-    );
+    final newConfig = currentConfig?.copyWith(screenRotation: rotation) ??
+        AppConfig(screenRotation: rotation);
+    return saveConfig(newConfig);
+  }
+
+  static Future<bool> updateArtFraming(ArtFraming artFraming) async {
+    final currentConfig = await loadConfig();
+    final newConfig = currentConfig?.copyWith(artFraming: artFraming) ??
+        AppConfig(artFraming: artFraming);
     return saveConfig(newConfig);
   }
 }

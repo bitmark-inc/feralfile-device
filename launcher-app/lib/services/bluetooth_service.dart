@@ -11,8 +11,8 @@ import 'package:ffi/ffi.dart';
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
 import '../services/command_service.dart';
-import '../utils/varint_parser.dart';
 import '../services/metric_service.dart';
+import '../utils/varint_parser.dart';
 
 class BluetoothService {
   static final BluetoothService _instance = BluetoothService._internal();

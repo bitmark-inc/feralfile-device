@@ -9,6 +9,8 @@ class SendLogHandler implements CommandHandler {
       Map<String, dynamic> data, BluetoothService bluetoothService,
       [String? replyId]) async {
     logger.info('SendLogHandler data: $data');
-    sendLog(data['userId']);
+    final userId = data['userId'];
+    final title = data['title'];
+    sendLog(userId, title);
   }
 }

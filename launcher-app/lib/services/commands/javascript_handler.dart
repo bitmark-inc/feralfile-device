@@ -1,4 +1,7 @@
+import 'package:feralfile/models/app_config.dart';
+import 'package:feralfile/models/command.dart';
 import 'package:feralfile/models/websocket_message.dart';
+import 'package:feralfile/services/config_service.dart';
 import 'package:feralfile/services/websocket_service.dart';
 
 import '../bluetooth_service.dart';
@@ -28,6 +31,19 @@ class JavaScriptHandler implements CommandHandler {
             logger.info('Received response: $response');
             logger.info('Sending response to Bluetooth: ${response.message}');
             bluetoothService.notify(replyId, response.message);
+            if (requestMessageData.command == Command.updateArtFraming) {
+              logger.info(
+                  'Received art framing update: ${requestMessageData.request?.keys}, ${requestMessageData.request?.values}');
+              final artFramingRaw = requestMessageData.request?['frameConfig'];
+              logger.info('Received art framing: $artFramingRaw');
+              if (artFramingRaw == null) {
+                logger.severe('Invalid art framing value: $artFramingRaw');
+                return;
+              }
+              final artFraming = ArtFraming.fromValue(artFramingRaw);
+              ConfigService.updateArtFraming(artFraming);
+              logger.severe('Updated art framing to: ${artFraming.name}');
+            }
           },
         );
       }

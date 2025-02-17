@@ -1,13 +1,15 @@
 // lib/main.dart
 import 'dart:io';
+
 import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:window_manager/window_manager.dart';
+
+import 'cubits/ble_connection_cubit.dart';
 import 'environment.dart';
 import 'screens/launch_screen.dart';
-import 'cubits/ble_connection_cubit.dart';
 import 'services/logger.dart';
-import 'package:window_manager/window_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,8 +25,8 @@ void main() async {
     ..startListening();
 
   // Listen for SIGTERM and cleanup
-  ProcessSignal.sigterm.watch().listen((_) async {
-    logger.info('[App] Received SIGTERM');
+  ProcessSignal.sigterm.watch().listen((signal) async {
+    logger.info('[App] Received SIGTERM: ${signal.toString()}');
     await bleConnectionCubit.close();
     HardwareMonitorService().dispose();
     logger.info('[App] Cleanup complete. Exiting...');

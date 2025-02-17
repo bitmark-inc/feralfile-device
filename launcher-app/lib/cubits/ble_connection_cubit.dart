@@ -48,7 +48,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
 
       if (!initialized && attempt < maxRetries) {
         // Wait before retrying
-        await Future.delayed(Duration(seconds: 2));
+        await Future.delayed(const Duration(seconds: 2));
       }
     }
 

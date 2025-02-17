@@ -1,11 +1,11 @@
 // lib/services/logger.dart
-import 'dart:convert';
-
-import 'package:logging/logging.dart';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:http/http.dart' as http;
+import 'package:logging/logging.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../environment.dart';
 import '../services/metric_service.dart';
@@ -14,7 +14,7 @@ final Logger logger = Logger('FeralFileApp');
 late File _logFile;
 HttpServer? _logServer;
 final _logBuffer = <String>[];
-final int _maxBufferSize = 1000; // Keep last 1000 log entries
+const int _maxBufferSize = 1000; // Keep last 1000 log entries
 
 String get logFilePath => _logFile.path;
 
@@ -160,7 +160,7 @@ void stopLogServer() {
   }
 }
 
-Future<void> sendLog(String? userID) async {
+Future<void> sendLog(String? userID, String? title) async {
   try {
     if (Environment.supportURL.isEmpty || Environment.supportApiKey.isEmpty) {
       throw Exception(
@@ -168,9 +168,9 @@ Future<void> sendLog(String? userID) async {
     }
 
     const deviceID = 'unknown';
-    const deviceName = 'FF Device';
-    final title =
-        '${deviceName}_${deviceID}_${DateTime.now().toIso8601String()}';
+    const deviceName = 'FF-X1 Pilot';
+    final ticketTitle =
+        "${deviceName}_${title ?? '${deviceID}_${DateTime.now().toIso8601String()}'}";
 
     var submitMessage = '';
     submitMessage += '**Version:** ${Environment.appVersion}\n';
@@ -188,7 +188,7 @@ Future<void> sendLog(String? userID) async {
     final tags = ['FF Device'];
 
     final payload = {
-      'title': title,
+      'title': ticketTitle,
       'message': submitMessage,
       'attachments': attachments,
       'tags': tags,
