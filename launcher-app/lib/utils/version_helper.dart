@@ -3,6 +3,7 @@ import 'package:process_run/stdio.dart';
 
 class VersionHelper {
   static String? _installedVersion;
+  static DateTime? _lastUpdated;
 
   static Future<String?> getInstalledVersion() async {
     if (_installedVersion == null) {
@@ -57,11 +58,18 @@ class VersionHelper {
   /// Update system package list
   static Future<void> updatePackageList() async {
     try {
+      final sinceLastUpdate =
+          DateTime.now().difference(_lastUpdated ?? DateTime(0));
+      if (sinceLastUpdate.inHours < 3) {
+        print("Package list updated less than an hour ago. Skipping update.");
+        return;
+      }
       print("Updating package list...");
       ProcessResult result = await Process.run('sudo', ['apt-get', 'update']);
 
       if (result.exitCode == 0) {
         print("Package list updated successfully.");
+        _lastUpdated = DateTime.now();
       } else {
         print("Error updating package list: ${result.stderr}");
       }
