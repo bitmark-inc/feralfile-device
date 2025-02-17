@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:feralfile/services/logger.dart';
 
 class VarintParser {
@@ -124,7 +125,7 @@ class VarintParser {
       List<int> remainingBytes = bytes.sublist(offset);
       return (strings, remainingBytes);
     } catch (e) {
-      logger.info('Finished parsing strings: ${e.toString()}');
+      logger.info('Error parsing strings: ${e.toString()}');
       return (strings, []);
     }
   }

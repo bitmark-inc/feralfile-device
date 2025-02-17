@@ -2,15 +2,7 @@ import 'package:feralfile/services/logger.dart';
 import 'package:process_run/stdio.dart';
 
 class VersionHelper {
-  static String? _latestVersion;
   static String? _installedVersion;
-
-  static Future<String?> getLatestVersion() async {
-    if (_latestVersion == null) {
-      _latestVersion = await _getLatestVersion();
-    }
-    return _latestVersion;
-  }
 
   static Future<String?> getInstalledVersion() async {
     if (_installedVersion == null) {
@@ -19,7 +11,7 @@ class VersionHelper {
     return _installedVersion;
   }
 
-  static Future<String?> _getLatestVersion() async {
+  static Future<String?> getLatestVersion() async {
     try {
       await updatePackageList();
       ProcessResult result =
@@ -91,6 +83,7 @@ class VersionHelper {
 
       if (result.exitCode == 0) {
         print("Successfully installed version $version.");
+        _installedVersion = version;
       } else {
         print("Error installing package: ${result.stderr}");
       }
