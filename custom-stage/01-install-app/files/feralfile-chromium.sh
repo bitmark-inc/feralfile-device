@@ -25,6 +25,7 @@ start_chromium() {
         --media-router=0 \
         --enable-logging \
         --v=1 \
+        --remote-debugging-port=9222 \
         --log-file=/var/log/chromium/chrome_debug.log \
         https://support-feralfile-device.feralfile-display-prod.pages.dev?platform=ff-device >/dev/null 2>&1 
 }

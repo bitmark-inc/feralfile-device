@@ -11,6 +11,7 @@ import '../services/commands/cursor_handler.dart';
 import '../services/logger.dart';
 import '../services/wifi_service.dart';
 import 'home_screen.dart';
+import '../services/cdp_client.dart';
 
 class LaunchScreen extends StatefulWidget {
   const LaunchScreen({super.key});
@@ -55,6 +56,10 @@ class _LaunchScreenState extends State<LaunchScreen>
 
         logger.info('Starting hardware monitoring...');
         HardwareMonitorService().startMonitoring();
+
+        // Start CDP client if connected to WiFi
+        logger.info('Starting CDP client...');
+        await CDPClient.startCDPConnection();
       }
 
       // Navigate to home screen

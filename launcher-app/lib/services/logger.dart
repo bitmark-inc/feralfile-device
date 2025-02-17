@@ -33,8 +33,10 @@ Future<void> setupLogging() async {
     // Print to console
     print(logMessage);
 
-    // Write to file
-    _logFile.writeAsStringSync(logMessage, mode: FileMode.append);
+    // Write to file only for INFO level and above
+    if (record.level.value >= Level.INFO.value) {
+      _logFile.writeAsStringSync(logMessage, mode: FileMode.append);
+    }
 
     // Add to buffer
     _logBuffer.add(logMessage);
