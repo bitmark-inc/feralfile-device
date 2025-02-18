@@ -10,7 +10,6 @@ export XAUTHORITY=/home/feralfile/.Xauthority
 # Function to start Chromium in kiosk mode
 start_chromium() {
     echo "Starting Chromium..."
-    # Create log directory if it doesn't exist
 
     "$CHROMIUM" \
         --kiosk \
@@ -29,6 +28,7 @@ start_chromium() {
         --v=1 \
         --vmodule=metrics=2 \
         --remote-debugging-port=9222 \
+        --remote-debugging-address=0.0.0.0 \
         https://support-feralfile-device.feralfile-display-prod.pages.dev?platform=ff-device \
         2>&1 | tee -a /var/log/chromium/chrome_debug.log
 }
