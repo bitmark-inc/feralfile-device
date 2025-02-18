@@ -11,7 +11,6 @@ export XAUTHORITY=/home/feralfile/.Xauthority
 start_chromium() {
     echo "Starting Chromium..."
     # Create log directory if it doesn't exist
-    mkdir -p /var/log/chromium
 
     "$CHROMIUM" \
         --kiosk \

@@ -2,6 +2,8 @@
 
 mkdir -p "${ROOTFS_DIR}/home/feralfile/feralfile/"
 
+mkdir -p "${ROOTFS_DIR}/var/log/chromium/"
+
 # Copy from the stage directory to the ROOTFS
 cp "feralfile-launcher.conf" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
     echo "Error: Failed to copy feralfile-launcher.conf"
