@@ -162,30 +162,50 @@ void stopLogServer() {
   }
 }
 
+String _deviceId = 'unknown';
+
+// Add this function to update the device ID
+void updateDeviceId(String deviceId) {
+  _deviceId = deviceId;
+  logger.info('Device ID updated to: $deviceId');
+}
+
 Future<void> sendLog(String? userID, String? title) async {
   try {
     if (Environment.supportURL.isEmpty || Environment.supportApiKey.isEmpty) {
       throw Exception(
           'Environment variables not properly initialized. Support URL: ${Environment.supportURL.isNotEmpty}, API Key exists: ${Environment.supportApiKey.isNotEmpty}');
     }
-
-    const deviceID = 'unknown';
     const deviceName = 'FF-X1 Pilot';
     final ticketTitle =
-        "${deviceName}_${title ?? '${deviceID}_${DateTime.now().toIso8601String()}'}";
+        "${deviceName}_${title ?? '${_deviceId}_${DateTime.now().toIso8601String()}'}";
 
     var submitMessage = '';
     submitMessage += '**Version:** ${Environment.appVersion}\n';
-    submitMessage += '**Device ID:** $deviceID\n**Device name:** $deviceName\n';
+    submitMessage += '**Device ID:** $_deviceId\n**Device name:** $deviceName\n';
 
-    final data = await _logFile.readAsBytes();
-    final attachments = [
-      {
-        'data': base64Encode(data),
-        'title': title,
+    // Create list of attachments
+    final attachments = <Map<String, dynamic>>[];
+
+    // Add app log
+    final appLogData = await _logFile.readAsBytes();
+    attachments.add({
+      'data': base64Encode(appLogData),
+      'title': 'app_log',
+      'content_type': 'logs',
+    });
+
+    // Add Chromium debug log if it exists
+    final chromiumLogFile = File('/var/log/chromium/chrome_debug.log');
+    if (await chromiumLogFile.exists()) {
+      logger.info('Chromium debug log found');
+      final chromiumLogData = await chromiumLogFile.readAsBytes();
+      attachments.add({
+        'data': base64Encode(chromiumLogData),
+        'title': 'chromium_debug_log',
         'content_type': 'logs',
-      }
-    ];
+      });
+    }
 
     final tags = ['FF Device'];
 
@@ -201,7 +221,7 @@ Future<void> sendLog(String? userID, String? title) async {
     final request = http.Request('POST', uri);
     request.headers.addAll({
       'Content-Type': 'application/json',
-      'x-device-id': userID ?? deviceID,
+      'x-device-id': userID ?? _deviceId,
       'x-api-key': Environment.supportApiKey,
     });
 
