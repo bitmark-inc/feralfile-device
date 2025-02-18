@@ -92,6 +92,14 @@ class CDPClient {
 
       _channel = channel;
       logger.info('Connected to Chrome DevTools Protocol via WebSocket');
+
+      // Enable required domains
+      await _sendCommand('Page.enable');
+      await _sendCommand('Performance.enable');
+      await _sendCommand('Rendering.enable');
+
+      // Enable FPS counter overlay for visual debugging
+      await _sendCommand('Rendering.setShowFPSCounter', {'show': true});
     } catch (e, stackTrace) {
       logger.severe('Failed to connect to CDP: $e\n$stackTrace');
       rethrow;
@@ -146,6 +154,12 @@ class CDPClient {
   }
 
   static void dispose() {
+    // Disable FPS counter before closing
+    _sendCommand('Rendering.setShowFPSCounter', {'show': false})
+        .catchError((e) {
+      logger.warning('Error disabling FPS counter: $e');
+    });
+
     _channel?.sink.close();
     _channel = null;
     _responseCompleters.clear();
@@ -159,16 +173,16 @@ class CDPClient {
     }
 
     try {
-      // Enable the Performance API
-      await _sendCommand('Performance.enable');
-
       // Get metrics including FPS
       final metricsResponse = await _sendCommand('Performance.getMetrics');
-
-      // Disable the Performance API after getting metrics
-      await _sendCommand('Performance.disable');
-
       final decoded = jsonDecode(metricsResponse);
+
+      if (!decoded.containsKey('result') ||
+          !decoded['result'].containsKey('metrics')) {
+        logger.warning('Invalid metrics response format: $decoded');
+        return null;
+      }
+
       final metrics = decoded['result']['metrics'] as List;
 
       // Find the FPS metric
@@ -177,9 +191,16 @@ class CDPClient {
         orElse: () => null,
       );
 
-      return fpsMetric?['value']?.toDouble();
-    } catch (e) {
-      logger.severe('Error getting Chromium FPS: $e');
+      if (fpsMetric == null) {
+        logger.warning('FPS metric not found in response');
+        return null;
+      }
+
+      final fps = fpsMetric['value']?.toDouble();
+      logger.fine('Raw FPS value: $fps');
+      return fps;
+    } catch (e, stackTrace) {
+      logger.severe('Error getting Chromium FPS: $e\n$stackTrace');
       return null;
     }
   }
@@ -212,11 +233,34 @@ class CDPClient {
     try {
       final response = await _sendCommand('Page.getNavigationHistory');
       final decoded = jsonDecode(response);
+
+      if (!decoded.containsKey('result') ||
+          !decoded['result'].containsKey('entries') ||
+          !decoded['result'].containsKey('currentIndex')) {
+        logger.warning('Invalid navigation history response format: $decoded');
+        return null;
+      }
+
       final entries = decoded['result']['entries'] as List;
-      final currentEntry = entries.last;
-      return currentEntry['url'] as String;
-    } catch (e) {
-      logger.severe('Error getting current URL: $e');
+      final currentIndex = decoded['result']['currentIndex'] as int;
+
+      if (entries.isEmpty || currentIndex >= entries.length) {
+        logger.warning('No navigation entries found or invalid current index');
+        return null;
+      }
+
+      final currentEntry = entries[currentIndex];
+      if (!currentEntry.containsKey('url')) {
+        logger.warning(
+            'URL not found in current navigation entry: $currentEntry');
+        return null;
+      }
+
+      final url = currentEntry['url'] as String;
+      logger.fine('Current URL: $url');
+      return url;
+    } catch (e, stackTrace) {
+      logger.severe('Error getting current URL: $e\n$stackTrace');
       return null;
     }
   }
