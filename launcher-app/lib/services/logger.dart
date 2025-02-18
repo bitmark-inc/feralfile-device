@@ -178,14 +178,28 @@ Future<void> sendLog(String? userID, String? title) async {
     submitMessage += '**Version:** ${Environment.appVersion}\n';
     submitMessage += '**Device ID:** $deviceID\n**Device name:** $deviceName\n';
 
-    final data = await _logFile.readAsBytes();
-    final attachments = [
-      {
-        'data': base64Encode(data),
-        'title': title,
+    // Create list of attachments
+    final attachments = <Map<String, dynamic>>[];
+
+    // Add app log
+    final appLogData = await _logFile.readAsBytes();
+    attachments.add({
+      'data': base64Encode(appLogData),
+      'title': 'app_log',
+      'content_type': 'logs',
+    });
+
+    // Add Chromium debug log if it exists
+    final chromiumLogFile = File('/var/log/chromium/chrome_debug.log');
+    if (await chromiumLogFile.exists()) {
+      logger.info('Chromium debug log found');
+      final chromiumLogData = await chromiumLogFile.readAsBytes();
+      attachments.add({
+        'data': base64Encode(chromiumLogData),
+        'title': 'chromium_debug_log',
         'content_type': 'logs',
-      }
-    ];
+      });
+    }
 
     final tags = ['FF Device'];
 
