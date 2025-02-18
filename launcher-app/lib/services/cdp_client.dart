@@ -56,6 +56,7 @@ class CDPClient {
 
   static Future<void> _cdpConnectionIsolate(SendPort sendPort) async {
     var retryCount = 0;
+    Exception? lastError;
 
     while (retryCount < _maxRetries) {
       try {
@@ -63,16 +64,21 @@ class CDPClient {
         return; // Success, exit the isolate
       } catch (e) {
         retryCount++;
+        lastError = e as Exception;
         logger.severe('CDP connection attempt $retryCount failed: $e');
 
         if (retryCount < _maxRetries) {
+          logger.info(
+              'Retrying CDP connection in ${_retryDelay.inSeconds} seconds...');
           await Future.delayed(_retryDelay);
         }
       }
     }
 
-    sendPort
-        .send('Failed to establish CDP connection after $_maxRetries attempts');
+    final errorMessage =
+        'Failed to establish CDP connection after $_maxRetries attempts. Last error: $lastError';
+    logger.severe(errorMessage);
+    sendPort.send(errorMessage);
   }
 
   static Future<void> connect(SendPort sendPort) async {
@@ -80,16 +86,25 @@ class CDPClient {
       final response =
           await http.get(Uri.parse('http://localhost:9222/json/version'));
       if (response.statusCode != 200) {
+        logger.severe(
+            'Failed to get debugger URL. Status code: ${response.statusCode}, Body: ${response.body}');
         throw Exception('Failed to get debugger URL: ${response.statusCode}');
       }
 
       logger.fine('CDP Response body: ${response.body}');
       final Map<String, dynamic> data = jsonDecode(response.body);
       logger.fine('CDP Parsed data: $data');
+
+      if (!data.containsKey('webSocketDebuggerUrl')) {
+        logger.severe('Missing webSocketDebuggerUrl in response: $data');
+        throw Exception('Missing webSocketDebuggerUrl in Chrome response');
+      }
+
       final String webSocketDebuggerUrl = data['webSocketDebuggerUrl'];
       logger.fine('CDP WebSocket URL: $webSocketDebuggerUrl');
 
       final channel = WebSocketChannel.connect(Uri.parse(webSocketDebuggerUrl));
+      await channel.ready; // Wait for the connection to be established
 
       channel.stream.listen(
         (data) {
@@ -110,9 +125,9 @@ class CDPClient {
         'channel': channel,
       });
 
-      logger.fine('Connected to Chrome DevTools Protocol via WebSocket');
-    } catch (e) {
-      logger.severe('Failed to connect to CDP: $e');
+      logger.info('Connected to Chrome DevTools Protocol via WebSocket');
+    } catch (e, stackTrace) {
+      logger.severe('Failed to connect to CDP: $e\n$stackTrace');
       rethrow;
     }
   }
