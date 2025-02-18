@@ -160,21 +160,27 @@ void stopLogServer() {
   }
 }
 
+String _deviceId = 'unknown';
+
+// Add this function to update the device ID
+void updateDeviceId(String deviceId) {
+  _deviceId = deviceId;
+  logger.info('Device ID updated to: $deviceId');
+}
+
 Future<void> sendLog(String? userID, String? title) async {
   try {
     if (Environment.supportURL.isEmpty || Environment.supportApiKey.isEmpty) {
       throw Exception(
           'Environment variables not properly initialized. Support URL: ${Environment.supportURL.isNotEmpty}, API Key exists: ${Environment.supportApiKey.isNotEmpty}');
     }
-
-    const deviceID = 'unknown';
     const deviceName = 'FF-X1 Pilot';
     final ticketTitle =
-        "${deviceName}_${title ?? '${deviceID}_${DateTime.now().toIso8601String()}'}";
+        "${deviceName}_${title ?? '${_deviceId}_${DateTime.now().toIso8601String()}'}";
 
     var submitMessage = '';
     submitMessage += '**Version:** ${Environment.appVersion}\n';
-    submitMessage += '**Device ID:** $deviceID\n**Device name:** $deviceName\n';
+    submitMessage += '**Device ID:** $_deviceId\n**Device name:** $deviceName\n';
 
     // Create list of attachments
     final attachments = <Map<String, dynamic>>[];
@@ -213,7 +219,7 @@ Future<void> sendLog(String? userID, String? title) async {
     final request = http.Request('POST', uri);
     request.headers.addAll({
       'Content-Type': 'application/json',
-      'x-device-id': userID ?? deviceID,
+      'x-device-id': userID ?? _deviceId,
       'x-api-key': Environment.supportApiKey,
     });
 
