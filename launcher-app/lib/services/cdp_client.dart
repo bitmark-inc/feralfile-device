@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
 import 'package:feralfile/services/metric_service.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
@@ -10,7 +9,6 @@ class CDPClient {
   static WebSocketChannel? _channel;
   static int _messageId = 0;
   static final _responseCompleters = <int, Completer<String>>{};
-  static Isolate? _cdpIsolate;
   static bool _isConnecting = false;
   static const _maxRetries = 10;
   static const _retryDelay = Duration(seconds: 5);
@@ -24,44 +22,16 @@ class CDPClient {
     }
 
     _isConnecting = true;
-    final receivePort = ReceivePort();
-
-    try {
-      _cdpIsolate = await Isolate.spawn(
-        _cdpConnectionIsolate,
-        receivePort.sendPort,
-      );
-
-      receivePort.listen((message) {
-        if (message is String) {
-          logger.fine('CDP Isolate message: $message');
-        } else if (message is Map) {
-          _handleIsolateMessage(message);
-        }
-      });
-    } catch (e) {
-      logger.severe('Failed to start CDP isolate: $e');
-      _isConnecting = false;
-    }
-  }
-
-  static void _handleIsolateMessage(Map message) {
-    if (message['type'] == 'connection_established') {
-      _channel = message['channel'] as WebSocketChannel?;
-      _isConnecting = false;
-      logger.info('CDP connection established in isolate');
-      startFPSMonitoring();
-    }
-  }
-
-  static Future<void> _cdpConnectionIsolate(SendPort sendPort) async {
     var retryCount = 0;
     Exception? lastError;
 
     while (retryCount < _maxRetries) {
       try {
-        await connect(sendPort);
-        return; // Success, exit the isolate
+        await connect();
+        _isConnecting = false;
+        logger.info('CDP connection established');
+        startFPSMonitoring();
+        return;
       } catch (e) {
         retryCount++;
         lastError = e as Exception;
@@ -75,13 +45,13 @@ class CDPClient {
       }
     }
 
+    _isConnecting = false;
     final errorMessage =
         'Failed to establish CDP connection after $_maxRetries attempts. Last error: $lastError';
     logger.severe(errorMessage);
-    sendPort.send(errorMessage);
   }
 
-  static Future<void> connect(SendPort sendPort) async {
+  static Future<void> connect() async {
     try {
       final response =
           await http.get(Uri.parse('http://localhost:9222/json/version'));
@@ -104,7 +74,7 @@ class CDPClient {
       logger.fine('CDP WebSocket URL: $webSocketDebuggerUrl');
 
       final channel = WebSocketChannel.connect(Uri.parse(webSocketDebuggerUrl));
-      await channel.ready; // Wait for the connection to be established
+      await channel.ready;
 
       channel.stream.listen(
         (data) {
@@ -120,11 +90,7 @@ class CDPClient {
         },
       );
 
-      sendPort.send({
-        'type': 'connection_established',
-        'channel': channel,
-      });
-
+      _channel = channel;
       logger.info('Connected to Chrome DevTools Protocol via WebSocket');
     } catch (e, stackTrace) {
       logger.severe('Failed to connect to CDP: $e\n$stackTrace');
