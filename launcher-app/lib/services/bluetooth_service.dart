@@ -22,7 +22,7 @@ class BluetoothService {
   final CommandService _commandService = CommandService();
   static void Function(WifiCredentials)? _onCredentialsReceived;
   static final _commandPort = ReceivePort();
-  static final Map<String, Map<int, List<int>>> _chunkCommands = {};
+  static final Map<String, Map<int, List<int>>> _chunkData = {};
 
   // Store both callbacks
   late final NativeCallable<ConnectionResultCallbackNative> _setupCallback;
@@ -114,7 +114,7 @@ class BluetoothService {
       _sendChunkAcknowledgement(chunkInfo);
 
       // Check if we have all chunks
-      if (_chunkCommands[chunkInfo.ackReplyId]!.length == chunkInfo.total) {
+      if (_chunkData[chunkInfo.ackReplyId]!.length == chunkInfo.total) {
         _processCompleteCommand(chunkInfo);
       }
     } catch (e, stackTrace) {
@@ -131,8 +131,8 @@ class BluetoothService {
   }
 
   static void _storeChunk(ChunkInfo info) {
-    _chunkCommands[info.ackReplyId] ??= {};
-    _chunkCommands[info.ackReplyId]![info.index] = info.command;
+    _chunkData[info.ackReplyId] ??= {};
+    _chunkData[info.ackReplyId]![info.index] = info.data;
   }
 
   static void _sendChunkAcknowledgement(ChunkInfo info) {
@@ -143,13 +143,11 @@ class BluetoothService {
 
   static void _processCompleteCommand(ChunkInfo info) {
     // Combine all chunks in order
-    final completeCommand = _chunkCommands[info.ackReplyId]!
-        .values
-        .expand((chunk) => chunk)
-        .toList();
+    final completeCommand =
+        _chunkData[info.ackReplyId]!.values.expand((chunk) => chunk).toList();
 
     // Clean up the chunks map
-    _chunkCommands.remove(info.ackReplyId);
+    _chunkData.remove(info.ackReplyId);
 
     final (commandStrings, _) =
         VarintParser.parseToStringArray(completeCommand, 0);

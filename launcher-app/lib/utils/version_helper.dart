@@ -2,15 +2,8 @@ import 'package:feralfile/services/logger.dart';
 import 'package:process_run/stdio.dart';
 
 class VersionHelper {
-  static String? _latestVersion;
   static String? _installedVersion;
-
-  static Future<String?> getLatestVersion() async {
-    if (_latestVersion == null) {
-      _latestVersion = await _getLatestVersion();
-    }
-    return _latestVersion;
-  }
+  static DateTime? _lastUpdated;
 
   static Future<String?> getInstalledVersion() async {
     if (_installedVersion == null) {
@@ -19,7 +12,7 @@ class VersionHelper {
     return _installedVersion;
   }
 
-  static Future<String?> _getLatestVersion() async {
+  static Future<String?> getLatestVersion() async {
     try {
       await updatePackageList();
       ProcessResult result =
@@ -65,11 +58,18 @@ class VersionHelper {
   /// Update system package list
   static Future<void> updatePackageList() async {
     try {
+      final sinceLastUpdate =
+          DateTime.now().difference(_lastUpdated ?? DateTime(0));
+      if (sinceLastUpdate.inHours < 3) {
+        print("Package list updated less than an hour ago. Skipping update.");
+        return;
+      }
       print("Updating package list...");
       ProcessResult result = await Process.run('sudo', ['apt-get', 'update']);
 
       if (result.exitCode == 0) {
         print("Package list updated successfully.");
+        _lastUpdated = DateTime.now();
       } else {
         print("Error updating package list: ${result.stderr}");
       }
@@ -91,6 +91,7 @@ class VersionHelper {
 
       if (result.exitCode == 0) {
         print("Successfully installed version $version.");
+        _installedVersion = version;
       } else {
         print("Error installing package: ${result.stderr}");
       }
