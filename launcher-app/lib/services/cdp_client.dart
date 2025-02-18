@@ -12,8 +12,8 @@ class CDPClient {
   static final _responseCompleters = <int, Completer<String>>{};
   static Isolate? _cdpIsolate;
   static bool _isConnecting = false;
-  static const _maxRetries = 3;
-  static const _retryDelay = Duration(seconds: 2);
+  static const _maxRetries = 10;
+  static const _retryDelay = Duration(seconds: 5);
   static Timer? _fpsMonitorTimer;
   static const _fpsMonitorInterval = Duration(minutes: 2);
 
