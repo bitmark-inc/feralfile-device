@@ -1,12 +1,16 @@
 #!/bin/bash -e
 
+# Create export-image directory if it doesn't exist
+mkdir -p "${BASE_DIR}/export-image"
+
 # Calculate partition sizes in MB
 BOOT_SIZE=256
 UPDATE_SIZE=2048
 BUSYBOX_SIZE=512
 
 # Create a new partition table
-cat > "${STAGE_WORK_DIR}/partition.txt" << EOF
+mkdir -p "${BASE_DIR}/export-image"
+cat > "${BASE_DIR}/export-image/partition.txt" << EOF
 label: dos
 unit: sectors
 
@@ -34,9 +38,9 @@ rm -f "${IMG_FILE}"
 rm -rf "${ROOTFS_DIR}"
 mkdir -p "${ROOTFS_DIR}"
 
-BOOT_SIZE=$(grep -E "^1 :" "${STAGE_WORK_DIR}/partition.txt" | awk '{print $5}')
-UPDATE_SIZE=$(grep -E "^2 :" "${STAGE_WORK_DIR}/partition.txt" | awk '{print $3}')
-BUSYBOX_SIZE=$(grep -E "^3 :" "${STAGE_WORK_DIR}/partition.txt" | awk '{print $3}')
+BOOT_SIZE=$(grep -E "^1 :" "${BASE_DIR}/export-image/partition.txt" | awk '{print $5}')
+UPDATE_SIZE=$(grep -E "^2 :" "${BASE_DIR}/export-image/partition.txt" | awk '{print $3}')
+BUSYBOX_SIZE=$(grep -E "^3 :" "${BASE_DIR}/export-image/partition.txt" | awk '{print $3}')
 ROOT_SIZE=$(du --apparent-size -s "${EXPORT_ROOTFS_DIR}" --exclude var/cache/apt/archives --exclude boot --block-size=1 | cut -f 1)
 
 # Calculate total image size
@@ -44,7 +48,7 @@ IMG_SIZE=$((BOOT_SIZE + UPDATE_SIZE + BUSYBOX_SIZE + ROOT_SIZE + (400 * 1024 * 1
 
 fallocate -l "${IMG_SIZE}" "${IMG_FILE}"
 parted -s "${IMG_FILE}" mklabel msdos
-sfdisk --force "${IMG_FILE}" < "${STAGE_WORK_DIR}/partition.txt"
+sfdisk --force "${IMG_FILE}" < "${BASE_DIR}/export-image/partition.txt"
 
 PARTED_OUT=$(parted -s "${IMG_FILE}" unit b print)
 BOOT_OFFSET=$(echo "${PARTED_OUT}" | grep -E "^ 1" | awk '{print $2}')
