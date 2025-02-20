@@ -8,23 +8,6 @@ BOOT_SIZE=256
 UPDATE_SIZE=2048
 BUSYBOX_SIZE=512
 
-# Create a new partition table
-mkdir -p "${BASE_DIR}/export-image"
-cat > "${BASE_DIR}/export-image/partition.txt" << EOF
-label: dos
-unit: sectors
-
-1 : start=2048, size=$(($BOOT_SIZE * 2048)), type=c, bootable
-2 : size=$(($UPDATE_SIZE * 2048)), type=83
-3 : size=$(($BUSYBOX_SIZE * 2048)), type=83
-4 : type=83
-EOF
-
-# Override the default partitioning in pi-gen
-if [ -f "${BASE_DIR}/export-image/prerun.sh" ]; then
-    mv "${BASE_DIR}/export-image/prerun.sh" "${BASE_DIR}/export-image/prerun.sh.bak"
-fi
-
 # Create custom prerun.sh for image creation
 cat > "${BASE_DIR}/export-image/prerun.sh" << 'EOF'
 #!/bin/bash -e
@@ -38,46 +21,73 @@ rm -f "${IMG_FILE}"
 rm -rf "${ROOTFS_DIR}"
 mkdir -p "${ROOTFS_DIR}"
 
-BOOT_SIZE=$(grep -E "^1 :" "${BASE_DIR}/export-image/partition.txt" | awk '{print $5}')
-UPDATE_SIZE=$(grep -E "^2 :" "${BASE_DIR}/export-image/partition.txt" | awk '{print $3}')
-BUSYBOX_SIZE=$(grep -E "^3 :" "${BASE_DIR}/export-image/partition.txt" | awk '{print $3}')
-ROOT_SIZE=$(du --apparent-size -s "${EXPORT_ROOTFS_DIR}" --exclude var/cache/apt/archives --exclude boot --block-size=1 | cut -f 1)
+# All partition sizes and starts will be aligned to this size
+ALIGN="$((4 * 1024 * 1024))"
 
-# Calculate total image size
-IMG_SIZE=$((BOOT_SIZE + UPDATE_SIZE + BUSYBOX_SIZE + ROOT_SIZE + (400 * 1024 * 1024)))
+BOOT_SIZE="$((256 * 1024 * 1024))"
+UPDATE_SIZE="$((2048 * 1024 * 1024))"
+BUSYBOX_SIZE="$((512 * 1024 * 1024))"
+ROOT_SIZE=$(du -x --apparent-size -s "${EXPORT_ROOTFS_DIR}" --exclude var/cache/apt/archives --exclude boot/firmware --block-size=1 | cut -f 1)
+ROOT_MARGIN="$(echo "($ROOT_SIZE * 0.2 + 200 * 1024 * 1024) / 1" | bc)"
 
-fallocate -l "${IMG_SIZE}" "${IMG_FILE}"
-parted -s "${IMG_FILE}" mklabel msdos
-sfdisk --force "${IMG_FILE}" < "${BASE_DIR}/export-image/partition.txt"
+# Calculate partition starts and sizes
+BOOT_PART_START=$((ALIGN))
+BOOT_PART_SIZE=$(((BOOT_SIZE + ALIGN - 1) / ALIGN * ALIGN))
+UPDATE_PART_START=$((BOOT_PART_START + BOOT_PART_SIZE))
+UPDATE_PART_SIZE=$(((UPDATE_SIZE + ALIGN - 1) / ALIGN * ALIGN))
+BUSYBOX_PART_START=$((UPDATE_PART_START + UPDATE_PART_SIZE))
+BUSYBOX_PART_SIZE=$(((BUSYBOX_SIZE + ALIGN - 1) / ALIGN * ALIGN))
+ROOT_PART_START=$((BUSYBOX_PART_START + BUSYBOX_PART_SIZE))
+ROOT_PART_SIZE=$(((ROOT_SIZE + ROOT_MARGIN + ALIGN - 1) / ALIGN * ALIGN))
 
-PARTED_OUT=$(parted -s "${IMG_FILE}" unit b print)
-BOOT_OFFSET=$(echo "${PARTED_OUT}" | grep -E "^ 1" | awk '{print $2}')
-BOOT_LENGTH=$(echo "${PARTED_OUT}" | grep -E "^ 1" | awk '{print $4}')
-UPDATE_OFFSET=$(echo "${PARTED_OUT}" | grep -E "^ 2" | awk '{print $2}')
-UPDATE_LENGTH=$(echo "${PARTED_OUT}" | grep -E "^ 2" | awk '{print $4}')
-BUSYBOX_OFFSET=$(echo "${PARTED_OUT}" | grep -E "^ 3" | awk '{print $2}')
-BUSYBOX_LENGTH=$(echo "${PARTED_OUT}" | grep -E "^ 3" | awk '{print $4}')
-ROOT_OFFSET=$(echo "${PARTED_OUT}" | grep -E "^ 4" | awk '{print $2}')
-ROOT_LENGTH=$(echo "${PARTED_OUT}" | grep -E "^ 4" | awk '{print $4}')
+IMG_SIZE=$((ROOT_PART_START + ROOT_PART_SIZE))
 
-BOOT_DEV=$(losetup --show -f -o "${BOOT_OFFSET}" --sizelimit "${BOOT_LENGTH}" "${IMG_FILE}")
-UPDATE_DEV=$(losetup --show -f -o "${UPDATE_OFFSET}" --sizelimit "${UPDATE_LENGTH}" "${IMG_FILE}")
-BUSYBOX_DEV=$(losetup --show -f -o "${BUSYBOX_OFFSET}" --sizelimit "${BUSYBOX_LENGTH}" "${IMG_FILE}")
-ROOT_DEV=$(losetup --show -f -o "${ROOT_OFFSET}" --sizelimit "${ROOT_LENGTH}" "${IMG_FILE}")
+truncate -s "${IMG_SIZE}" "${IMG_FILE}"
 
-mkdosfs -n boot -F 32 -v "${BOOT_DEV}"
-mkfs.ext4 -L update "${UPDATE_DEV}"
-mkfs.ext4 -L busybox "${BUSYBOX_DEV}"
-mkfs.ext4 -L rootfs "${ROOT_DEV}"
+parted --script "${IMG_FILE}" mklabel msdos
+parted --script "${IMG_FILE}" unit B mkpart primary fat32 "${BOOT_PART_START}" "$((BOOT_PART_START + BOOT_PART_SIZE - 1))"
+parted --script "${IMG_FILE}" unit B mkpart primary ext4 "${UPDATE_PART_START}" "$((UPDATE_PART_START + UPDATE_PART_SIZE - 1))"
+parted --script "${IMG_FILE}" unit B mkpart primary ext4 "${BUSYBOX_PART_START}" "$((BUSYBOX_PART_START + BUSYBOX_PART_SIZE - 1))"
+parted --script "${IMG_FILE}" unit B mkpart primary ext4 "${ROOT_PART_START}" "$((ROOT_PART_START + ROOT_PART_SIZE - 1))"
+parted --script "${IMG_FILE}" set 1 boot on
 
-mkdir -p "${STAGE_WORK_DIR}/rootfs"
-mkdir -p "${STAGE_WORK_DIR}/boot"
+echo "Creating loop device..."
+cnt=0
+until ensure_next_loopdev && LOOP_DEV="$(losetup --show --find --partscan "$IMG_FILE")"; do
+    if [ $cnt -lt 5 ]; then
+        cnt=$((cnt + 1))
+        echo "Error in losetup. Retrying..."
+        sleep 5
+    else
+        echo "ERROR: losetup failed; exiting"
+        exit 1
+    fi
+done
 
-mount "${ROOT_DEV}" "${STAGE_WORK_DIR}/rootfs"
-mount "${BOOT_DEV}" "${STAGE_WORK_DIR}/boot"
+ensure_loopdev_partitions "$LOOP_DEV"
+BOOT_DEV="${LOOP_DEV}p1"
+UPDATE_DEV="${LOOP_DEV}p2"
+BUSYBOX_DEV="${LOOP_DEV}p3"
+ROOT_DEV="${LOOP_DEV}p4"
 
-rsync -aHAXx --exclude var/cache/apt/archives "${EXPORT_ROOTFS_DIR}/" "${STAGE_WORK_DIR}/rootfs/"
-rsync -rtx "${EXPORT_ROOTFS_DIR}/boot/" "${STAGE_WORK_DIR}/boot/"
+ROOT_FEATURES="^huge_file"
+for FEATURE in 64bit; do
+    if grep -q "$FEATURE" /etc/mke2fs.conf; then
+        ROOT_FEATURES="^$FEATURE,$ROOT_FEATURES"
+    fi
+done
+
+mkdosfs -n bootfs -F 32 -s 4 -v "$BOOT_DEV" > /dev/null
+mkfs.ext4 -L update -O "$ROOT_FEATURES" "$UPDATE_DEV" > /dev/null
+mkfs.ext4 -L busybox -O "$ROOT_FEATURES" "$BUSYBOX_DEV" > /dev/null
+mkfs.ext4 -L rootfs -O "$ROOT_FEATURES" "$ROOT_DEV" > /dev/null
+
+mount -v "$ROOT_DEV" "${ROOTFS_DIR}" -t ext4
+mkdir -p "${ROOTFS_DIR}/boot/firmware"
+mount -v "$BOOT_DEV" "${ROOTFS_DIR}/boot/firmware" -t vfat
+
+rsync -aHAXx --exclude /var/cache/apt/archives --exclude /boot/firmware "${EXPORT_ROOTFS_DIR}/" "${ROOTFS_DIR}/"
+rsync -rtx "${EXPORT_ROOTFS_DIR}/boot/firmware/" "${ROOTFS_DIR}/boot/firmware/"
 EOF
 
 chmod +x "${BASE_DIR}/export-image/prerun.sh" 
