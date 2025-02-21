@@ -15,7 +15,7 @@ ALIGN="$((4 * 1024 * 1024))"
 # Define fixed partition sizes in bytes
 BOOT_SIZE="$((256 * 1024 * 1024))"    # 256MB
 UPDATE_SIZE="$((2048 * 1024 * 1024))"  # 2048MB
-BUSYBOX_SIZE="$((1536 * 1024 * 1024))" # 1536MB (1.5GB as per your spec)
+BUSYBOX_SIZE="$((1536 * 1024 * 1024))" # 1536MB (1.5GB)
 MIN_ROOT_SIZE="$((5 * 1024 * 1024 * 1024))"  # 5GB minimum for root
 
 # Calculate ROOT_SIZE with fallback
@@ -64,8 +64,8 @@ ROOT_START=$(($BUSYBOX_END_ALIGNED + 1))
 ROOT_END=$(($ROOT_START + $ROOT_PART_SIZE - 1))
 ROOT_END_ALIGNED=$((($ROOT_END + $ALIGN - 1) / $ALIGN * $ALIGN - 1))
 
-# Total image size
-IMG_SIZE=$(($ROOT_END_ALIGNED + $ALIGN))
+# Total image size, aligned to 512-byte sectors
+IMG_SIZE=$(( ($ROOT_END_ALIGNED + $ALIGN + 511) & ~511 ))
 
 # Debug output for partitions
 echo "BOOT: $BOOT_START - $BOOT_END_ALIGNED (~$(($BOOT_SIZE / 1024 / 1024))MB)"
@@ -88,7 +88,6 @@ parted --script "${IMG_FILE}" set 1 boot on
 # Debugging: Print partition table
 parted --script "${IMG_FILE}" unit B print
 
-# Rest of your script (loop device setup, filesystem creation, etc.)
 echo "Creating loop device..."
 cnt=0
 until ensure_next_loopdev && LOOP_DEV="$(losetup --show --find --partscan "$IMG_FILE")"; do
@@ -125,4 +124,8 @@ mkdir -p "${ROOTFS_DIR}/boot/firmware"
 mount -v "$BOOT_DEV" "${ROOTFS_DIR}/boot/firmware" -t vfat
 
 rsync -aHAXx --exclude /var/cache/apt/archives --exclude /boot/firmware "${EXPORT_ROOTFS_DIR}/" "${ROOTFS_DIR}/"
-rsync -rtx "${EXPORT_ROOTFS_DIR}/boot/firmware/" "${ROOTFS_DIR}/boot/firmware/"
+if [ -d "${EXPORT_ROOTFS_DIR}/boot/firmware" ]; then
+    rsync -rtx "${EXPORT_ROOTFS_DIR}/boot/firmware/" "${ROOTFS_DIR}/boot/firmware/"
+else
+    echo "Warning: ${EXPORT_ROOTFS_DIR}/boot/firmware not found. Skipping boot firmware copy."
+fi
