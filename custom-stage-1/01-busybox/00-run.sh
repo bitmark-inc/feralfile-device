@@ -14,24 +14,33 @@ UPDATE_PART="/dev/mmcblk0p2"
 OS_PART="/dev/mmcblk0p4"
 MOUNT_POINT="/mnt/update"
 
+echo "Starting update check process..."
+
 # Mount update partition
-mkdir -p "${MOUNT_POINT}"
-mount "${UPDATE_PART}" "${MOUNT_POINT}"
+echo "Creating mount point directory at ${MOUNT_POINT}..."
+mkdir -p "${MOUNT_POINT}" || echo "Failed to create mount point directory"
+
+echo "Attempting to mount update partition ${UPDATE_PART}..."
+mount "${UPDATE_PART}" "${MOUNT_POINT}" || echo "Failed to mount update partition"
 
 # Check for update image
+echo "Checking for update image..."
 if [ -f "${MOUNT_POINT}/update.img" ]; then
     echo "Found update image, applying..."
     
     # Unmount OS partition if mounted
+    echo "Unmounting OS partition ${OS_PART} if mounted..."
     umount "${OS_PART}" 2>/dev/null || true
     
     # Write image to OS partition
-    dd if="${MOUNT_POINT}/update.img" of="${OS_PART}" bs=4M
-    sync
+    echo "Writing update image to OS partition..."
+    dd if="${MOUNT_POINT}/update.img" of="${OS_PART}" bs=4M || echo "Failed to write update image"
+    sync || echo "Failed to sync after writing image"
     
     # Remove update image
-    rm "${MOUNT_POINT}/update.img"
-    sync
+    echo "Removing update image..."
+    rm "${MOUNT_POINT}/update.img" || echo "Failed to remove update image"
+    sync || echo "Failed to sync after removing image"
     
     echo "Update complete, rebooting..."
     reboot
@@ -47,16 +56,32 @@ chmod +x "${ROOTFS_DIR}/usr/local/sbin/check_update.sh"
 cat > "${ROOTFS_DIR}/init" << 'EOF'
 #!/bin/busybox sh
 
-# Mount essential filesystems
-mount -t proc proc /proc
-mount -t sysfs sysfs /sys
-mount -t devtmpfs devtmpfs /dev
+echo "
++------------------+
+|                  |
+|  ███████ ███████ |  ██   ██  ██ 
+|  ██      ██      |   ██ ██   ██
+|  ███████ ███████ |    ███    ██
+|  ██      ██      |   ██ ██   ██
+|  ██      ██      |  ██   ██  ██
+|                  |
++------------------+
+"
 
-# Mount OS partition
-mkdir -p /mnt/os
-mount /dev/mmcblk0p4 /mnt/os
+# Create essential directories
+echo "Creating essential directories..."
+mkdir -p /proc /sys /dev /root || echo "Failed to create essential directories"
 
-# Run update checker
+echo "Mounting essential filesystems..."
+mount -t proc proc /proc || echo "Failed to mount proc"
+mount -t sysfs sysfs /sys || echo "Failed to mount sysfs"
+mount -t devtmpfs devtmpfs /dev || echo "Failed to mount devtmpfs"
+
+echo "Creating and mounting OS partition..."
+mkdir -p /mnt/os || echo "Failed to create /mnt/os directory"
+mount /dev/mmcblk0p4 /mnt/os || echo "Failed to mount OS partition"
+
+echo "Running update checker..."
 /usr/local/sbin/check_update.sh
 EOF
 
