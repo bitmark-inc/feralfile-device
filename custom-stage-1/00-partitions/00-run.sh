@@ -13,16 +13,20 @@ mkdir -p "${ROOTFS_DIR}"
 ALIGN="$((4 * 1024 * 1024))"
 
 # Calculate partition sizes in bytes
-BOOT_SIZE="$((256 * 1024 * 1024))"   # 256MB
-UPDATE_SIZE="$((2048 * 1024 * 1024))" # 2048MB
-BUSYBOX_SIZE="$((512 * 1024 * 1024))" # 512MB
+BOOT_SIZE="$((256 * 1024 * 1024))"    # 256MB
+UPDATE_SIZE="$((2048 * 1024 * 1024))"  # 2048MB (update partition)
+BUSYBOX_SIZE="$((1536 * 1024 * 1024))" # 1536MB (1.5GB standby partition)
 ROOT_SIZE=$(du -x --apparent-size -s "${EXPORT_ROOTFS_DIR}" --exclude var/cache/apt/archives --exclude boot/firmware --block-size=1 | cut -f 1)
 ROOT_MARGIN="$(echo "($ROOT_SIZE * 0.2 + 200 * 1024 * 1024) / 1" | bc)"
+
+# Debugging: Print sizes
+echo "ROOT_SIZE: $ROOT_SIZE bytes (~$(($ROOT_SIZE / 1024 / 1024))MB)"
+echo "ROOT_MARGIN: $ROOT_MARGIN bytes (~$(($ROOT_MARGIN / 1024 / 1024))MB)"
 
 # Define partition starts and ends with proper alignment
 BOOT_START="$ALIGN"  # Start at 4MB
 BOOT_END=$(($BOOT_START + $BOOT_SIZE - 1))
-BOOT_END_ALIGNED=$((($BOOT_END + $ALIGN - 1) / $ALIGN * $ALIGN - 1))  # Align end up to next 4MB boundary
+BOOT_END_ALIGNED=$((($BOOT_END + $ALIGN - 1) / $ALIGN * $ALIGN - 1))
 
 UPDATE_START=$(($BOOT_END_ALIGNED + 1))
 UPDATE_END=$(($UPDATE_START + $UPDATE_SIZE - 1))
@@ -36,8 +40,15 @@ ROOT_START=$(($BUSYBOX_END_ALIGNED + 1))
 ROOT_END=$(($ROOT_START + $ROOT_SIZE + $ROOT_MARGIN - 1))
 ROOT_END_ALIGNED=$((($ROOT_END + $ALIGN - 1) / $ALIGN * $ALIGN - 1))
 
-# Total image size is the aligned end of the root partition
-IMG_SIZE=$(($ROOT_END_ALIGNED + 1))
+# Total image size is the aligned end of the root partition plus padding
+IMG_SIZE=$(($ROOT_END_ALIGNED + $ALIGN))
+
+# Debugging: Print sizes and positions
+echo "BOOT: $BOOT_START - $BOOT_END_ALIGNED (~$(($BOOT_SIZE / 1024 / 1024))MB)"
+echo "UPDATE: $UPDATE_START - $UPDATE_END_ALIGNED (~$(($UPDATE_SIZE / 1024 / 1024))MB)"
+echo "BUSYBOX: $BUSYBOX_START - $BUSYBOX_END_ALIGNED (~$(($BUSYBOX_SIZE / 1024 / 1024))MB)"
+echo "ROOT: $ROOT_START - $ROOT_END_ALIGNED (~$((($ROOT_SIZE + $ROOT_MARGIN) / 1024 / 1024))MB)"
+echo "IMG_SIZE: $IMG_SIZE bytes (~$(($IMG_SIZE / 1024 / 1024))MB)"
 
 # Create the image file
 truncate -s "${IMG_SIZE}" "${IMG_FILE}"
