@@ -9,21 +9,27 @@ rm -f "${IMG_FILE}"
 rm -rf "${ROOTFS_DIR}"
 mkdir -p "${ROOTFS_DIR}"
 
-# All partition sizes and starts will be aligned to this size (4MB in bytes)
-ALIGN="$((4 * 1024 * 1024))"
+# Define constants
+ALIGN=4194304  # 4MB alignment in bytes
+BOOT_SIZE=$((64 * 1024 * 1024))  # Example: 64MB for boot
+UPDATE_SIZE=$((128 * 1024 * 1024))  # Example: 128MB for update
+BUSYBOX_SIZE=$((32 * 1024 * 1024))  # Example: 32MB for busybox
+MIN_ROOT_SIZE=$((1024 * 1024 * 1024))  # Minimum 1GB for root
 
-# Calculate partition sizes in bytes
-BOOT_SIZE="$((256 * 1024 * 1024))"    # 256MB
-UPDATE_SIZE="$((2048 * 1024 * 1024))"  # 2048MB (update partition)
-BUSYBOX_SIZE="$((1536 * 1024 * 1024))" # 1536MB (1.5GB standby partition)
-ROOT_SIZE=$(du -x --apparent-size -s "${EXPORT_ROOTFS_DIR}" --exclude var/cache/apt/archives --exclude boot/firmware --block-size=1 | cut -f 1)
-ROOT_MARGIN="$(echo "($ROOT_SIZE * 0.2 + 200 * 1024 * 1024) / 1" | bc)"
+# Use the larger of calculated ROOT_SIZE or MIN_ROOT_SIZE
+if [ "$ROOT_SIZE" -lt "$MIN_ROOT_SIZE" ]; then
+    echo "Warning: ROOT_SIZE is less than 1GB. Setting to minimum size."
+    ROOT_SIZE=$MIN_ROOT_SIZE
+fi
 
-# Debugging: Print sizes
-echo "ROOT_SIZE: $ROOT_SIZE bytes (~$(($ROOT_SIZE / 1024 / 1024))MB)"
-echo "ROOT_MARGIN: $ROOT_MARGIN bytes (~$(($ROOT_MARGIN / 1024 / 1024))MB)"
+# Calculate root partition size
+ROOT_PART_SIZE=$(($ROOT_SIZE + $ROOT_MARGIN))
+if [ "$ROOT_PART_SIZE" -le 0 ]; then
+    echo "Error: Calculated root partition size is zero or negative."
+    exit 1
+fi
 
-# Define partition starts and ends with proper alignment
+# Calculate partition boundaries
 BOOT_START="$ALIGN"  # Start at 4MB
 BOOT_END=$(($BOOT_START + $BOOT_SIZE - 1))
 BOOT_END_ALIGNED=$((($BOOT_END + $ALIGN - 1) / $ALIGN * $ALIGN - 1))
@@ -37,18 +43,18 @@ BUSYBOX_END=$(($BUSYBOX_START + $BUSYBOX_SIZE - 1))
 BUSYBOX_END_ALIGNED=$((($BUSYBOX_END + $ALIGN - 1) / $ALIGN * $ALIGN - 1))
 
 ROOT_START=$(($BUSYBOX_END_ALIGNED + 1))
-ROOT_END=$(($ROOT_START + $ROOT_SIZE + $ROOT_MARGIN - 1))
+ROOT_END=$(($ROOT_START + $ROOT_PART_SIZE - 1))
 ROOT_END_ALIGNED=$((($ROOT_END + $ALIGN - 1) / $ALIGN * $ALIGN - 1))
 
-# Total image size is the aligned end of the root partition plus padding
+# Total image size
 IMG_SIZE=$(($ROOT_END_ALIGNED + $ALIGN))
 
-# Debugging: Print sizes and positions
-echo "BOOT: $BOOT_START - $BOOT_END_ALIGNED (~$(($BOOT_SIZE / 1024 / 1024))MB)"
-echo "UPDATE: $UPDATE_START - $UPDATE_END_ALIGNED (~$(($UPDATE_SIZE / 1024 / 1024))MB)"
-echo "BUSYBOX: $BUSYBOX_START - $BUSYBOX_END_ALIGNED (~$(($BUSYBOX_SIZE / 1024 / 1024))MB)"
-echo "ROOT: $ROOT_START - $ROOT_END_ALIGNED (~$((($ROOT_SIZE + $ROOT_MARGIN) / 1024 / 1024))MB)"
-echo "IMG_SIZE: $IMG_SIZE bytes (~$(($IMG_SIZE / 1024 / 1024))MB)"
+# Debug output
+echo "BOOT: $BOOT_START - $BOOT_END_ALIGNED"
+echo "UPDATE: $UPDATE_START - $UPDATE_END_ALIGNED"
+echo "BUSYBOX: $BUSYBOX_START - $BUSYBOX_END_ALIGNED"
+echo "ROOT: $ROOT_START - $ROOT_END_ALIGNED"
+echo "IMG_SIZE: $IMG_SIZE"
 
 # Create the image file
 truncate -s "${IMG_SIZE}" "${IMG_FILE}"
