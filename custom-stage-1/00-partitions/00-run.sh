@@ -9,27 +9,45 @@ rm -f "${IMG_FILE}"
 rm -rf "${ROOTFS_DIR}"
 mkdir -p "${ROOTFS_DIR}"
 
-# Define constants
-ALIGN=4194304  # 4MB alignment in bytes
-BOOT_SIZE=$((64 * 1024 * 1024))  # Example: 64MB for boot
-UPDATE_SIZE=$((128 * 1024 * 1024))  # Example: 128MB for update
-BUSYBOX_SIZE=$((32 * 1024 * 1024))  # Example: 32MB for busybox
-MIN_ROOT_SIZE=$((1024 * 1024 * 1024))  # Minimum 1GB for root
+# All partition sizes and starts will be aligned to this size (4MB in bytes)
+ALIGN="$((4 * 1024 * 1024))"
 
-# Use the larger of calculated ROOT_SIZE or MIN_ROOT_SIZE
-if [ "$ROOT_SIZE" -lt "$MIN_ROOT_SIZE" ]; then
-    echo "Warning: ROOT_SIZE is less than 1GB. Setting to minimum size."
-    ROOT_SIZE=$MIN_ROOT_SIZE
+# Define fixed partition sizes in bytes
+BOOT_SIZE="$((256 * 1024 * 1024))"    # 256MB
+UPDATE_SIZE="$((2048 * 1024 * 1024))"  # 2048MB
+BUSYBOX_SIZE="$((1536 * 1024 * 1024))" # 1536MB (1.5GB as per your spec)
+MIN_ROOT_SIZE="$((5 * 1024 * 1024 * 1024))"  # 5GB minimum for root
+
+# Calculate ROOT_SIZE with fallback
+ROOT_SIZE=$(du -x --apparent-size -s "${EXPORT_ROOTFS_DIR}" --exclude var/cache/apt/archives --exclude boot/firmware --block-size=1 2>/dev/null | cut -f 1)
+if [ -z "$ROOT_SIZE" ] || [ "$ROOT_SIZE" -eq 0 ]; then
+    echo "Warning: Unable to calculate ROOT_SIZE from '${EXPORT_ROOTFS_DIR}'. Using minimum size of 5GB."
+    ROOT_SIZE="$MIN_ROOT_SIZE"
+elif [ "$ROOT_SIZE" -lt "$MIN_ROOT_SIZE" ]; then
+    echo "Warning: ROOT_SIZE ($ROOT_SIZE bytes) is less than 5GB. Setting to minimum size."
+    ROOT_SIZE="$MIN_ROOT_SIZE"
 fi
 
-# Calculate root partition size
-ROOT_PART_SIZE=$(($ROOT_SIZE + $ROOT_MARGIN))
-if [ "$ROOT_PART_SIZE" -le 0 ]; then
-    echo "Error: Calculated root partition size is zero or negative."
+# Calculate ROOT_MARGIN (20% of ROOT_SIZE + 200MB)
+ROOT_MARGIN=$(echo "($ROOT_SIZE * 0.2 + 200 * 1024 * 1024) / 1" | bc)
+if [ -z "$ROOT_MARGIN" ]; then
+    echo "Error: Failed to calculate ROOT_MARGIN."
     exit 1
 fi
 
-# Calculate partition boundaries
+# Calculate ROOT_PART_SIZE
+ROOT_PART_SIZE=$(($ROOT_SIZE + $ROOT_MARGIN))
+if [ -z "$ROOT_PART_SIZE" ] || [ "$ROOT_PART_SIZE" -le 0 ]; then
+    echo "Error: ROOT_PART_SIZE is invalid or zero."
+    exit 1
+fi
+
+# Debug output
+echo "ROOT_SIZE: $ROOT_SIZE bytes (~$(($ROOT_SIZE / 1024 / 1024))MB)"
+echo "ROOT_MARGIN: $ROOT_MARGIN bytes (~$(($ROOT_MARGIN / 1024 / 1024))MB)"
+echo "ROOT_PART_SIZE: $ROOT_PART_SIZE bytes (~$(($ROOT_PART_SIZE / 1024 / 1024))MB)"
+
+# Define partition starts and ends with proper alignment
 BOOT_START="$ALIGN"  # Start at 4MB
 BOOT_END=$(($BOOT_START + $BOOT_SIZE - 1))
 BOOT_END_ALIGNED=$((($BOOT_END + $ALIGN - 1) / $ALIGN * $ALIGN - 1))
@@ -49,12 +67,12 @@ ROOT_END_ALIGNED=$((($ROOT_END + $ALIGN - 1) / $ALIGN * $ALIGN - 1))
 # Total image size
 IMG_SIZE=$(($ROOT_END_ALIGNED + $ALIGN))
 
-# Debug output
-echo "BOOT: $BOOT_START - $BOOT_END_ALIGNED"
-echo "UPDATE: $UPDATE_START - $UPDATE_END_ALIGNED"
-echo "BUSYBOX: $BUSYBOX_START - $BUSYBOX_END_ALIGNED"
-echo "ROOT: $ROOT_START - $ROOT_END_ALIGNED"
-echo "IMG_SIZE: $IMG_SIZE"
+# Debug output for partitions
+echo "BOOT: $BOOT_START - $BOOT_END_ALIGNED (~$(($BOOT_SIZE / 1024 / 1024))MB)"
+echo "UPDATE: $UPDATE_START - $UPDATE_END_ALIGNED (~$(($UPDATE_SIZE / 1024 / 1024))MB)"
+echo "BUSYBOX: $BUSYBOX_START - $BUSYBOX_END_ALIGNED (~$(($BUSYBOX_SIZE / 1024 / 1024))MB)"
+echo "ROOT: $ROOT_START - $ROOT_END_ALIGNED (~$(($ROOT_PART_SIZE / 1024 / 1024))MB)"
+echo "IMG_SIZE: $IMG_SIZE bytes (~$(($IMG_SIZE / 1024 / 1024))MB)"
 
 # Create the image file
 truncate -s "${IMG_SIZE}" "${IMG_FILE}"
@@ -70,6 +88,7 @@ parted --script "${IMG_FILE}" set 1 boot on
 # Debugging: Print partition table
 parted --script "${IMG_FILE}" unit B print
 
+# Rest of your script (loop device setup, filesystem creation, etc.)
 echo "Creating loop device..."
 cnt=0
 until ensure_next_loopdev && LOOP_DEV="$(losetup --show --find --partscan "$IMG_FILE")"; do
