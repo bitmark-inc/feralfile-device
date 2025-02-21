@@ -1,5 +1,6 @@
 #!/bin/bash -e
 
+mkdir -p "${ROOTFS_DIR}/proc" "${ROOTFS_DIR}/sys" "${ROOTFS_DIR}/dev"
 # Install required packages in the busybox partition
 on_chroot << EOF
 apt-get update
