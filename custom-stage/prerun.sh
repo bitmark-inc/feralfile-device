@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-IMG_FILE="${STAGE_WORK_DIR}/${IMG_FILENAME}"
+IMG_FILE="${STAGE_WORK_DIR}/${IMG_FILENAME}.img"
 
 # Overwrite any existing partition table
 parted --script "${IMG_FILE}" mklabel msdos
