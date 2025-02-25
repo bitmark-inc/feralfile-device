@@ -25,11 +25,11 @@ class VersionHelper {
         logger.info('[getLatestVersion] Latest version: $version');
         return version;
       } else {
-        print("Error fetching latest version: ${result.stderr}");
+        logger.info("Error fetching latest version: ${result.stderr}");
         return null;
       }
     } catch (e) {
-      print("Exception: $e");
+      logger.info("Exception: $e");
       return null;
     }
   }
@@ -46,11 +46,11 @@ class VersionHelper {
         logger.info('[getInstalledVersion] Installed version: $version');
         return version;
       } else {
-        print("Error fetching latest version: ${result.stderr}");
+        logger.info("Error fetching latest version: ${result.stderr}");
         return null;
       }
     } catch (e) {
-      print("Exception: $e");
+      logger.info("Exception: $e");
       return null;
     }
   }
@@ -61,20 +61,21 @@ class VersionHelper {
       final sinceLastUpdate =
           DateTime.now().difference(_lastUpdated ?? DateTime(0));
       if (sinceLastUpdate.inHours < 3) {
-        print("Package list updated less than an hour ago. Skipping update.");
+        logger.info(
+            "Package list updated less than an hour ago. Skipping update.");
         return;
       }
-      print("Updating package list...");
+      logger.info("Updating package list...");
       ProcessResult result = await Process.run('sudo', ['apt-get', 'update']);
 
       if (result.exitCode == 0) {
-        print("Package list updated successfully.");
+        logger.info("Package list updated successfully.");
         _lastUpdated = DateTime.now();
       } else {
-        print("Error updating package list: ${result.stderr}");
+        logger.info("Error updating package list: ${result.stderr}");
       }
     } catch (e) {
-      print("Exception during package update: $e");
+      logger.info("Exception during package update: $e");
     }
   }
 
@@ -83,30 +84,37 @@ class VersionHelper {
     try {
       await updatePackageList(); // First, update the package list
 
-      print("Installing feralfile-launcher version: $version");
+      logger.info("Installing feralfile-launcher version: $version");
       ProcessResult result = await Process.run(
         'sudo',
         ['apt-get', 'install', 'feralfile-launcher=$version'],
       );
 
       if (result.exitCode == 0) {
-        print("Successfully installed version $version.");
+        logger.info("Successfully installed version $version.");
         _installedVersion = version;
       } else {
-        print("Error installing package: ${result.stderr}");
+        logger.info("Error installing package: ${result.stderr}");
       }
     } catch (e) {
-      print("Exception during installation: $e");
+      logger.info("Exception during installation: $e");
     }
   }
 
   // update to latest version
   static Future<void> updateToLatestVersion() async {
     final latestVersion = await getLatestVersion();
+    final installedVersion = await getInstalledVersion();
+    logger.info('[updateToLatestVersion] Latest version: $latestVersion');
+    logger.info('[updateToLatestVersion] Installed version: $installedVersion');
+    if (latestVersion == installedVersion) {
+      logger.info("Already on the latest version: $latestVersion");
+      return;
+    }
     if (latestVersion != null) {
       await updateToVersion(latestVersion);
     } else {
-      print("Failed to get latest version.");
+      logger.info("Failed to get latest version.");
     }
   }
 }

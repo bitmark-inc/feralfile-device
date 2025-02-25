@@ -62,11 +62,11 @@ class DeviceStatusHandler implements CommandHandler {
         String timezone = result.stdout.toString().trim();
         return timezone;
       } else {
-        print("Error: ${result.stderr}");
+        logger.info("Error: ${result.stderr}");
         return "Unknown";
       }
     } catch (e) {
-      print("Failed to get timezone: $e");
+      logger.info("Failed to get timezone: $e");
       return "Unknown";
     }
   }
