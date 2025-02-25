@@ -44,7 +44,7 @@ jobs:
       - name: Remame the package
         run: |
           # Rename downloaded package
-          mv ./custom-stage/packages/feralfile-launcher_${{ github.event.inputs.version }}_arm64.deb ./custom-stage/01-install-app/feralfile-launcher_arm64.deb
+          mv ./custom-stage/packages/feralfile-launcher_${{ github.event.inputs.version }}_arm64.deb ./custom-stages/stage-3/01-install-app/feralfile-launcher_arm64.deb
 
       - name: Build Pi OS Image with pi-gen-action
         uses: usimd/pi-gen-action@v1
