@@ -2,6 +2,12 @@
 
 IMG_FILE="${STAGE_WORK_DIR}/${IMG_FILENAME}.img"
 
+# Ensure the image exists
+if [ ! -f "${IMG_FILE}" ]; then
+  echo "Creating blank image: ${IMG_FILE}"
+  dd if=/dev/zero of="${IMG_FILE}" bs=1M count=1200
+fi
+
 # Overwrite any existing partition table
 parted --script "${IMG_FILE}" mklabel msdos
 
