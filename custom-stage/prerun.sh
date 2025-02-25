@@ -2,6 +2,9 @@
 
 IMG_FILE="${STAGE_WORK_DIR}/${IMG_FILENAME}.img"
 
+# Ensure the directory exists before creating the image file
+mkdir -p "$(dirname "${IMG_FILE}")"
+
 # Ensure the image exists
 if [ ! -f "${IMG_FILE}" ]; then
   echo "Creating blank image: ${IMG_FILE}"
