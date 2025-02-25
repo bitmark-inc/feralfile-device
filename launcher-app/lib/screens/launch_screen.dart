@@ -3,6 +3,7 @@ import 'package:feralfile/cubits/ble_connection_cubit.dart';
 import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/websocket_service.dart';
+import 'package:feralfile/utils/version_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -78,7 +79,7 @@ class _LaunchScreenState extends State<LaunchScreen>
     // Update to latest version
     logger.info('Updating to latest version...');
     try {
-      // await VersionHelper.updateToLatestVersion();
+      await VersionHelper.updateToLatestVersion();
     } catch (e) {
       logger.severe('Error updating to latest version: $e');
     }
