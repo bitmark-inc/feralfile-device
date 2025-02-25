@@ -93,7 +93,7 @@ jobs:
         uses: usimd/pi-gen-action@v1
         with:
           image-name: feralfile-device-${{ github.event.inputs.version }}
-          stage-list: stage0 stage1 stage2 ./custom-stage
+          stage-list: stage0 stage1 stage2 ./custom-stages/stage-3 ./custom-stages/export-image
           compression: zip
           compression-level: 6
           username: feralfile
@@ -106,7 +106,7 @@ jobs:
           release: bookworm
           enable-ssh: 0
           disable-first-boot-user-rename: 1
-          export-last-stage-only: true
+          export-last-stage-only: false
           wpa-country: 'US'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           verbose-output: true
