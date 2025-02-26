@@ -39,6 +39,8 @@ truncate -s "${IMG_SIZE}" "${IMG_FILE}"
 THIRD_PART_START=$((ROOT_PART_START + ROOT_PART_SIZE))
 THIRD_PART_END=$((THIRD_PART_START + ROOT_PART_SIZE - 1))
 
+parted --script "${IMG_FILE}" mklabel msdos
+
 # Partition #1 (boot):
 parted --script "${IMG_FILE}" unit B mkpart primary fat32 \
   "${BOOT_PART_START}" "$((BOOT_PART_START + BOOT_PART_SIZE - 1))"
