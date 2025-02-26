@@ -1,21 +1,43 @@
 #!/bin/bash -e
 
-# If your script calculates/assigns these:
-IMG_FILE="${STAGE_WORK_DIR}/${IMG_FILENAME}.img"
-LOOP_DEV="$(losetup -j "${IMG_FILE}" | cut -d: -f1)"
+IMG_FILE="${STAGE_WORK_DIR}/${IMG_FILENAME}${IMG_SUFFIX}.img"
 
-# Format root partition (p2) as ext4
-mkfs.ext4 -F -L rootfs "${LOOP_DEV}p2"
+# 1) Set up loop device
+cnt=0
+until ensure_next_loopdev && LOOP_DEV="$(losetup --show --find --partscan "$IMG_FILE")"; do
+  if [ $cnt -lt 5 ]; then
+    cnt=$((cnt + 1))
+    echo "Error in losetup. Retrying..."
+    sleep 5
+  else
+    echo "ERROR: losetup failed; exiting"
+    exit 1
+  fi
+done
 
-# Mount it so $ROOTFS_DIR points to an actual filesystem
+# 2) Make filesystems
+BOOT_DEV="${LOOP_DEV}p1"
+ROOT_DEV="${LOOP_DEV}p2"
+ROOTB_DEV="${LOOP_DEV}p3"
+
+mkfs.vfat -n bootfs -F 32 -s 4 -v "$BOOT_DEV" > /dev/null
+mkfs.ext4 -L rootfs "$ROOT_DEV" > /dev/null
+mkfs.ext4 -L rootfsB "$ROOTB_DEV" > /dev/null
+
+# 3) Mount partitions
 mkdir -p "${ROOTFS_DIR}"
-mount "${LOOP_DEV}p2" "${ROOTFS_DIR}"
+mount -v "$ROOT_DEV" "${ROOTFS_DIR}"
+mkdir -p "${ROOTFS_DIR}/boot/firmware"
+mount -v "$BOOT_DEV" "${ROOTFS_DIR}/boot/firmware"
 
-# If you need the OS from the previous stage:
-if [ ! -d "${ROOTFS_DIR}/bin" ]; then
-  copy_previous  # or rsync from a prior rootfs
-fi
+# 4) rsync from stage-3 rootfs
+EXPORT_ROOTFS_DIR="${WORK_DIR}/stage-3/rootfs"
+rsync -aHAXx --exclude var/cache/apt/archives --exclude boot/firmware \
+   "${EXPORT_ROOTFS_DIR}/" "${ROOTFS_DIR}/"
 
-# Now $ROOTFS_DIR/usr/bin definitely exists
-mkdir -p "${ROOTFS_DIR}/usr/bin"
-cp /usr/bin/qemu-arm-static "${ROOTFS_DIR}/usr/bin/"
+rsync -rtx "${EXPORT_ROOTFS_DIR}/boot/firmware/" "${ROOTFS_DIR}/boot/firmware/"
+
+# 5) Cleanup
+umount -v "${ROOTFS_DIR}/boot/firmware"
+umount -v "${ROOTFS_DIR}"
+losetup -d "$LOOP_DEV"
