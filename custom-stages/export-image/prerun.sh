@@ -1,6 +1,12 @@
 #!/bin/bash -e
 
+if [ ! -d "${ROOTFS_DIR}" ]; then
+    copy_previous
+fi
+
 IMG_FILE="${STAGE_WORK_DIR}/${IMG_FILENAME}${IMG_SUFFIX}.img"
+
+EXPORT_ROOTFS_DIR="${WORK_DIR}/stage-3/rootfs"
 
 unmount_image "${IMG_FILE}"
 
