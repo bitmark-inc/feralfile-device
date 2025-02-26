@@ -24,6 +24,8 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
     // Get device name based on MAC address
     final deviceName = await _getDeviceName();
 
+    updateDeviceId(deviceName);
+
     // Initialize Bluetooth service with the device name with retries
     const maxRetries = 3;
     var attempt = 0;
