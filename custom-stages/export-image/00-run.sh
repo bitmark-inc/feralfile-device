@@ -1,22 +1,19 @@
 #!/bin/bash -e
 
 IMG_FILE="${STAGE_WORK_DIR}/${IMG_FILENAME}${IMG_SUFFIX}.img"
-LOOP_DEV="$(losetup -j "${IMG_FILE}" | cut -d: -f1)"
 
-# Format partitions, mount them, copy rootfs...
-mkfs.vfat -F 32 -n boot "${LOOP_DEV}p1"
-mkfs.ext4 -F -L rootfs "${LOOP_DEV}p2"
-# etc...
+# 1) Possibly remove an old image
+rm -f "${IMG_FILE}"
 
-mount "${LOOP_DEV}p2" /mnt/root
-# rsync rootfs stuff...
+# 2) Create a blank image, say 2GB
+dd if=/dev/zero of="${IMG_FILE}" bs=1M count=2048
 
-# Boot partition
-mkdir -p /mnt/boot
-mount "${LOOP_DEV}p1" /mnt/boot
+# 3) Partition it
+parted --script "${IMG_FILE}" mklabel msdos
+parted --script "${IMG_FILE}" mkpart primary fat32 0% 256MB
+parted --script "${IMG_FILE}" mkpart primary ext4 256MB 1536MB
+parted --script "${IMG_FILE}" mkpart primary ext4 1536MB 100%
 
-install -m 644 "$(dirname "$0")/files/cmdlineA.txt" /mnt/boot/cmdline.txt
-install -m 644 "$(dirname "$0")/files/cmdlineB.txt" /mnt/boot/cmdlineB.txt
-
-umount /mnt/boot
-umount /mnt/root
+if [ ! -d "${ROOTFS_DIR}" ]; then
+  copy_previous
+fi
