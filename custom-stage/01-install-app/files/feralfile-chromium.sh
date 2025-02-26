@@ -9,6 +9,12 @@ export XAUTHORITY=/home/feralfile/.Xauthority
 
 # Function to start Chromium in kiosk mode
 start_chromium() {
+    # Create log directory if it doesn't exist and set permissions
+    echo "Setting up log directory..."
+    sudo mkdir -p /var/log/chromium
+    sudo chown feralfile:feralfile /var/log/chromium
+    sudo chmod 755 /var/log/chromium
+
     echo "Starting Chromium..."
     "$CHROMIUM" \
         --kiosk \
@@ -23,7 +29,15 @@ start_chromium() {
         --enable-gpu-rasterization \
         --force-renderer-accessibility \
         --media-router=0 \
-        https://support-feralfile-device.feralfile-display-prod.pages.dev?platform=ff-device >/dev/null 2>&1 
+        --enable-logging \
+        --log-level=0 \
+        --log-time \
+        --log-file="/var/log/chromium/chrome_debug.log" \
+        --v=0 \
+        --vmodule=console=0,*=-1 \
+        --remote-debugging-port=9222 \
+        https://support-feralfile-device.feralfile-display-prod.pages.dev?platform=ff-device \
+        2>&1 | tee -a /var/log/chromium/chrome_debug.log
 }
 
 # Function to check internet connectivity
