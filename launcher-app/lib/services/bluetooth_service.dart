@@ -32,9 +32,9 @@ class BluetoothService {
 
   BluetoothService._internal() {
     _commandService.initialize(this);
-    final logFilePtr = '/var/log/chromium/chrome_debug.log'.toNativeUtf8();
-    _bindings.bluetooth_set_logfile(logFilePtr);
-    calloc.free(logFilePtr);
+    logger.info('Setting log file: ${logFilePath}');
+    logger.info('Setting log file: ${logFilePath.toNativeUtf8()}');
+    _bindings.bluetooth_set_logfile(logFilePath.toNativeUtf8());
   }
 
   Future<bool> initialize(String deviceName) async {
