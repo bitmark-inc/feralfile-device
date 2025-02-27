@@ -1,4 +1,5 @@
 // lib/main.dart
+import 'dart:async';
 import 'dart:io';
 
 import 'package:feralfile/services/hardware_monitor_service.dart';
@@ -33,14 +34,18 @@ void main() async {
     exit(0);
   });
 
-  runApp(
-    MultiBlocProvider(
-      providers: [
-        BlocProvider.value(value: bleConnectionCubit),
-      ],
-      child: const FeralFileApp(),
-    ),
-  );
+  runZonedGuarded(() {
+    runApp(
+      MultiBlocProvider(
+        providers: [
+          BlocProvider.value(value: bleConnectionCubit),
+        ],
+        child: const FeralFileApp(),
+      ),
+    );
+  }, (error, stackTrace) {
+    logger.info('Uncaught error: $error\n$stackTrace');
+  });
 }
 
 class FeralFileApp extends StatelessWidget {
