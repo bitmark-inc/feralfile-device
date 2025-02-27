@@ -134,11 +134,15 @@ class VarintParser {
     List<int> result = [];
 
     for (var str in strings) {
+      logger.info('String: $str');
       // Convert string to UTF-8 bytes
       List<int> strBytes = utf8.encode(str);
 
       // Encode length as varint
       result.addAll(_encodeVarint(strBytes.length));
+
+      logger.info('length: ${_encodeVarint(strBytes.length).length}');
+      logger.info('String length: ${strBytes.length}');
 
       // Add string bytes
       result.addAll(strBytes);
