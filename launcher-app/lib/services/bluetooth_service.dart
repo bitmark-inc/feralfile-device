@@ -100,6 +100,8 @@ class BluetoothService {
       int success, Pointer<Uint8> data, int length) {
     List<int>? dataCopy;
     try {
+      logger.info('Received command data: $data');
+      logger.info('Received command data of length $length');
       // Create an immediate copy of the data
       dataCopy = List<int>.unmodifiable(data.asTypedList(length));
       // Release the FFI data

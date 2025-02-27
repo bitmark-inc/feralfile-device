@@ -14,7 +14,7 @@ final Logger logger = Logger('FeralFileApp');
 late File _logFile;
 HttpServer? _logServer;
 final _logBuffer = <String>[];
-const int _maxBufferSize = 1000; // Keep last 1000 log entries
+const int _maxBufferSize = 400; // Keep last 1000 log entries
 
 String get logFilePath => _logFile.path;
 
@@ -180,7 +180,8 @@ Future<void> sendLog(String? userID, String? title) async {
 
     var submitMessage = '';
     submitMessage += '**Version:** ${Environment.appVersion}\n';
-    submitMessage += '**Device ID:** $_deviceId\n**Device name:** $deviceName\n';
+    submitMessage +=
+        '**Device ID:** $_deviceId\n**Device name:** $deviceName\n';
 
     // Create list of attachments
     final attachments = <Map<String, dynamic>>[];
