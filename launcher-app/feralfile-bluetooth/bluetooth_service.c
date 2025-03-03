@@ -231,7 +231,7 @@ static void handle_write_value(GDBusConnection *conn,
     if (sentry_initialized) {
         sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received setup data");
         sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
-        sentry_add_breadcrumb(crumb, NULL);
+        sentry_add_breadcrumb(crumb);
     }
     #endif
 
@@ -285,7 +285,7 @@ static void handle_command_write(GDBusConnection *conn,
     if (sentry_initialized) {
         sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received command data");
         sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
-        sentry_add_breadcrumb(crumb, NULL);
+        sentry_add_breadcrumb(crumb);
     }
     #endif
 
@@ -685,7 +685,7 @@ int bluetooth_init(const char* custom_device_name) {
             
             // Add initial breadcrumb
             sentry_value_t crumb = sentry_value_new_breadcrumb("default", "Bluetooth service initialized");
-            sentry_add_breadcrumb(crumb, NULL);
+            sentry_add_breadcrumb(crumb);
             
             log_debug("[%s] Sentry initialized successfully", LOG_TAG);
         } else {
@@ -726,7 +726,7 @@ void bluetooth_stop() {
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
         sentry_value_t crumb = sentry_value_new_breadcrumb("default", "Bluetooth service stopping");
-        sentry_add_breadcrumb(crumb, NULL);
+        sentry_add_breadcrumb(crumb);
     }
     #endif
     
