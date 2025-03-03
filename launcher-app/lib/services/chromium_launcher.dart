@@ -41,7 +41,7 @@ class ChromiumLauncher {
   static Future<void> launchAndWait() async {
     // await launchChromium('https://display.feralfile.com');
     await launchChromium(
-        'https://support-feralfile-device.feralfile-display-prod.pages.dev?platform=ff-device');
+        'https://recover-app-data.feralfile-display-prod.pages.dev?platform=ff-device');
   }
 
   static void dispose() {

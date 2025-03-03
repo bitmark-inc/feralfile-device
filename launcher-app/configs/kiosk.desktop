@@ -1,5 +1,5 @@
 [Desktop Entry]
 Type=Application
 Name=Kiosk
-Exec=chromium-browser --kiosk --disable-infobars --disable-session-crashed-bubble --noerrdialogs https://support-feralfile-device.feralfile-display-prod.pages.dev?platform=ff-device
+Exec=chromium-browser --kiosk --disable-infobars --disable-session-crashed-bubble --noerrdialogs https://recover-app-data.feralfile-display-prod.pages.dev?platform=ff-device
 X-GNOME-Autostart-enabled=true
