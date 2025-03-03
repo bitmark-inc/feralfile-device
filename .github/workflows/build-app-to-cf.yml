@@ -133,8 +133,10 @@ jobs:
 
       - name: Build Sentry SDK
         run: |
-          git clone https://github.com/getsentry/sentry-native.git
+          git clone --recursive https://github.com/getsentry/sentry-native.git
           cd sentry-native
+          # Initialize and update submodules if they weren't included in the recursive clone
+          git submodule update --init --recursive
           cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build --parallel
           sudo cmake --install build
