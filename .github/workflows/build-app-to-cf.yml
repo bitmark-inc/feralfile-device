@@ -47,6 +47,8 @@ on:
         required: true
       SENTRY_DSN_BLUETOOTH_LIB:
         required: true
+      SENTRY_DSN_APP:
+        required: true
 
 jobs:
   build:
@@ -116,6 +118,7 @@ jobs:
           echo "APP_VERSION=${{ inputs.version }}" >> .env
           echo "METRICS_URL=${{ secrets.METRICS_URL }}" >> .env
           echo "METRICS_API_KEY=${{ secrets.METRICS_API_KEY }}" >> .env
+          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN_APP }}" >> .env
           
           # Debug file contents (showing first 4 chars of values)
           echo "Contents of .env (first 4 chars of values):"

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:sentry_logging/sentry_logging.dart';
 import 'package:window_manager/window_manager.dart';
@@ -25,8 +26,7 @@ void main() async {
 
   await SentryFlutter.init(
     (options) {
-      options.dsn =
-          'https://f4cc428b31482d025cc7726dea12f557@o142150.ingest.us.sentry.io/4508912674209792';
+      options.dsn = Environment.sentryDSN;
       // Set tracesSampleRate to 1.0 to capture 100% of transactions for tracing.
       // We recommend adjusting this value in production.
       options.tracesSampleRate = 1.0;
