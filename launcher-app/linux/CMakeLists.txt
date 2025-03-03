@@ -152,3 +152,16 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# Add Sentry configuration
+option(SENTRY_DSN "Sentry DSN for error tracking" "")
+if(SENTRY_DSN)
+  add_definitions(-DSENTRY_DSN="${SENTRY_DSN}")
+endif()
+
+# Make sure to find the required packages for Sentry
+find_package(CURL REQUIRED)
+find_package(ZLIB REQUIRED)
+
+# Add these to the target_link_libraries section for your executable
+# target_link_libraries(${BINARY_NAME} PRIVATE sentry curl z)

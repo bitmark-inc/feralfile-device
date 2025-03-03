@@ -45,6 +45,8 @@ on:
         required: true
       APT_GPG_SIGN_KEY_ID:
         required: true
+      SENTRY_DSN_BLUETOOTH_LIB:
+        required: true
 
 jobs:
   build:
@@ -87,7 +89,9 @@ jobs:
             libdbus-glib-1-dev \
             bluetooth \
             bluez \
-            bluez-tools
+            bluez-tools            bluez-tools \
+            libcurl4-openssl-dev \
+            zlib1g-dev
 
           # Set pkg-config path
           export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
@@ -124,11 +128,20 @@ jobs:
           export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
           flutter pub get
 
+      - name: Build Sentry SDK
+        run: |
+          git clone https://github.com/getsentry/sentry-native.git
+          cd sentry-native
+          cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build --parallel
+          sudo cmake --install build
+          cd ..
+
       - name: Build C library
         run: |
           cd feralfile-bluetooth
           make clean
-          make
+          make SENTRY_DSN='${{ secrets.SENTRY_DSN_BLUETOOTH_LIB }}' APP_VERSION='${{ inputs.version }}'
           mkdir -p ../build/linux/arm64/release/bundle/lib/
           cp libbluetooth_service.so ../build/linux/arm64/release/bundle/lib/
           cd ..

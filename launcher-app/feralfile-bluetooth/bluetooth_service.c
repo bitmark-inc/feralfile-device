@@ -11,6 +11,7 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
 #include <bluetooth/hci_lib.h>
+#include <sentry.h>
 
 #define LOG_TAG "BluetoothService"
 #define FERALFILE_SERVICE_NAME   "FeralFile Device"
@@ -47,6 +48,8 @@ static FILE* log_file = NULL;
 
 static char device_name[MAX_DEVICE_NAME_LENGTH] = FERALFILE_SERVICE_NAME;
 static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/advertisement0";
+
+static int sentry_initialized = 0;
 
 void bluetooth_set_logfile(const char* path) {
     if (log_file != NULL) {
@@ -223,6 +226,14 @@ static void handle_write_value(GDBusConnection *conn,
         result_callback(1, data_copy, (int)n_elements);
     }
 
+    // Add Sentry breadcrumb
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received setup data");
+        sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
+        sentry_add_breadcrumb(crumb, NULL);
+    }
+    #endif
 
     g_variant_unref(array_variant);
     if (options_variant) {
@@ -268,6 +279,15 @@ static void handle_command_write(GDBusConnection *conn,
     if (cmd_callback) {
         cmd_callback(1, data_copy, (int)n_elements);
     }
+
+    // Add Sentry breadcrumb
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received command data");
+        sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
+        sentry_add_breadcrumb(crumb, NULL);
+    }
+    #endif
 
     g_variant_unref(array_variant);
     if (options_variant) {
@@ -636,8 +656,57 @@ int bluetooth_init(const char* custom_device_name) {
         device_name[MAX_DEVICE_NAME_LENGTH - 1] = '\0';
     }
     
+    // Initialize Sentry if DSN is defined
+    #ifdef SENTRY_DSN
+    if (!sentry_initialized) {
+        log_debug("[%s] Initializing Sentry with DSN: %s", LOG_TAG, SENTRY_DSN);
+        
+        sentry_options_t* options = sentry_options_new();
+        sentry_options_set_dsn(options, SENTRY_DSN);
+        
+        #ifdef APP_VERSION
+        sentry_options_set_release(options, APP_VERSION);
+        #endif
+        
+        // Set environment
+        #ifdef DEBUG
+        sentry_options_set_environment(options, "development");
+        sentry_options_set_debug(options, 1);
+        #else
+        sentry_options_set_environment(options, "production");
+        #endif
+        
+        if (sentry_init(options) == 0) {
+            sentry_initialized = 1;
+            
+            // Set tags
+            sentry_set_tag("service", "bluetooth");
+            sentry_set_tag("device_name", device_name);
+            
+            // Add initial breadcrumb
+            sentry_value_t crumb = sentry_value_new_breadcrumb("default", "Bluetooth service initialized");
+            sentry_add_breadcrumb(crumb, NULL);
+            
+            log_debug("[%s] Sentry initialized successfully", LOG_TAG);
+        } else {
+            log_debug("[%s] Failed to initialize Sentry", LOG_TAG);
+        }
+    }
+    #endif
+    
     if (pthread_create(&bluetooth_thread, NULL, bluetooth_thread_func, NULL) != 0) {
         log_debug("[%s] Failed to create Bluetooth thread\n", LOG_TAG);
+        #ifdef SENTRY_DSN
+        if (sentry_initialized) {
+            sentry_capture_event(
+                sentry_value_new_message_event(
+                    SENTRY_LEVEL_ERROR,
+                    "bluetooth",
+                    "Failed to create Bluetooth thread"
+                )
+            );
+        }
+        #endif
         return -1;
     }
     return 0;
@@ -652,6 +721,15 @@ int bluetooth_start(connection_result_callback scb, command_callback ccb) {
 
 void bluetooth_stop() {
     log_debug("[%s] Stopping Bluetooth...\n", LOG_TAG);
+    
+    // Add Sentry breadcrumb for stopping
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        sentry_value_t crumb = sentry_value_new_breadcrumb("default", "Bluetooth service stopping");
+        sentry_add_breadcrumb(crumb, NULL);
+    }
+    #endif
+    
     GError *error = NULL;
 
     // 1) Unregister the advertisement
@@ -744,10 +822,16 @@ void bluetooth_stop() {
         connection = NULL;
     }
 
+    // Add Sentry cleanup at the end
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        sentry_close();
+        sentry_initialized = 0;
+    }
+    #endif
+
     log_debug("[%s] Bluetooth service stopped\n", LOG_TAG);
 }
-
-
 
 void bluetooth_notify(const unsigned char* data, int length) {
     // Log the hex string for debugging
