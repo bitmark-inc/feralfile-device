@@ -133,11 +133,14 @@ jobs:
 
       - name: Build Sentry SDK
         run: |
-          git clone --recursive https://github.com/getsentry/sentry-native.git
+          git clone https://github.com/getsentry/sentry-native.git
           cd sentry-native
-          # Initialize and update submodules if they weren't included in the recursive clone
-          git submodule update --init --recursive
-          cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          # Explicitly initialize and update all submodules
+          git submodule init
+          git submodule update --recursive
+          
+          # Configure with a different backend since crashpad is causing issues
+          cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSENTRY_BACKEND=inproc
           cmake --build build --parallel
           sudo cmake --install build
           cd ..
