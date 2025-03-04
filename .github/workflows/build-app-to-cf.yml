@@ -170,6 +170,47 @@ jobs:
           flutter config --enable-linux-desktop
           flutter build linux --release --target-platform=linux-arm64
 
+      - name: Upload debug symbols to Sentry
+        env:
+          SENTRY_RELEASE: ${{ inputs.version }}
+        run: |
+          # Install Sentry CLI
+          curl -sL https://sentry.io/get-cli/ | bash
+          
+          # Authenticate with Sentry
+          export SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
+          export SENTRY_ORG=${{ vars.SENTRY_ORG }}
+          export SENTRY_PROJECT=${{ vars.SENTRY_PROJECT }}
+          
+          # Set release version if on main branch
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            # Extract version from pubspec.yaml
+            echo "Setting Sentry release to $SENTRY_RELEASE"
+            
+            # Create a release in Sentry
+            sentry-cli releases new "$SENTRY_RELEASE"
+            
+            # Set the current commit to the release
+            COMMIT_SHA="${{ github.sha }}"
+            REPO_NAME="${{ github.repository }}"
+            sentry-cli releases set-commits "$SENTRY_RELEASE" --commit "$REPO_NAME@$COMMIT_SHA"
+          fi
+          
+          # Upload debug symbols
+          sentry-cli debug-files upload \
+            --include-sources \
+            --wait \
+            build/linux/arm64/release/bundle/
+          
+          # Finalize release if on main branch
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]] && [[ -n "$SENTRY_RELEASE" ]]; then
+            sentry-cli releases finalize "$SENTRY_RELEASE"
+            echo "Finalized Sentry release $SENTRY_RELEASE"
+          fi
+          
+          # Verify upload
+          echo "Debug symbols uploaded to Sentry"
+
       - name: Package as Debian .deb
         env:
           APP_NAME: feralfile-launcher

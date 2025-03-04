@@ -35,6 +35,7 @@ void main() async {
       // Setting to 1.0 will profile 100% of sampled transactions:
       options.profilesSampleRate = 1.0;
       options.addIntegration(LoggingIntegration(minEventLevel: Level.WARNING));
+      options.release = Environment.appVersion;
     },
     appRunner: () async {
       final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit()
