@@ -58,7 +58,7 @@ void bluetooth_set_logfile(const char* path) {
     log_file = fopen(path, "a");
 }
 
-static void log_debug(const char* format, ...) {
+static void log_info(const char* format, ...) {
     va_list args, args_copy;
     va_start(args, format);
     va_copy(args_copy, args);
@@ -71,21 +71,87 @@ static void log_debug(const char* format, ...) {
     timestamp[24] = '\0'; // Remove newline
     
     // Log to syslog
-    vsyslog(LOG_DEBUG, format, args);
+    vsyslog(LOG_INFO, format, args);
     
     // Log to console (stdout)
-    fprintf(stdout, "%s: ", timestamp);
+    fprintf(stdout, "%s: INFO: ", timestamp);
     vfprintf(stdout, format, args_copy);
     fprintf(stdout, "\n");
     fflush(stdout);  // Ensure immediate output
     
     // Log to file if available
     if (log_file != NULL) {
-        fprintf(log_file, "%s: DEBUG: ", timestamp);
+        fprintf(log_file, "%s: INFO: ", timestamp);
         vfprintf(log_file, format, args);
         fprintf(log_file, "\n");
         fflush(log_file);
     }
+    
+    // Add Sentry breadcrumb for info messages
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        char message[1024];
+        va_list args_crumb;
+        va_copy(args_crumb, args);
+        vsnprintf(message, sizeof(message), format, args_crumb);
+        va_end(args_crumb);
+        
+        sentry_value_t crumb = sentry_value_new_breadcrumb("info", message);
+        sentry_value_set_by_key(crumb, "category", sentry_value_new_string("bluetooth"));
+        sentry_add_breadcrumb(crumb);
+    }
+    #endif
+    
+    va_end(args_copy);
+    va_end(args);
+}
+
+static void log_error(const char* format, ...) {
+    va_list args, args_copy;
+    va_start(args, format);
+    va_copy(args_copy, args);
+    
+    // Get current time
+    time_t now;
+    time(&now);
+    char timestamp[26];
+    ctime_r(&now, timestamp);
+    timestamp[24] = '\0'; // Remove newline
+    
+    // Log to syslog
+    vsyslog(LOG_ERR, format, args);
+    
+    // Log to console (stderr)
+    fprintf(stderr, "%s: ERROR: ", timestamp);
+    vfprintf(stderr, format, args_copy);
+    fprintf(stderr, "\n");
+    fflush(stderr);  // Ensure immediate output
+    
+    // Log to file if available
+    if (log_file != NULL) {
+        fprintf(log_file, "%s: ERROR: ", timestamp);
+        vfprintf(log_file, format, args);
+        fprintf(log_file, "\n");
+        fflush(log_file);
+    }
+    
+    // Capture Sentry event for error messages
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        char message[1024];
+        va_list args_event;
+        va_copy(args_event, args);
+        vsnprintf(message, sizeof(message), format, args_event);
+        va_end(args_event);
+        
+        sentry_value_t event = sentry_value_new_message_event(
+            SENTRY_LEVEL_ERROR,
+            "bluetooth",
+            message
+        );
+        sentry_capture_event(event);
+    }
+    #endif
     
     va_end(args_copy);
     va_end(args);
@@ -214,7 +280,7 @@ static void handle_write_value(GDBusConnection *conn,
     guchar *data_copy = (guchar *)malloc(n_elements);
     memcpy(data_copy, data, n_elements);
 
-    log_debug("[%s] (setup_char) Received %zu bytes of data", LOG_TAG, n_elements);
+    log_info("[%s] (setup_char) Received %zu bytes of data", LOG_TAG, n_elements);
     
     // Optional hex string logging
     char hex_string[n_elements * 3 + 1];
@@ -222,7 +288,7 @@ static void handle_write_value(GDBusConnection *conn,
         sprintf(hex_string + (i * 3), "%02x ", data_copy[i]);
     }
     hex_string[n_elements * 3 - 1] = '\0';
-    log_debug("[%s] (setup_char) Data: %s", LOG_TAG, hex_string);
+    log_info("[%s] (setup_char) Data: %s", LOG_TAG, hex_string);
 
     // If you want to pass these bytes to your existing 'result_callback'
     if (result_callback) {
@@ -268,7 +334,7 @@ static void handle_command_write(GDBusConnection *conn,
     guchar *data_copy = (guchar *)malloc(n_elements);
     memcpy(data_copy, data, n_elements);
 
-    log_debug("[%s] (cmd_char) Received %zu bytes of data", LOG_TAG, n_elements);
+    log_info("[%s] (cmd_char) Received %zu bytes of data", LOG_TAG, n_elements);
 
     // Optional hex string logging
     char hex_string[n_elements * 3 + 1];
@@ -276,7 +342,7 @@ static void handle_command_write(GDBusConnection *conn,
         sprintf(hex_string + (i * 3), "%02x ", data_copy[i]);
     }
     hex_string[n_elements * 3 - 1] = '\0';
-    log_debug("[%s] (cmd_char) Data: %s", LOG_TAG, hex_string);
+    log_info("[%s] (cmd_char) Data: %s", LOG_TAG, hex_string);
 
     // Use cmd_callback with the copied data
     if (cmd_callback) {
@@ -422,7 +488,7 @@ static void* bluetooth_thread_func(void* arg) {
     // Step 1: Connect to the system bus
     connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
     if (!connection) {
-        log_debug("[%s] Failed to connect to D-Bus: %s\n", LOG_TAG, error->message);
+        log_error("[%s] Failed to connect to D-Bus: %s", LOG_TAG, error->message);
         g_error_free(error);
         pthread_exit(NULL);
     }
@@ -430,7 +496,7 @@ static void* bluetooth_thread_func(void* arg) {
     // Step 2: Parse our service XML
     root_node = g_dbus_node_info_new_for_xml(service_xml, &error);
     if (!root_node || error) {
-        log_debug("[%s] Failed to parse service XML: %s\n",
+        log_error("[%s] Failed to parse service XML: %s",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
@@ -440,7 +506,7 @@ static void* bluetooth_thread_func(void* arg) {
     // Find the service0 node
     service_node = find_node_by_name(root_node, "service0");
     if (!service_node) {
-        log_debug("[%s] service0 node not found\n", LOG_TAG);
+        log_error("[%s] service0 node not found", LOG_TAG);
         pthread_exit(NULL);
     }
 
@@ -448,7 +514,7 @@ static void* bluetooth_thread_func(void* arg) {
     GDBusNodeInfo *setup_char_node = find_node_by_name(service_node, "setup_char");
     GDBusNodeInfo *cmd_char_node   = find_node_by_name(service_node, "cmd_char");
     if (!setup_char_node || !cmd_char_node) {
-        log_debug("[%s] Characteristic nodes not found\n", LOG_TAG);
+        log_error("[%s] Characteristic nodes not found", LOG_TAG);
         pthread_exit(NULL);
     }
 
@@ -463,7 +529,7 @@ static void* bluetooth_thread_func(void* arg) {
         &error
     );
     if (error || !objects_reg_id) {
-        log_debug("[%s] Failed to register ObjectManager interface: %s\n",
+        log_error("[%s] Failed to register ObjectManager interface: %s",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
@@ -481,7 +547,7 @@ static void* bluetooth_thread_func(void* arg) {
         &error
     );
     if (error || !service_reg_id) {
-        log_debug("[%s] Failed to register service object: %s\n",
+        log_error("[%s] Failed to register service object: %s",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
@@ -499,7 +565,7 @@ static void* bluetooth_thread_func(void* arg) {
         &error
     );
     if (error || !setup_char_reg_id) {
-        log_debug("[%s] Failed to register setup characteristic object: %s\n",
+        log_error("[%s] Failed to register setup characteristic object: %s",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
@@ -517,7 +583,7 @@ static void* bluetooth_thread_func(void* arg) {
         &error
     );
     if (error || !cmd_char_reg_id) {
-        log_debug("[%s] Failed to register command characteristic object: %s\n",
+        log_error("[%s] Failed to register command characteristic object: %s",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
@@ -536,7 +602,7 @@ static void* bluetooth_thread_func(void* arg) {
         &error
     );
     if (!gatt_manager || error) {
-        log_debug("[%s] Failed to get GattManager1: %s\n",
+        log_error("[%s] Failed to get GattManager1: %s",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error) g_error_free(error);
@@ -554,7 +620,7 @@ static void* bluetooth_thread_func(void* arg) {
         &error
     );
     if (error) {
-        log_debug("[%s] RegisterApplication failed: %s\n",
+        log_error("[%s] RegisterApplication failed: %s",
                   LOG_TAG,
                   error->message);
         g_error_free(error);
@@ -576,7 +642,7 @@ static void* bluetooth_thread_func(void* arg) {
         g_dbus_node_info_new_for_xml(adv_introspection_xml, &error);
     g_free(adv_introspection_xml);
     if (!advertisement_introspection_data || error) {
-        log_debug("[%s] Failed to parse advertisement XML: %s\n",
+        log_error("[%s] Failed to parse advertisement XML: %s",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error)
@@ -595,7 +661,7 @@ static void* bluetooth_thread_func(void* arg) {
         &error
     );
     if (error || !ad_reg_id) {
-        log_debug("[%s] Failed to register advertisement object: %s\n",
+        log_error("[%s] Failed to register advertisement object: %s",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error)
@@ -615,7 +681,7 @@ static void* bluetooth_thread_func(void* arg) {
         &error
     );
     if (!advertising_manager || error) {
-        log_debug("[%s] Failed to get LEAdvertisingManager1: %s\n",
+        log_error("[%s] Failed to get LEAdvertisingManager1: %s",
                   LOG_TAG,
                   error ? error->message : "Unknown error");
         if (error)
@@ -634,14 +700,14 @@ static void* bluetooth_thread_func(void* arg) {
         &error
     );
     if (error) {
-        log_debug("[%s] Advertisement registration failed: %s\n",
+        log_error("[%s] Advertisement registration failed: %s",
                   LOG_TAG,
                   error->message);
         g_error_free(error);
         pthread_exit(NULL);
     }
 
-    log_debug("[%s] Bluetooth initialized successfully\n", LOG_TAG);
+    log_info("[%s] Bluetooth initialized successfully", LOG_TAG);
 
     // Run the main loop to process D-Bus events
     g_main_loop_run(main_loop);
@@ -651,7 +717,7 @@ static void* bluetooth_thread_func(void* arg) {
 }
 
 int bluetooth_init(const char* custom_device_name) {
-    log_debug("[%s] Initializing Bluetooth in background thread\n", LOG_TAG);
+    log_info("[%s] Initializing Bluetooth in background thread", LOG_TAG);
     
     // Set custom device name if provided
     if (custom_device_name != NULL) {
@@ -662,32 +728,32 @@ int bluetooth_init(const char* custom_device_name) {
     // Initialize Sentry if DSN is defined
     #ifdef SENTRY_DSN
     if (!sentry_initialized) {
-        log_debug("[%s] Initializing Sentry with DSN: %s", LOG_TAG, SENTRY_DSN);
+        log_info("[%s] Initializing Sentry with DSN: %s", LOG_TAG, SENTRY_DSN);
         
         sentry_options_t* options = sentry_options_new();
         sentry_options_set_dsn(options, SENTRY_DSN);
         
         #ifdef APP_VERSION
-        log_debug("[%s] Setting Sentry release to: %s", LOG_TAG, APP_VERSION);
+        log_info("[%s] Setting Sentry release to: %s", LOG_TAG, APP_VERSION);
         sentry_options_set_release(options, APP_VERSION);
         #else
-        log_debug("[%s] No APP_VERSION defined, not setting release", LOG_TAG);
+        log_info("[%s] No APP_VERSION defined, not setting release", LOG_TAG);
         #endif
         
         // Set environment
         #ifdef DEBUG
-        log_debug("[%s] Setting Sentry environment to: development", LOG_TAG);
+        log_info("[%s] Setting Sentry environment to: development", LOG_TAG);
         sentry_options_set_environment(options, "development");
         sentry_options_set_debug(options, 1);
         #else
-        log_debug("[%s] Setting Sentry environment to: production", LOG_TAG);
+        log_info("[%s] Setting Sentry environment to: production", LOG_TAG);
         sentry_options_set_environment(options, "production");
         #endif
         
         // Create a temporary directory for Sentry database
         char db_path[256];
         snprintf(db_path, sizeof(db_path), "/tmp/sentry-native-%d", (int)time(NULL));
-        log_debug("[%s] Setting Sentry database path to: %s", LOG_TAG, db_path);
+        log_info("[%s] Setting Sentry database path to: %s", LOG_TAG, db_path);
         sentry_options_set_database_path(options, db_path);
         
         int init_result = sentry_init(options);
@@ -695,37 +761,25 @@ int bluetooth_init(const char* custom_device_name) {
             sentry_initialized = 1;
             
             // Set tags
-            log_debug("[%s] Setting Sentry tags", LOG_TAG);
+            log_info("[%s] Setting Sentry tags", LOG_TAG);
             sentry_set_tag("service", "bluetooth");
             sentry_set_tag("device_name", device_name);
             
             // Add initial breadcrumb
-            log_debug("[%s] Adding initial breadcrumb", LOG_TAG);
             sentry_value_t crumb = sentry_value_new_breadcrumb("default", "Bluetooth service initialized");
             sentry_add_breadcrumb(crumb);
             
-            log_debug("[%s] Sentry initialized successfully", LOG_TAG);
+            log_info("[%s] Sentry initialized successfully", LOG_TAG);
         } else {
-            log_debug("[%s] Failed to initialize Sentry, error code: %d", LOG_TAG, init_result);
+            log_error("[%s] Failed to initialize Sentry, error code: %d", LOG_TAG, init_result);
         }
     }
     #else
-    log_debug("[%s] Sentry DSN not defined, skipping initialization", LOG_TAG);
+    log_info("[%s] Sentry DSN not defined, skipping initialization", LOG_TAG);
     #endif
     
     if (pthread_create(&bluetooth_thread, NULL, bluetooth_thread_func, NULL) != 0) {
-        log_debug("[%s] Failed to create Bluetooth thread\n", LOG_TAG);
-        #ifdef SENTRY_DSN
-        if (sentry_initialized) {
-            sentry_capture_event(
-                sentry_value_new_message_event(
-                    SENTRY_LEVEL_ERROR,
-                    "bluetooth",
-                    "Failed to create Bluetooth thread"
-                )
-            );
-        }
-        #endif
+        log_error("[%s] Failed to create Bluetooth thread", LOG_TAG);
         return -1;
     }
     return 0;
@@ -734,26 +788,12 @@ int bluetooth_init(const char* custom_device_name) {
 int bluetooth_start(connection_result_callback scb, command_callback ccb) {
     result_callback = scb;
     cmd_callback = ccb;
-    log_debug("[%s] Bluetooth service started\n", LOG_TAG);
+    log_info("[%s] Bluetooth service started", LOG_TAG);
     return 0;
 }
 
 void bluetooth_stop() {
-    log_debug("[%s] Stopping Bluetooth...\n", LOG_TAG);
-    
-    // Add Sentry breadcrumb for stopping
-    #ifdef SENTRY_DSN
-    if (sentry_initialized) {
-        log_debug("[%s] Adding Sentry breadcrumb for stopping", LOG_TAG);
-        sentry_value_t crumb = sentry_value_new_breadcrumb("default", "Bluetooth service stopping");
-        sentry_add_breadcrumb(crumb);
-        
-        log_debug("[%s] Closing Sentry", LOG_TAG);
-        sentry_close();
-        sentry_initialized = 0;
-        log_debug("[%s] Sentry closed successfully", LOG_TAG);
-    }
-    #endif
+    log_info("[%s] Stopping Bluetooth...", LOG_TAG);
     
     GError *error = NULL;
 
@@ -769,7 +809,7 @@ void bluetooth_stop() {
             &error
         );
         if (error) {
-            log_debug("[%s] UnregisterAdvertisement failed: %s\n", LOG_TAG, error->message);
+            log_error("[%s] UnregisterAdvertisement failed: %s", LOG_TAG, error->message);
             g_error_free(error);
             error = NULL;
         }
@@ -789,7 +829,7 @@ void bluetooth_stop() {
             &error
         );
         if (error) {
-            log_debug("[%s] UnregisterApplication failed: %s",
+            log_error("[%s] UnregisterApplication failed: %s",
                       LOG_TAG, error->message);
             g_error_free(error);
             error = NULL;
@@ -847,7 +887,17 @@ void bluetooth_stop() {
         connection = NULL;
     }
 
-    log_debug("[%s] Bluetooth service stopped\n", LOG_TAG);
+    // Close Sentry at the end
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        log_info("[%s] Closing Sentry", LOG_TAG);
+        sentry_close();
+        sentry_initialized = 0;
+        log_info("[%s] Sentry closed successfully", LOG_TAG);
+    }
+    #endif
+
+    log_info("[%s] Bluetooth service stopped", LOG_TAG);
 }
 
 void bluetooth_notify(const unsigned char* data, int length) {
@@ -857,7 +907,7 @@ void bluetooth_notify(const unsigned char* data, int length) {
         sprintf(hex_string + (i * 3), "%02x ", data[i]);
     }
     hex_string[length * 3 - 1] = '\0';
-    log_debug("[%s] Notifying data: %s", LOG_TAG, hex_string);
+    log_info("[%s] Notifying data: %s", LOG_TAG, hex_string);
 
     // Create GVariant for the notification value
     GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
@@ -887,12 +937,14 @@ const char* bluetooth_get_mac_address() {
     int sock = hci_open_dev(dev_id);
     
     if (dev_id < 0 || sock < 0) {
-        log_debug("[%s] Could not get Bluetooth device info", LOG_TAG);
+        log_error("[%s] Could not get Bluetooth device info (dev_id=%d, sock=%d)", 
+                 LOG_TAG, dev_id, sock);
         return NULL;
     }
 
     bdaddr_t bdaddr;
     if (hci_read_bd_addr(sock, &bdaddr, 1000) < 0) {
+        log_error("[%s] Could not read Bluetooth address", LOG_TAG);
         close(sock);
         return NULL;
     }
@@ -900,5 +952,6 @@ const char* bluetooth_get_mac_address() {
     ba2str(&bdaddr, mac_address);
     close(sock);
     
+    log_info("[%s] Bluetooth MAC address: %s", LOG_TAG, mac_address);
     return mac_address;
 }
