@@ -665,33 +665,49 @@ int bluetooth_init(const char* custom_device_name) {
         sentry_options_set_dsn(options, SENTRY_DSN);
         
         #ifdef APP_VERSION
+        log_debug("[%s] Setting Sentry release to: %s", LOG_TAG, APP_VERSION);
         sentry_options_set_release(options, APP_VERSION);
+        #else
+        log_debug("[%s] No APP_VERSION defined, not setting release", LOG_TAG);
         #endif
         
         // Set environment
         #ifdef DEBUG
+        log_debug("[%s] Setting Sentry environment to: development", LOG_TAG);
         sentry_options_set_environment(options, "development");
         sentry_options_set_debug(options, 1);
         #else
+        log_debug("[%s] Setting Sentry environment to: production", LOG_TAG);
         sentry_options_set_environment(options, "production");
         #endif
         
-        if (sentry_init(options) == 0) {
+        // Create a temporary directory for Sentry database
+        char db_path[256];
+        snprintf(db_path, sizeof(db_path), "/tmp/sentry-native-%d", (int)time(NULL));
+        log_debug("[%s] Setting Sentry database path to: %s", LOG_TAG, db_path);
+        sentry_options_set_database_path(options, db_path);
+        
+        int init_result = sentry_init(options);
+        if (init_result == 0) {
             sentry_initialized = 1;
             
             // Set tags
+            log_debug("[%s] Setting Sentry tags", LOG_TAG);
             sentry_set_tag("service", "bluetooth");
             sentry_set_tag("device_name", device_name);
             
             // Add initial breadcrumb
+            log_debug("[%s] Adding initial breadcrumb", LOG_TAG);
             sentry_value_t crumb = sentry_value_new_breadcrumb("default", "Bluetooth service initialized");
             sentry_add_breadcrumb(crumb);
             
             log_debug("[%s] Sentry initialized successfully", LOG_TAG);
         } else {
-            log_debug("[%s] Failed to initialize Sentry", LOG_TAG);
+            log_debug("[%s] Failed to initialize Sentry, error code: %d", LOG_TAG, init_result);
         }
     }
+    #else
+    log_debug("[%s] Sentry DSN not defined, skipping initialization", LOG_TAG);
     #endif
     
     if (pthread_create(&bluetooth_thread, NULL, bluetooth_thread_func, NULL) != 0) {
@@ -725,8 +741,14 @@ void bluetooth_stop() {
     // Add Sentry breadcrumb for stopping
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
+        log_debug("[%s] Adding Sentry breadcrumb for stopping", LOG_TAG);
         sentry_value_t crumb = sentry_value_new_breadcrumb("default", "Bluetooth service stopping");
         sentry_add_breadcrumb(crumb);
+        
+        log_debug("[%s] Closing Sentry", LOG_TAG);
+        sentry_close();
+        sentry_initialized = 0;
+        log_debug("[%s] Sentry closed successfully", LOG_TAG);
     }
     #endif
     
@@ -821,14 +843,6 @@ void bluetooth_stop() {
         g_object_unref(connection);
         connection = NULL;
     }
-
-    // Add Sentry cleanup at the end
-    #ifdef SENTRY_DSN
-    if (sentry_initialized) {
-        sentry_close();
-        sentry_initialized = 0;
-    }
-    #endif
 
     log_debug("[%s] Bluetooth service stopped\n", LOG_TAG);
 }
