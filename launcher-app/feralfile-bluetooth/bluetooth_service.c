@@ -727,9 +727,7 @@ int bluetooth_init(const char* custom_device_name) {
     
     // Initialize Sentry if DSN is defined
     #ifdef SENTRY_DSN
-    if (!sentry_initialized) {
-        log_info("[%s] Initializing Sentry with DSN: %s", LOG_TAG, SENTRY_DSN);
-        
+    if (!sentry_initialized) {        
         sentry_options_t* options = sentry_options_new();
         sentry_options_set_dsn(options, SENTRY_DSN);
         

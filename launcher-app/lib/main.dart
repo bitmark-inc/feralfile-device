@@ -25,8 +25,6 @@ void main() async {
 
   await Environment.load();
 
-  logger.info('[App] Sentry DSN: ${Environment.sentryDSN}');
-
   await SentryFlutter.init(
     (options) {
       options.dsn = Environment.sentryDSN;
