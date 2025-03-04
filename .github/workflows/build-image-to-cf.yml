@@ -42,7 +42,7 @@ jobs:
       APT_GPG_SIGN_KEY_ID: ${{ secrets.APT_GPG_SIGN_KEY_ID }}
       SENTRY_DSN_BLUETOOTH_LIB: ${{ secrets.SENTRY_DSN_BLUETOOTH_LIB }}
       SENTRY_DSN_APP: ${{ secrets.SENTRY_DSN_APP }}
-
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
   # --- STEP 2: Build Raspberry Pi Image ---
   build-image:
     name: Generate Raspberry Pi OS Image

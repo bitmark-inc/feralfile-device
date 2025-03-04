@@ -49,6 +49,8 @@ on:
         required: true
       SENTRY_DSN_APP:
         required: true
+      SENTRY_AUTH_TOKEN:
+        required: true
 
 jobs:
   build:
