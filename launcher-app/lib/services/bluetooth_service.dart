@@ -23,6 +23,7 @@ class BluetoothService {
   static void Function(WifiCredentials)? _onCredentialsReceived;
   static final _commandPort = ReceivePort();
   static final Map<String, Map<int, List<int>>> _chunkData = {};
+  static final Set<String> chunkedResponseReplyIds = {};
 
   // Store both callbacks
   late final NativeCallable<ConnectionResultCallbackNative> _setupCallback;
@@ -32,6 +33,7 @@ class BluetoothService {
 
   BluetoothService._internal() {
     _commandService.initialize(this);
+    _bindings.bluetooth_set_logfile(logFilePath.toNativeUtf8());
   }
 
   Future<bool> initialize(String deviceName) async {
@@ -165,6 +167,10 @@ class BluetoothService {
         .info('Parsed complete command: "$command" with data: "$commandData"');
     if (replyId != null) {
       logger.info('Reply ID: "$replyId"');
+      logger.info('command: $command');
+      if (command == 'checkStatus') {
+        chunkedResponseReplyIds.add(replyId);
+      }
     }
 
     // Send metric with cached device ID
@@ -218,30 +224,100 @@ class BluetoothService {
 
   void notify(String replyID, Map<String, dynamic> payload) {
     try {
-      final encodedMessage = VarintParser.encodeStringArray([
-        replyID,
-        jsonEncode(payload),
-      ]);
-
-      final Pointer<Uint8> data = calloc<Uint8>(encodedMessage.length);
-      final bytes = data.asTypedList(encodedMessage.length);
-
-      logger.info('Copying ${encodedMessage.length} bytes to FFI buffer');
-      for (var i = 0; i < encodedMessage.length; i++) {
-        bytes[i] = encodedMessage[i];
+      if (chunkedResponseReplyIds.contains(replyID)) {
+        _sendDataByChunks(payload, replyID);
+        chunkedResponseReplyIds.remove(replyID);
+      } else {
+        final encodedMessage = VarintParser.encodeStringArray([
+          replyID,
+          jsonEncode(payload),
+        ]);
+        _sendData(encodedMessage);
       }
-
-      final hexString =
-          bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-      logger.info('Copied bytes (hex): $hexString');
-
-      _bindings.bluetooth_notify(data, encodedMessage.length);
-      calloc.free(data);
 
       logger.info('Sent notification: $replyID with payload: $payload');
     } catch (e) {
       logger.severe('Error sending notification: $e');
     }
+  }
+
+  int _getMaxChunkDataSize() {
+    const mtu = 512;
+    const messageOverhead = 7;
+    const chunkMapOverhead = 22;
+
+    // Calculate available space for payload
+    // Convert binary data to base64 encoding (which increases size by ~33%)
+    // Base64 encoding works by converting every 3 bytes of binary data into 4 ASCII characters
+
+    var maxRawDataSize = mtu - messageOverhead - chunkMapOverhead;
+    maxRawDataSize = maxRawDataSize - (maxRawDataSize % 4);
+
+    final maxChunkDataSize =
+        (maxRawDataSize * 0.75).floor(); // Base64 encoding factor
+
+    return maxChunkDataSize;
+  }
+
+  void _sendDataByChunks(Map<String, dynamic> payload, String replyID) {
+    final payloadString = jsonEncode(payload);
+    List<int> payloadBytes = utf8.encode(payloadString);
+    logger.info('payloadBytes: ${payloadBytes.length}');
+
+    final maxChunkDataSize = _getMaxChunkDataSize();
+    final totalChunks = (payloadBytes.length / maxChunkDataSize).ceil();
+
+    logger.info(
+        'Splitting message into $totalChunks chunks of ~$maxChunkDataSize bytes each');
+
+    for (var i = 0; i < totalChunks; i++) {
+      final start = i * maxChunkDataSize;
+      final end = (start + maxChunkDataSize) > payloadBytes.length
+          ? payloadBytes.length
+          : start + maxChunkDataSize;
+
+      final chunkData = payloadBytes.sublist(start, end);
+      final chunkMap = {
+        'i': i,
+        't': totalChunks,
+        'd': base64.encode(chunkData),
+      };
+
+      final encodedMessage = VarintParser.encodeStringArray([
+        replyID,
+        jsonEncode(chunkMap),
+      ]);
+
+      logger.info(
+          'Sending chunk $i/${totalChunks - 1} with ${encodedMessage.length} bytes');
+      _sendData(encodedMessage, chunkIndex: i);
+
+      // Use adaptive delay based on chunk size
+      if (totalChunks > 1) {
+        final delayMs = (chunkData.length / 1000).ceil() * 10;
+        final adjustedDelay = delayMs.clamp(20, 100);
+        Future.delayed(Duration(milliseconds: adjustedDelay));
+      }
+    }
+  }
+
+  void _sendData(List<int> data, {int? chunkIndex}) {
+    final Pointer<Uint8> pointer = calloc<Uint8>(data.length);
+    final bytes = pointer.asTypedList(data.length);
+
+    final logPrefix = chunkIndex != null ? 'Chunk $chunkIndex: ' : '';
+    logger.info('${logPrefix}Copying ${data.length} bytes to FFI buffer');
+
+    for (var i = 0; i < data.length; i++) {
+      bytes[i] = data[i];
+    }
+
+    final hexString =
+        bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    logger.info('${logPrefix}Copied bytes (hex): $hexString');
+
+    _bindings.bluetooth_notify(pointer, data.length);
+    calloc.free(pointer);
   }
 
   String? getMacAddress() {
