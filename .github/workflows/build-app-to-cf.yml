@@ -174,8 +174,14 @@ jobs:
         env:
           SENTRY_RELEASE: ${{ inputs.version }}
         run: |
-          # Install Sentry CLI
-          curl -sL https://sentry.io/get-cli/ | bash
+          # Check if sentry-cli is already installed
+          if ! command -v sentry-cli &> /dev/null; then
+            # Install Sentry CLI only if not already installed
+            curl -sL https://sentry.io/get-cli/ | bash
+          else
+            # Update existing installation
+            sentry-cli update
+          fi
           
           # Authenticate with Sentry
           export SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
