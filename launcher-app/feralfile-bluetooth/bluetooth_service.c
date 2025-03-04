@@ -59,8 +59,9 @@ void bluetooth_set_logfile(const char* path) {
 }
 
 static void log_debug(const char* format, ...) {
-    va_list args;
+    va_list args, args_copy;
     va_start(args, format);
+    va_copy(args_copy, args);
     
     // Get current time
     time_t now;
@@ -72,10 +73,11 @@ static void log_debug(const char* format, ...) {
     // Log to syslog
     vsyslog(LOG_DEBUG, format, args);
     
-    // Log to console
-    printf("%s: ", timestamp);
-    vprintf(format, args);
-    printf("\n");
+    // Log to console (stdout)
+    fprintf(stdout, "%s: ", timestamp);
+    vfprintf(stdout, format, args_copy);
+    fprintf(stdout, "\n");
+    fflush(stdout);  // Ensure immediate output
     
     // Log to file if available
     if (log_file != NULL) {
@@ -85,6 +87,7 @@ static void log_debug(const char* format, ...) {
         fflush(log_file);
     }
     
+    va_end(args_copy);
     va_end(args);
 }
 
