@@ -197,11 +197,6 @@ jobs:
             
             # Create a release in Sentry
             sentry-cli releases new "$SENTRY_RELEASE"
-            
-            # Set the current commit to the release
-            COMMIT_SHA="${{ github.sha }}"
-            REPO_NAME="${{ github.repository }}"
-            sentry-cli releases set-commits "$SENTRY_RELEASE" --commit "$REPO_NAME@$COMMIT_SHA"
           fi
           
           # Upload debug symbols
