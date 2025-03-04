@@ -1,6 +1,7 @@
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/websocket_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
@@ -25,6 +26,10 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
     final deviceName = await _getDeviceName();
 
     updateDeviceId(deviceName);
+
+    Sentry.configureScope((scope) {
+      scope.setTag('device_name', deviceName);
+    });
 
     // Initialize Bluetooth service with the device name with retries
     const maxRetries = 3;

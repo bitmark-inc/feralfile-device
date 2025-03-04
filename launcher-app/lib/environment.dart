@@ -12,6 +12,8 @@ class Environment {
 
   static String get metricsApiKey => dotenv.env['METRICS_API_KEY'] ?? '';
 
+  static String get sentryDSN => dotenv.env['SENTRY_DSN'] ?? '';
+
   static Future<void> load() async {
     try {
       await dotenv.load(fileName: ".env");

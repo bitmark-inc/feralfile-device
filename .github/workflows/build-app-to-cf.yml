@@ -45,6 +45,10 @@ on:
         required: true
       APT_GPG_SIGN_KEY_ID:
         required: true
+      SENTRY_DSN_BLUETOOTH_LIB:
+        required: true
+      SENTRY_DSN_APP:
+        required: true
 
 jobs:
   build:
@@ -87,7 +91,9 @@ jobs:
             libdbus-glib-1-dev \
             bluetooth \
             bluez \
-            bluez-tools
+            bluez-tools            bluez-tools \
+            libcurl4-openssl-dev \
+            zlib1g-dev
 
           # Set pkg-config path
           export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
@@ -112,6 +118,7 @@ jobs:
           echo "APP_VERSION=${{ inputs.version }}" >> .env
           echo "METRICS_URL=${{ secrets.METRICS_URL }}" >> .env
           echo "METRICS_API_KEY=${{ secrets.METRICS_API_KEY }}" >> .env
+          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN_APP }}" >> .env
           
           # Debug file contents (showing first 4 chars of values)
           echo "Contents of .env (first 4 chars of values):"
@@ -124,11 +131,25 @@ jobs:
           export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
           flutter pub get
 
+      - name: Build Sentry SDK
+        run: |
+          git clone https://github.com/getsentry/sentry-native.git
+          cd sentry-native
+          # Explicitly initialize and update all submodules
+          git submodule init
+          git submodule update --recursive
+          
+          # Configure with a different backend since crashpad is causing issues
+          cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSENTRY_BACKEND=inproc
+          cmake --build build --parallel
+          sudo cmake --install build
+          cd ..
+
       - name: Build C library
         run: |
           cd feralfile-bluetooth
           make clean
-          make
+          make SENTRY_DSN='${{ secrets.SENTRY_DSN_BLUETOOTH_LIB }}' APP_VERSION='${{ inputs.version }}'
           mkdir -p ../build/linux/arm64/release/bundle/lib/
           cp libbluetooth_service.so ../build/linux/arm64/release/bundle/lib/
           cd ..

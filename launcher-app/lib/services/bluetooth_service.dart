@@ -102,10 +102,22 @@ class BluetoothService {
       int success, Pointer<Uint8> data, int length) {
     List<int>? dataCopy;
     try {
+      // Check if we have valid data
+      if (data == nullptr || length <= 0) {
+        logger.warning('Received empty or invalid command data');
+        return;
+      }
+
       // Create an immediate copy of the data
       dataCopy = List<int>.unmodifiable(data.asTypedList(length));
       // Release the FFI data
       calloc.free(data);
+
+      // Check if we have enough data to parse
+      if (dataCopy.isEmpty) {
+        logger.warning('Empty data after copying');
+        return;
+      }
 
       final chunkInfo = ChunkInfo.fromData(dataCopy);
       _validateChunkIndices(chunkInfo);
