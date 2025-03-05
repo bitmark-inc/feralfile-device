@@ -70,17 +70,31 @@ def restart_services():
 def parse_last_n_lines(log_path, n=100):
     """
     Read the last n lines from the log file and parse into log entries.
-    Assumes log format: [timestamp] [level] message
+    Assumes Chromium log format: [process_id:thread_id:timestamp:level:source] message
     """
     try:
         with open(log_path, 'r') as file:
             lines = file.readlines()[-n:]  # Get the last n lines
         log_entries = []
         for line in lines:
-            parts = line.strip().split(' ', 2)
-            if len(parts) >= 3:
-                timestamp, level, message = parts[0], parts[1], parts[2]
-                log_entries.append({'timestamp': timestamp, 'level': level, 'message': message})
+            line = line.strip()
+            if line.startswith('[') and ']' in line:
+                try:
+                    prefix, message = line.split(']', 1)
+                    prefix = prefix[1:]  # Remove leading '['
+                    parts = prefix.split(':')
+                    if len(parts) >= 4:
+                        timestamp = parts[2]
+                        level = parts[3]
+                        message = message.strip()
+                        log_entries.append({'timestamp': timestamp, 'level': level, 'message': message})
+                    else:
+                        logging.warning(f"Malformed log entry: {line}")
+                except Exception as e:
+                    logging.warning(f"Error parsing log entry: {line} - {e}")
+            else:
+                logging.warning(f"Non-standard log entry: {line}")
+        logging.info(f"Successfully parsed {len(log_entries)} log entries from {log_path}")
         return log_entries
     except FileNotFoundError:
         logging.error(f"Log file not found: {log_path}")
@@ -93,8 +107,11 @@ def report_to_sentry(log_path):
     """
     Parse the log file and send a Sentry event with the last ERROR and breadcrumbs.
     """
+    logging.info("Starting log analysis for Sentry reporting")
+
     log_entries = parse_last_n_lines(log_path, n=100)
     if not log_entries:
+        logging.warning("No log entries found or unable to read log file.")
         sentry_sdk.capture_message("Heartbeat timeout occurred. Unable to read log file.")
         return
 
@@ -107,10 +124,13 @@ def report_to_sentry(log_path):
     last_error = next((entry for entry in reversed(log_entries) if entry['level'].upper() == 'ERROR'), None)
     if last_error:
         message = f"Heartbeat timeout occurred. Last ERROR: {last_error['message']}"
+        logging.error(message)
     else:
         message = "Heartbeat timeout occurred. No recent ERROR in logs."
+        logging.info(message)
     
     sentry_sdk.capture_message(message)
+    logging.info("Sentry report sent successfully")
 
 async def main():
     """
