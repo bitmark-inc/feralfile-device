@@ -140,6 +140,9 @@ async def main():
       3. If a timeout occurs, report to Sentry and restart services.
       4. Repeat indefinitely.
     """
+    logging.info("------DEBUG DSN------")
+    logging.info(SENTRY_DSN)
+    logging.info("---------------------")
     while True:
         while not is_server_up():
             logging.info("WebSocket server not up yet, waiting 10 seconds...")
