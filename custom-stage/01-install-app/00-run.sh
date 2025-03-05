@@ -15,6 +15,10 @@ cp "files/feralfile-switcher.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
     echo "Error: Failed to copy files/feralfile-switcher.sh"
     exit 1
 }
+cp "files/feralfile-watchdog.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
+    echo "Error: Failed to copy files/feralfile-watchdog.sh"
+    exit 1
+}
 cp "files/feralfile-install-deps.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
     echo "Error: Failed to copy files/feralfile-install-deps.sh"
     exit 1

@@ -4,3 +4,4 @@ openbox lightdm
 bluez
 zenity jq
 unattended-upgrades
+netcat websocat

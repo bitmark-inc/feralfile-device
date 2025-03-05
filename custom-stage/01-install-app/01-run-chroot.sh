@@ -27,6 +27,7 @@ chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 644 /etc/apt/trusted.gpg.d/feralfile.asc
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
 chmod 755 /home/feralfile/feralfile/feralfile-switcher.sh
+chmod 755 /home/feralfile/feralfile/feralfile-watchdog.sh
 chmod 755 /home/feralfile/feralfile/feralfile-install-deps.sh
 
 # Create autostart
@@ -50,6 +51,10 @@ fi
 if ! sudo systemctl is-enabled feralfile-switcher.service >/dev/null 2>&1; then
     sudo systemctl enable feralfile-switcher.service
     sudo systemctl start feralfile-switcher.service
+fi
+if ! sudo systemctl is-enabled feralfile-watchdog.service >/dev/null 2>&1; then
+    sudo systemctl enable feralfile-watchdog.service
+    sudo systemctl start feralfile-watchdog.service
 fi
 if ! sudo systemctl is-enabled feralfile-install-deps.service >/dev/null 2>&1; then
     sudo systemctl enable feralfile-install-deps.service
@@ -139,6 +144,20 @@ Environment=XDG_RUNTIME_DIR=/run/user/1000
 WantedBy=default.target
 EOF
 
+cat > /etc/systemd/system/feralfile-watchdog.service << EOF
+Description=WebSocket Watchdog Service
+After=feralfile-launcher.service
+Wants=feralfile-launcher.service
+
+[Service]
+ExecStart=/home/feralfile/feralfile/feralfile-watchdog.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
 cat > /etc/systemd/system/feralfile-install-deps.service << EOF
 [Unit]
 Description=Install feralfile-launcher dependencies before daily upgrade
@@ -198,6 +217,7 @@ APT::Periodic::AutocleanInterval "7";
 APT::Periodic::Verbose "1";
 EOF
 cat > /etc/apt/apt.conf.d/99auto-restart << EOF
+DPkg::Post-Invoke { "systemctl restart feralfile-watchdog.service || true"; };
 DPkg::Post-Invoke { "systemctl restart feralfile-launcher.service || true"; };
 DPkg::Post-Invoke { "systemctl restart feralfile-chromium.service || true"; };
 EOF
