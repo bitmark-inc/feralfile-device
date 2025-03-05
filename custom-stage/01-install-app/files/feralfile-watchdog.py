@@ -1,5 +1,3 @@
-import os
-import time
 import socket
 import logging
 import subprocess
@@ -7,95 +5,146 @@ import asyncio
 import websockets
 import sentry_sdk
 
-# Read SENTRY_DSN from environment variables
-# This value will be replaced automatically while building pi-gen image
+# Constants
+LOG_PATH = "/var/log/chromium/chrome_debug.log"
+HEARTBEAT_TIMEOUT = 10  # Seconds to wait for a heartbeat
+MAX_FAILURES = 6  # Number of failures before restarting services
+PING_IPS = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]  # IPs to check internet connectivity
+SERVICES = ["feralfile-launcher", "feralfile-chromium", "feralfile-switcher"]
+
+# Sentry DSN (replaced during pi-gen build)
 SENTRY_DSN = "REPLACE_SENTRY_DSN"
 
-# Initialize Sentry SDK with the environment-provided DSN
+# Initialize Sentry SDK
 sentry_sdk.init(
-    dsn=SENTRY_DSN,  # Read from environment
-    traces_sample_rate=1.0,  # Optional: adjust as needed
+    dsn=SENTRY_DSN,
+    traces_sample_rate=1.0,
 )
 
-# Configure logging to write to /var/log/feralfile-watchdog.log with timestamps
+# Configure logging
 logging.basicConfig(
     filename="/var/log/feralfile-watchdog.log",
     level=logging.INFO,
-    format="%(asctime)s: %(message)s"
+    format="%(asctime)s: %(message)s",
 )
 
 # Map Chromium log levels to Sentry breadcrumb levels
-level_mapping = {
-    'DEBUG': 'debug',
-    'INFO': 'info',
-    'WARNING': 'warning',
-    'ERROR': 'error',
-    'FATAL': 'fatal',
+LEVEL_MAPPING = {
+    "DEBUG": "debug",
+    "INFO": "info",
+    "WARNING": "warning",
+    "ERROR": "error",
+    "FATAL": "fatal",
 }
 
-def is_server_up(host='localhost', port=8080):
+heartbeat_failed_count = 0
+
+def is_server_up(host="localhost", port=8080):
     """
-    Check if a TCP connection to the server can be made,
-    replicating the 'nc -z localhost 8080' check.
+    Check if a TCP connection to the server can be made and internet is connected.
+    
+    Args:
+        host (str): Hostname to check (default: 'localhost').
+        port (int): Port to check (default: 8080).
+    
+    Returns:
+        bool: True if server is up and internet is connected, False otherwise.
     """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex((host, port)) == 0
 
+def internet_connected():
+    """
+    Check internet connectivity by pinging well-known IP addresses.
+    
+    Returns:
+        bool: True if at least one ping succeeds, False otherwise.
+    """
+    for ip in PING_IPS:
+        try:
+            result = subprocess.run(
+                ["ping", "-c", "1", "-W", "1", ip],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if result.returncode == 0:
+                logging.info(f"Ping successful to {ip}")
+                return True
+        except Exception as e:
+            logging.warning(f"Ping to {ip} failed: {e}")
+    return False
+
 async def monitor_websocket():
     """
-    Connect to the WebSocket server and wait for heartbeat messages.
-    A timeout of 30 seconds is applied to each receive attempt.
+    Connect to the WebSocket server and monitor heartbeat messages.
+    
+    Resets failure count on first heartbeat, exits on timeout or connection error.
     """
+    global heartbeat_failed_count
     uri = "ws://localhost:8080/watchdog"
     try:
         async with websockets.connect(uri) as websocket:
-            logging.info(f"Monitoring heartbeat...")
+            logging.info("Trying to receive first heartbeat...")
+            try:
+                await asyncio.wait_for(websocket.recv(), timeout=HEARTBEAT_TIMEOUT)
+                heartbeat_failed_count = 0
+            except asyncio.TimeoutError:
+                logging.error("Timeout: Failed to receive first heartbeat")
+                return
+            logging.info("Monitoring heartbeat...")
             while True:
                 try:
-                    await asyncio.wait_for(websocket.recv(), timeout=30)
+                    await asyncio.wait_for(websocket.recv(), timeout=HEARTBEAT_TIMEOUT)
                 except asyncio.TimeoutError:
-                    logging.info("Timeout: No heartbeat received in 30 seconds")
+                    logging.info(f"Timeout: No heartbeat received in {HEARTBEAT_TIMEOUT} seconds")
                     break
     except Exception as e:
         logging.info(f"Error connecting to WebSocket: {e}")
 
-def restart_services():
+def reboot():
     """
-    Restart the required services using systemctl.
+    Reboot the device.
     """
-    services = ["feralfile-launcher", "feralfile-chromium", "feralfile-switcher"]
-    for service in services:
-        subprocess.run(["systemctl", "restart", service])
-        logging.info(f"Service {service} restarted")
+    result = subprocess.run(["reboot"])
+    if result.returncode == 0:
+        logging.info(f"Reboot triggered successfully")
+    else:
+        logging.error(f"Failed to reboot")
 
 def parse_last_n_lines(log_path, n=100):
     """
-    Read the last n lines from the log file and parse into log entries.
-    Assumes Chromium log format: [process_id:thread_id:timestamp:level:source] message
+    Parse the last n lines from a log file into structured entries.
+    
+    Args:
+        log_path (str): Path to the log file.
+        n (int): Number of lines to read (default: 100).
+    
+    Returns:
+        list: List of dicts with 'timestamp', 'level', and 'message' keys.
     """
     try:
-        with open(log_path, 'r') as file:
-            lines = file.readlines()[-n:]  # Get the last n lines
+        with open(log_path, "r") as file:
+            lines = file.readlines()[-n:]
         log_entries = []
         for line in lines:
             line = line.strip()
-            if line.startswith('[') and ']' in line:
+            if line.startswith("[") and "]" in line:
                 try:
-                    prefix, message = line.split(']', 1)
+                    prefix, message = line.split("]", 1)
                     prefix = prefix[1:]  # Remove leading '['
-                    parts = prefix.split(':')
+                    parts = prefix.split(":")
                     if len(parts) >= 4:
                         timestamp = parts[2]
                         level = parts[3]
                         message = message.strip()
-                        log_entries.append({'timestamp': timestamp, 'level': level, 'message': message})
+                        log_entries.append({"timestamp": timestamp, "level": level, "message": message})
                     else:
                         logging.warning(f"Malformed log entry: {line}")
                 except Exception as e:
                     logging.warning(f"Error parsing log entry: {line} - {e}")
             else:
                 logging.warning(f"Non-standard log entry: {line}")
-        logging.info(f"Successfully parsed {len(log_entries)} log entries from {log_path}")
+        logging.info(f"Parsed {len(log_entries)} log entries from {log_path}")
         return log_entries
     except FileNotFoundError:
         logging.error(f"Log file not found: {log_path}")
@@ -106,57 +155,64 @@ def parse_last_n_lines(log_path, n=100):
 
 def report_to_sentry(log_path):
     """
-    Parse the log file and send a Sentry event with the last ERROR and breadcrumbs.
+    Send a Sentry report with log breadcrumbs and the last error message.
+    
+    Args:
+        log_path (str): Path to the log file to analyze.
     """
     logging.info("Starting log analysis for Sentry reporting")
-
     log_entries = parse_last_n_lines(log_path, n=100)
     if not log_entries:
-        logging.warning("No log entries found or unable to read log file.")
+        logging.warning("No log entries found or unable to read log file")
         sentry_sdk.capture_message("Heartbeat timeout occurred. Unable to read log file.")
         return
-
-    # Add up to 100 log entries as breadcrumbs
     for entry in log_entries:
-        level = level_mapping.get(entry['level'].upper(), 'info')
-        sentry_sdk.add_breadcrumb(message=entry['message'], level=level)
-
-    # Find the last ERROR message
-    last_error = next((entry for entry in reversed(log_entries) if entry['level'].upper() == 'ERROR'), None)
+        level = LEVEL_MAPPING.get(entry["level"].upper(), "info")
+        sentry_sdk.add_breadcrumb(message=entry["message"], level=level)
+    last_error = next((entry for entry in reversed(log_entries) if entry["level"].upper() == "ERROR"), None)
     if last_error:
         message = f"Heartbeat timeout occurred. Last ERROR: {last_error['message']}"
         logging.error(message)
     else:
         message = "Heartbeat timeout occurred. No recent ERROR in logs."
         logging.info(message)
-    
     sentry_sdk.capture_message(message)
     logging.info("Sentry report sent successfully")
 
+async def wait_for_server(wait_interval=10, max_failures=MAX_FAILURES):
+    """
+    Waits for the server to be up and returns True if successful,
+    or False if the maximum number of failures is reached.
+    """
+    failures = 0
+    while not is_server_up():
+        if internet_connected():
+            logging.info("WebSocket server not up but internet is connected")
+            failures += 1
+        else:
+            logging.info("WebSocket server not up yet, waiting for internet connectivity...")
+        if failures >= max_failures:
+            return False
+        await asyncio.sleep(wait_interval)
+    return True
+
 async def main():
-    """
-    Main loop:
-      1. Wait for the WebSocket server to become available.
-      2. Once up, connect and monitor for heartbeats.
-      3. If a timeout occurs, report to Sentry and restart services.
-      4. Repeat indefinitely.
-    """
     logging.info("------DEBUG DSN------")
     logging.info(SENTRY_DSN)
     logging.info("---------------------")
-    while True:
-        while not is_server_up():
-            logging.info("WebSocket server not up yet, waiting 10 seconds...")
-            time.sleep(10)
-        logging.info("WebSocket server is up, connecting...")
-        
+    global heartbeat_failed_count
+    while heartbeat_failed_count < MAX_FAILURES:
+    # Wait until the server is up or until failures reach max_failures
+        if not await wait_for_server():
+            report_to_sentry(LOG_PATH)
+            logging.info("Reached maximum connection failures. Rebooting...")
+            reboot()
+            return
         await monitor_websocket()
-        
-        # Report log information to Sentry when heartbeat stops
-        report_to_sentry('/var/log/chromium/chrome_debug.log')
-        
-        logging.info("Restarting services...")
-        restart_services()
+        heartbeat_failed_count += 1
+    report_to_sentry(LOG_PATH)
+    logging.info("Reached maximum connection failures. Rebooting...")
+    reboot()
 
 if __name__ == "__main__":
     asyncio.run(main())
