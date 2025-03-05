@@ -49,6 +49,7 @@ jobs:
     runs-on: ['self-hosted', 'ARM64']
     needs: [build-app]
     if: ${{ always() && (needs.build-app.result == 'success' || needs.build-app.result == 'skipped') }}
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
 
     steps:
       - name: Checkout Repository

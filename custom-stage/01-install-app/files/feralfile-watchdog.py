@@ -10,7 +10,6 @@ LOG_PATH = "/var/log/chromium/chrome_debug.log"
 HEARTBEAT_TIMEOUT = 10  # Seconds to wait for a heartbeat
 MAX_FAILURES = 6  # Number of failures before restarting services
 PING_IPS = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]  # IPs to check internet connectivity
-SERVICES = ["feralfile-launcher", "feralfile-chromium", "feralfile-switcher"]
 
 # Sentry DSN (replaced during pi-gen build)
 SENTRY_DSN = "REPLACE_SENTRY_DSN"
