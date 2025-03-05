@@ -27,7 +27,7 @@ chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 644 /etc/apt/trusted.gpg.d/feralfile.asc
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
 chmod 755 /home/feralfile/feralfile/feralfile-switcher.sh
-chmod 755 /home/feralfile/feralfile/feralfile-watchdog.sh
+chmod 755 /home/feralfile/feralfile/feralfile-watchdog.py
 chmod 755 /home/feralfile/feralfile/feralfile-install-deps.sh
 
 # Create autostart
@@ -150,7 +150,7 @@ After=feralfile-launcher.service
 Wants=feralfile-launcher.service
 
 [Service]
-ExecStart=/home/feralfile/feralfile/feralfile-watchdog.sh
+ExecStart=python3 /home/feralfile/feralfile/feralfile-watchdog.py
 Restart=always
 RestartSec=5
 

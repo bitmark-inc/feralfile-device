@@ -6,3 +6,7 @@ x11-xserver-utils
 xdotool
 sysstat
 procps
+python3-pyqt5
+python3-opengl
+python3-websockets
+vulkan-tools mesa-vulkan-drivers
