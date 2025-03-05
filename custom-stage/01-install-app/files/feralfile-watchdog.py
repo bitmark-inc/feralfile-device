@@ -8,7 +8,8 @@ import websockets
 import sentry_sdk
 
 # Read SENTRY_DSN from environment variables
-SENTRY_DSN = os.getenv("SENTRY_DSN")
+# This value will be replaced automatically while building pi-gen image
+SENTRY_DSN = "REPLACE_SENTRY_DSN"
 
 # Initialize Sentry SDK with the environment-provided DSN
 sentry_sdk.init(

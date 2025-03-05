@@ -7,6 +7,7 @@ function get_config_value() {
 
 BASIC_AUTH_USER="$(get_config_value "distribution_auth_user")"
 BASIC_AUTH_PASS="$(get_config_value "distribution_auth_password")"
+SENTRY_DSN="$(get_config_value "sentry_dsn")"
 LOCAL_BRANCH="$(get_config_value "app_branch")"
 
 # Update BlueZ version
@@ -179,13 +180,15 @@ Requires=feralfile-install-deps.service
 After=feralfile-install-deps.service
 EOF
 
-# Install feralfile launcher app
+# Set settings
 mkdir -p "/etc/apt/auth.conf.d/"
 cat > /etc/apt/auth.conf.d/feralfile.conf << EOF
 machine feralfile-device-distribution.bitmark-development.workers.dev
 login $BASIC_AUTH_USER
 password $BASIC_AUTH_PASS
 EOF
+
+sed -i "s|REPLACE_SENTRY_DSN|$SENTRY_DSN|g" "/home/feralfile/feralfile/feralfile-watchdog.py"
 
 ## Remove the config file since it's not used anymore
 rm "/home/feralfile/feralfile/feralfile-launcher.conf"
