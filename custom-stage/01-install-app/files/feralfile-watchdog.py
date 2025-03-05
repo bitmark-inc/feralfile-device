@@ -7,8 +7,8 @@ import sentry_sdk
 
 # Constants
 LOG_PATH = "/var/log/chromium/chrome_debug.log"
-HEARTBEAT_TIMEOUT = 10  # Seconds to wait for a heartbeat
-MAX_FAILURES = 6  # Number of failures before restarting services
+HEARTBEAT_TIMEOUT = 15  # Seconds to wait for a heartbeat
+MAX_HEARTBEAT_FAILURES = 4  # Number of heartbeat failures before rebooting
 PING_IPS = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]  # IPs to check internet connectivity
 
 # Sentry DSN (replaced during pi-gen build)
@@ -88,7 +88,7 @@ async def monitor_websocket():
                 await asyncio.wait_for(websocket.recv(), timeout=HEARTBEAT_TIMEOUT)
                 heartbeat_failed_count = 0
             except asyncio.TimeoutError:
-                logging.error("Timeout: Failed to receive first heartbeat")
+                logging.warning("Timeout: Failed to receive first heartbeat")
                 return
             logging.info("Monitoring heartbeat...")
             while True:
@@ -171,14 +171,14 @@ def report_to_sentry(log_path):
     last_error = next((entry for entry in reversed(log_entries) if entry["level"].upper() == "ERROR"), None)
     if last_error:
         message = f"Heartbeat timeout occurred. Last ERROR: {last_error['message']}"
-        logging.error(message)
+        logging.warning(message)
     else:
         message = "Heartbeat timeout occurred. No recent ERROR in logs."
         logging.info(message)
     sentry_sdk.capture_message(message)
     logging.info("Sentry report sent successfully")
 
-async def wait_for_server(wait_interval=10, max_failures=MAX_FAILURES):
+async def wait_for_server(wait_interval=5, max_failures=12):
     """
     Waits for the server to be up and returns True if successful,
     or False if the maximum number of failures is reached.
@@ -186,7 +186,7 @@ async def wait_for_server(wait_interval=10, max_failures=MAX_FAILURES):
     failures = 0
     while not is_server_up():
         if internet_connected():
-            logging.info("WebSocket server not up but internet is connected")
+            logging.warning("WebSocket server not up but internet is connected")
             failures += 1
         else:
             logging.info("WebSocket server not up yet, waiting for internet connectivity...")
@@ -196,11 +196,8 @@ async def wait_for_server(wait_interval=10, max_failures=MAX_FAILURES):
     return True
 
 async def main():
-    logging.info("------DEBUG DSN------")
-    logging.info(SENTRY_DSN)
-    logging.info("---------------------")
     global heartbeat_failed_count
-    while heartbeat_failed_count < MAX_FAILURES:
+    while heartbeat_failed_count < MAX_HEARTBEAT_FAILURES:
     # Wait until the server is up or until failures reach max_failures
         if not await wait_for_server():
             report_to_sentry(LOG_PATH)
@@ -210,7 +207,7 @@ async def main():
         await monitor_websocket()
         heartbeat_failed_count += 1
     report_to_sentry(LOG_PATH)
-    logging.info("Reached maximum connection failures. Rebooting...")
+    logging.info("Reached maximum heartbeat failures. Rebooting...")
     reboot()
 
 if __name__ == "__main__":
