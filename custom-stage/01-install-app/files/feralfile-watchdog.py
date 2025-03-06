@@ -100,10 +100,43 @@ async def monitor_websocket():
     except Exception as e:
         logging.info(f"Error connecting to WebSocket: {e}")
 
+def force_kill_services():
+    """
+    Force kill systemd services and X11 processes.
+    """
+    services = [
+        "feralfile-switcher",
+        "feralfile-launcher",
+        "feralfile-chromium",
+    ]
+    for service in services:
+        logging.info(f"Force killing systemd service: {service}")
+        # Send kill signal to all processes of the service
+        subprocess.run(
+            ["systemctl", "kill", "--kill-who=all", service],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        # Stop the service to ensure it won't restart
+        subprocess.run(
+            ["systemctl", "stop", service],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    # Force kill X11 processes
+    logging.info("Force killing X11 processes")
+    subprocess.run(
+        ["pkill", "-9", "Xorg"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
 def reboot():
     """
     Reboot the device.
     """
+    logging.info("Force killing services before rebooting")
+    force_kill_services()
     result = subprocess.run(["reboot"])
     if result.returncode == 0:
         logging.info(f"Reboot triggered successfully")
@@ -178,7 +211,7 @@ def report_to_sentry(log_path):
     sentry_sdk.capture_message(message)
     logging.info("Sentry report sent successfully")
 
-async def wait_for_server(wait_interval=5, max_failures=12):
+async def wait_for_server(wait_interval=5, max_failures=24):
     """
     Waits for the server to be up and returns True if successful,
     or False if the maximum number of failures is reached.
