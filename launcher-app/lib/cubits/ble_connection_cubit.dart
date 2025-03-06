@@ -5,7 +5,6 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
-import '../services/chromium_launcher.dart';
 import '../services/config_service.dart';
 import 'ble_connection_state.dart';
 import 'dart:math';
@@ -114,7 +113,6 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       ));
 
       logger.info('[BLEConnectionCubit] Launching Chromium browser');
-      // await ChromiumLauncher.launchAndWait();
     } else {
       _bluetoothService.notify('wifi_connection', {'success': false});
       logger.info('[BLEConnectionCubit] Failed to connect to WiFi network');
