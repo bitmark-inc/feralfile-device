@@ -121,11 +121,9 @@ class WebSocketService {
             WebSocketRequestMessage(
               message: RequestMessageData(command: Command.ping)
             ),
+            false,
             callback: (response) {
-              logger.info('Received pong: $response');
-              logger.info('Sending pong to watchdog: $response');
               _watchdogSocket!.add(jsonEncode(response.toJson()));
-              logger.info('Pong message sent');
             },
           );
         }
@@ -134,22 +132,26 @@ class WebSocketService {
       }
     });
   }
-  
+
   void _stopHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
   }
 
   /// Sends a message to the website with an optional callback
-  void _sendMessage(WebSocketRequestMessage message,
+  void _sendMessage(WebSocketRequestMessage message, bool logging,
       {Function(WebSocketResponseMessage)? callback}) {
-    if (_websiteSocket != null && _websiteSocket!.readyState == WebSocket.open) {
+    if (_websiteSocket?.readyState == WebSocket.open) {
       if (callback != null && message.messageID != null) {
         _messageCallbacks[message.messageID!] = callback;
       }
-      logger.info('Sending message to website: ${jsonEncode(message.toJson())}');
+      if (logging) {
+        logger.info('Sending message to website: ${jsonEncode(message.toJson())}');
+      }
       _websiteSocket!.add(jsonEncode(message.toJson()));
-      logger.info('Message sent');
+      if (logging) {
+        logger.info('Message sent');
+      }
     } else {
       logger.warning(
           'Sending message failed. Website WebSocket connection not available');
@@ -158,13 +160,13 @@ class WebSocketService {
 
   /// Public method to send a message to the website
   void sendMessage(WebSocketRequestMessage message) {
-    _sendMessage(message);
+    _sendMessage(message, true);
   }
 
   /// Public method to send a message to the website and register a callback
   void sendMessageWithCallback(WebSocketRequestMessage message,
       Function(WebSocketResponseMessage) callback) {
-    _sendMessage(message, callback: callback);
+    _sendMessage(message, true, callback: callback);
   }
 
   /// Adds an internal message listener
