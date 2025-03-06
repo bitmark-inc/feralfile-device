@@ -189,38 +189,11 @@ def reboot():
     """
     Reboot the device.
     """
-    logging.info("Force killing services before rebooting")
-    force_kill_services()
     result = subprocess.run(["reboot"])
     if result.returncode == 0:
         logging.info(f"Reboot triggered successfully")
     else:
         logging.error(f"Failed to reboot")
-
-def force_kill_services():
-    """
-    Force kill systemd services and X11 processes.
-    """
-    # Force kill X11 processes
-    logging.info("Force killing X11 processes")
-    subprocess.run(
-        ["pkill", "-9", "Xorg"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    services = [
-        "feralfile-switcher",
-        "feralfile-chromium",
-        "feralfile",
-    ]
-    for service in services:
-        logging.info(f"Force killing systemd service: {service}")
-        # Send kill signal to all processes of the service
-        subprocess.run(
-            ["pkill", "-9", service],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
 
 async def main():
     global heartbeat_failed_count
