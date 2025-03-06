@@ -24,8 +24,6 @@ rm /home/feralfile/bluez-5.79.tar.xz
 rm -rf /home/feralfile/bluez-5.79
 cd /
 
-sed -i 's/$/ quiet/' "/boot/firmware/cmdline.txt"
-
 chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 644 /etc/apt/trusted.gpg.d/feralfile.asc
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
