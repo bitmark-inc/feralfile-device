@@ -1,4 +1,4 @@
-name: Build FeralFile App for ARM64 to Cloudflare R2
+name: Build FeralFile App
 
 on:
   workflow_dispatch:

@@ -1,4 +1,4 @@
-name: Build Feral File Device Image to Cloudflare R2
+name: Build Feral File Device Image
 
 on:
   workflow_dispatch:
