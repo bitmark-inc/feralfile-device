@@ -38,6 +38,23 @@ LEVEL_MAPPING = {
 
 heartbeat_failed_count = 0
 
+async def wait_for_server(wait_interval=5, max_failures=24):
+    """
+    Waits for the server to be up and returns True if successful,
+    or False if the maximum number of failures is reached.
+    """
+    failures = 0
+    while not is_server_up():
+        if internet_connected():
+            logging.warning("WebSocket server not up but internet is connected")
+            failures += 1
+        else:
+            logging.info("WebSocket server not up yet, waiting for internet connectivity...")
+        if failures >= max_failures:
+            return False
+        await asyncio.sleep(wait_interval)
+    return True
+
 def is_server_up(host="localhost", port=8080):
     """
     Check if a TCP connection to the server can be made and internet is connected.
@@ -95,53 +112,36 @@ async def monitor_websocket():
                 try:
                     await asyncio.wait_for(websocket.recv(), timeout=HEARTBEAT_TIMEOUT)
                 except asyncio.TimeoutError:
-                    logging.info(f"Timeout: No heartbeat received in {HEARTBEAT_TIMEOUT} seconds")
+                    logging.warning(f"Timeout: No heartbeat received in {HEARTBEAT_TIMEOUT} seconds")
                     break
     except Exception as e:
         logging.info(f"Error connecting to WebSocket: {e}")
 
-def force_kill_services():
+def report_to_sentry(log_path):
     """
-    Force kill systemd services and X11 processes.
+    Send a Sentry report with log breadcrumbs and the last error message.
+    
+    Args:
+        log_path (str): Path to the log file to analyze.
     """
-    services = [
-        "feralfile-switcher",
-        "feralfile-launcher",
-        "feralfile-chromium",
-    ]
-    for service in services:
-        logging.info(f"Force killing systemd service: {service}")
-        # Send kill signal to all processes of the service
-        subprocess.run(
-            ["systemctl", "kill", "--kill-who=all", service],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        # Stop the service to ensure it won't restart
-        subprocess.run(
-            ["systemctl", "stop", service],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    # Force kill X11 processes
-    logging.info("Force killing X11 processes")
-    subprocess.run(
-        ["pkill", "-9", "Xorg"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-def reboot():
-    """
-    Reboot the device.
-    """
-    logging.info("Force killing services before rebooting")
-    force_kill_services()
-    result = subprocess.run(["reboot"])
-    if result.returncode == 0:
-        logging.info(f"Reboot triggered successfully")
+    logging.info("Starting log analysis for Sentry reporting")
+    log_entries = parse_last_n_lines(log_path, n=100)
+    if not log_entries:
+        logging.warning("No log entries found or unable to read log file")
+        sentry_sdk.capture_message("Heartbeat timeout occurred. Unable to read log file.")
+        return
+    for entry in log_entries:
+        level = LEVEL_MAPPING.get(entry["level"].upper(), "info")
+        sentry_sdk.add_breadcrumb(message=entry["message"], level=level)
+    last_error = next((entry for entry in reversed(log_entries) if entry["level"].upper() == "ERROR"), None)
+    if last_error:
+        message = f"Heartbeat timeout occurred. Last ERROR: {last_error['message']}"
+        logging.warning(message)
     else:
-        logging.error(f"Failed to reboot")
+        message = "Heartbeat timeout occurred. No recent ERROR in logs."
+        logging.info(message)
+    sentry_sdk.capture_message(message)
+    logging.info("Sentry report sent successfully")
 
 def parse_last_n_lines(log_path, n=100):
     """
@@ -185,48 +185,48 @@ def parse_last_n_lines(log_path, n=100):
         logging.error(f"Error reading log file {log_path}: {e}")
         return []
 
-def report_to_sentry(log_path):
+def reboot():
     """
-    Send a Sentry report with log breadcrumbs and the last error message.
-    
-    Args:
-        log_path (str): Path to the log file to analyze.
+    Reboot the device.
     """
-    logging.info("Starting log analysis for Sentry reporting")
-    log_entries = parse_last_n_lines(log_path, n=100)
-    if not log_entries:
-        logging.warning("No log entries found or unable to read log file")
-        sentry_sdk.capture_message("Heartbeat timeout occurred. Unable to read log file.")
-        return
-    for entry in log_entries:
-        level = LEVEL_MAPPING.get(entry["level"].upper(), "info")
-        sentry_sdk.add_breadcrumb(message=entry["message"], level=level)
-    last_error = next((entry for entry in reversed(log_entries) if entry["level"].upper() == "ERROR"), None)
-    if last_error:
-        message = f"Heartbeat timeout occurred. Last ERROR: {last_error['message']}"
-        logging.warning(message)
+    logging.info("Force killing services before rebooting")
+    force_kill_services()
+    result = subprocess.run(["reboot"])
+    if result.returncode == 0:
+        logging.info(f"Reboot triggered successfully")
     else:
-        message = "Heartbeat timeout occurred. No recent ERROR in logs."
-        logging.info(message)
-    sentry_sdk.capture_message(message)
-    logging.info("Sentry report sent successfully")
+        logging.error(f"Failed to reboot")
 
-async def wait_for_server(wait_interval=5, max_failures=24):
+def force_kill_services():
     """
-    Waits for the server to be up and returns True if successful,
-    or False if the maximum number of failures is reached.
+    Force kill systemd services and X11 processes.
     """
-    failures = 0
-    while not is_server_up():
-        if internet_connected():
-            logging.warning("WebSocket server not up but internet is connected")
-            failures += 1
-        else:
-            logging.info("WebSocket server not up yet, waiting for internet connectivity...")
-        if failures >= max_failures:
-            return False
-        await asyncio.sleep(wait_interval)
-    return True
+    services = [
+        "feralfile-switcher",
+        "feralfile-launcher",
+        "feralfile-chromium",
+    ]
+    for service in services:
+        logging.info(f"Force killing systemd service: {service}")
+        # Send kill signal to all processes of the service
+        subprocess.run(
+            ["systemctl", "kill", "--kill-who=all", service],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        # Stop the service to ensure it won't restart
+        subprocess.run(
+            ["systemctl", "stop", service],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    # Force kill X11 processes
+    logging.info("Force killing X11 processes")
+    subprocess.run(
+        ["pkill", "-9", "Xorg"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 async def main():
     global heartbeat_failed_count
