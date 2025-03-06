@@ -201,25 +201,6 @@ def force_kill_services():
     """
     Force kill systemd services and X11 processes.
     """
-    services = [
-        "feralfile-switcher",
-        "feralfile-launcher",
-        "feralfile-chromium",
-    ]
-    for service in services:
-        logging.info(f"Force killing systemd service: {service}")
-        # Send kill signal to all processes of the service
-        subprocess.run(
-            ["systemctl", "kill", "--kill-who=all", service],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        # Stop the service to ensure it won't restart
-        subprocess.run(
-            ["systemctl", "stop", service],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
     # Force kill X11 processes
     logging.info("Force killing X11 processes")
     subprocess.run(
@@ -227,6 +208,19 @@ def force_kill_services():
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    services = [
+        "feralfile-switcher",
+        "feralfile-chromium",
+        "feralfile",
+    ]
+    for service in services:
+        logging.info(f"Force killing systemd service: {service}")
+        # Send kill signal to all processes of the service
+        subprocess.run(
+            ["pkill", "-9", service],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
 async def main():
     global heartbeat_failed_count
