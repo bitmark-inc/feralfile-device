@@ -42,6 +42,10 @@ class _LaunchScreenState extends State<LaunchScreen>
       final bleConnectionCubit = context.read<BLEConnectionCubit>();
       await bleConnectionCubit.initialize();
 
+      // Start WebSocket server
+      await WebSocketService().initServer();
+      logger.info('[BLEConnectionCubit] WebSocket server started');
+
       // Check WiFi connection
       logger.info('Checking WiFi connection...');
       bool isConnected = await WifiService.isConnectedToWifi();

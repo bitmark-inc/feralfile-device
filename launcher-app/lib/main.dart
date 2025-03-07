@@ -46,6 +46,7 @@ void main() async {
         logger.info('[App] Received SIGTERM: ${signal.toString()}');
         await bleConnectionCubit.close();
         HardwareMonitorService().dispose();
+        WebSocketService().dispose();
         logger.info('[App] Cleanup complete. Exiting...');
         exit(0);
       });

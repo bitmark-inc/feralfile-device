@@ -104,10 +104,6 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       await startLogServer();
       logger.info('[BLEConnectionCubit] Log server started');
 
-      // Start WebSocket server
-      await WebSocketService().initServer();
-      logger.info('[BLEConnectionCubit] WebSocket server started');
-
       emit(state.copyWith(
         status: BLEConnectionStatus.connected,
         localIp: localIp,
@@ -131,7 +127,6 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
         '[BLEConnectionCubit] Closing cubit and disposing Bluetooth service');
     _bluetoothService.dispose();
     stopLogServer();
-    WebSocketService().dispose();
     return super.close();
   }
 }
