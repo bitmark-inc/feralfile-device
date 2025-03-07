@@ -29,3 +29,15 @@ cp "files/apt-public-key.asc" "${ROOTFS_DIR}/etc/apt/trusted.gpg.d/feralfile.asc
     echo "Error: Failed to copy files/apt-public-key.asc"
     exit 1
 }
+
+if [ -f "${ROOTFS_DIR}/boot/firmware/cmdline.txt" ]; then
+    if ! grep -q "quiet" "${ROOTFS_DIR}/boot/firmware/cmdline.txt"; then
+        echo "Adding 'quiet' to cmdline.txt"
+        sed -i 's/$/ quiet/' "${ROOTFS_DIR}/boot/firmware/cmdline.txt"
+    else
+        echo "'quiet' already present in cmdline.txt"
+    fi
+else
+    echo "Error: Failed to find cmdline.txt"
+    exit 1
+fi
