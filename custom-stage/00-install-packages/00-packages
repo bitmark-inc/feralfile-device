@@ -6,3 +6,6 @@ x11-xserver-utils
 xdotool
 sysstat
 procps
+python3-websockets
+python3-sentry-sdk
+vulkan-tools mesa-vulkan-drivers

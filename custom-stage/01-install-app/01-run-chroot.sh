@@ -7,6 +7,7 @@ function get_config_value() {
 
 BASIC_AUTH_USER="$(get_config_value "distribution_auth_user")"
 BASIC_AUTH_PASS="$(get_config_value "distribution_auth_password")"
+SENTRY_DSN="$(get_config_value "sentry_dsn")"
 LOCAL_BRANCH="$(get_config_value "app_branch")"
 
 # Update BlueZ version
@@ -27,11 +28,16 @@ chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 644 /etc/apt/trusted.gpg.d/feralfile.asc
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
 chmod 755 /home/feralfile/feralfile/feralfile-switcher.sh
+chmod 755 /home/feralfile/feralfile/feralfile-watchdog.py
 chmod 755 /home/feralfile/feralfile/feralfile-install-deps.sh
 
 # Create autostart
 mkdir -p /home/feralfile/.config/openbox
 cat > /home/feralfile/.config/openbox/autostart <<EOF
+if ! grep -q "quiet" "/boot/firmware/cmdline.txt"; then
+    sudo sed -i 's/$/ quiet/' "/boot/firmware/cmdline.txt"
+fi
+
 xset s off
 xset s noblank
 xset -dpms
@@ -50,6 +56,10 @@ fi
 if ! sudo systemctl is-enabled feralfile-switcher.service >/dev/null 2>&1; then
     sudo systemctl enable feralfile-switcher.service
     sudo systemctl start feralfile-switcher.service
+fi
+if ! sudo systemctl is-enabled feralfile-watchdog.service >/dev/null 2>&1; then
+    sudo systemctl enable feralfile-watchdog.service
+    sudo systemctl start feralfile-watchdog.service
 fi
 if ! sudo systemctl is-enabled feralfile-install-deps.service >/dev/null 2>&1; then
     sudo systemctl enable feralfile-install-deps.service
@@ -139,6 +149,20 @@ Environment=XDG_RUNTIME_DIR=/run/user/1000
 WantedBy=default.target
 EOF
 
+cat > /etc/systemd/system/feralfile-watchdog.service << EOF
+Description=WebSocket Watchdog Service
+After=feralfile-launcher.service
+Wants=feralfile-launcher.service
+
+[Service]
+ExecStart=python3 /home/feralfile/feralfile/feralfile-watchdog.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
 cat > /etc/systemd/system/feralfile-install-deps.service << EOF
 [Unit]
 Description=Install feralfile-launcher dependencies before daily upgrade
@@ -160,13 +184,15 @@ Requires=feralfile-install-deps.service
 After=feralfile-install-deps.service
 EOF
 
-# Install feralfile launcher app
+# Set settings
 mkdir -p "/etc/apt/auth.conf.d/"
 cat > /etc/apt/auth.conf.d/feralfile.conf << EOF
 machine feralfile-device-distribution.bitmark-development.workers.dev
 login $BASIC_AUTH_USER
 password $BASIC_AUTH_PASS
 EOF
+
+sed -i "s|REPLACE_SENTRY_DSN|$SENTRY_DSN|g" "/home/feralfile/feralfile/feralfile-watchdog.py"
 
 ## Remove the config file since it's not used anymore
 rm "/home/feralfile/feralfile/feralfile-launcher.conf"
@@ -198,6 +224,7 @@ APT::Periodic::AutocleanInterval "7";
 APT::Periodic::Verbose "1";
 EOF
 cat > /etc/apt/apt.conf.d/99auto-restart << EOF
+DPkg::Post-Invoke { "systemctl restart feralfile-watchdog.service || true"; };
 DPkg::Post-Invoke { "systemctl restart feralfile-launcher.service || true"; };
 DPkg::Post-Invoke { "systemctl restart feralfile-chromium.service || true"; };
 EOF
