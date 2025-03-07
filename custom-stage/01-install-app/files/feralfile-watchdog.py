@@ -189,7 +189,7 @@ def reboot():
     """
     Reboot the device.
     """
-    result = subprocess.run(["reboot"])
+    result = subprocess.run(["sudo", "reboot", "-f"])
     if result.returncode == 0:
         logging.info(f"Reboot triggered successfully")
     else:
