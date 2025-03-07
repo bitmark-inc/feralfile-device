@@ -38,7 +38,7 @@ LEVEL_MAPPING = {
 
 heartbeat_failed_count = 0
 
-async def wait_for_server(wait_interval=5, max_failures=24):
+async def wait_for_server(wait_interval=5, max_failures=12):
     """
     Waits for the server to be up and returns True if successful,
     or False if the maximum number of failures is reached.

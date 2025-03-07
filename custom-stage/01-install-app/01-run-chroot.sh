@@ -34,6 +34,10 @@ chmod 755 /home/feralfile/feralfile/feralfile-install-deps.sh
 # Create autostart
 mkdir -p /home/feralfile/.config/openbox
 cat > /home/feralfile/.config/openbox/autostart <<EOF
+if ! grep -q "quiet" "/boot/firmware/cmdline.txt"; then
+    sudo sed -i 's/$/ quiet/' "/boot/firmware/cmdline.txt"
+fi
+
 xset s off
 xset s noblank
 xset -dpms
