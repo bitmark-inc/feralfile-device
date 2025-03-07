@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:feralfile/models/websocket_message.dart';
+import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/logger.dart';
 
 class WebSocketService {
@@ -69,6 +70,16 @@ class WebSocketService {
         _messageCallbacks[data.messageID]?.call(data);
         _messageCallbacks
             .remove(data.messageID); // Remove the callback after use
+      }
+
+      // Call bluetoothService.notify if messageID is updateIndex
+      if (data.messageID == 'updateIndex') {
+        try {
+          final message = jsonDecode(data.message) as Map<String, dynamic>;
+          BluetoothService().notify(data.messageID!, message);
+        } catch (e) {
+          logger.warning('Error sending notification: $e');
+        }
       }
 
       // Notify to all listeners
