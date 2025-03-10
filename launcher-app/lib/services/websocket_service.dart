@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:feralfile/models/command.dart';
 import 'package:feralfile/models/websocket_message.dart';
+import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/logger.dart';
 
 class WebSocketService {
@@ -41,7 +42,7 @@ class WebSocketService {
       _server = await HttpServer.bind('localhost', 8080);
       logger.info('WebSocket server running on ws://localhost:8080');
 
-      // Trigger the heart beat 
+      // Trigger the heart beat
       _startHeartbeat();
 
       // Listen for incoming HTTP requests and upgrade to WebSocket based on path
@@ -105,6 +106,16 @@ class WebSocketService {
         _messageCallbacks.remove(data.messageID);
       }
 
+      // Call bluetoothService.notify if messageID is statusChanged
+      if (data.messageID == 'statusChanged') {
+        try {
+          final message = jsonDecode(data.message) as Map<String, dynamic>;
+          BluetoothService().notify(data.messageID!, message);
+        } catch (e) {
+          logger.warning('Error sending notification: $e');
+        }
+      }
+
       for (var listener in _messageListeners) {
         listener(data);
       }
@@ -117,11 +128,11 @@ class WebSocketService {
     _stopHeartbeat(); // Cancel any existing timer
     _heartbeatTimer = Timer.periodic(interval, (_) {
       try {
-        if (_watchdogSocket != null && _watchdogSocket!.readyState == WebSocket.open) {
+        if (_watchdogSocket != null &&
+            _watchdogSocket!.readyState == WebSocket.open) {
           _sendMessage(
             WebSocketRequestMessage(
-              message: RequestMessageData(command: Command.ping)
-            ),
+                message: RequestMessageData(command: Command.ping)),
             false,
             callback: (response) {
               _watchdogSocket!.add(jsonEncode(response.toJson()));
@@ -129,7 +140,8 @@ class WebSocketService {
           );
         }
       } catch (e, s) {
-        logger.warning('Error trying to heart beating website: $e \n stack: $s');
+        logger
+            .warning('Error trying to heart beating website: $e \n stack: $s');
       }
     });
   }
@@ -147,7 +159,8 @@ class WebSocketService {
         _messageCallbacks[message.messageID!] = callback;
       }
       if (logging) {
-        logger.info('Sending message to website: ${jsonEncode(message.toJson())}');
+        logger.info(
+            'Sending message to website: ${jsonEncode(message.toJson())}');
       }
       _websiteSocket!.add(jsonEncode(message.toJson()));
       if (logging) {
