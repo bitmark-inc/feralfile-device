@@ -26,6 +26,7 @@ class WebSocketService {
 
   Future<void> initServer() async {
     try {
+      logger.info('Starting WebSocket server...');
       if (isServerRunning()) {
         logger.info('WebSocket server already running');
         return;
