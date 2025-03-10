@@ -96,6 +96,20 @@ class WifiService {
     }
   }
 
+  static Future<bool> checkInternetConnection() async {
+    ProcessResult internetResult = await Process.run(
+      'wget',
+      ['-q', '--spider', 'https://www.google.com'],
+    );
+    if (internetResult.exitCode == 0) {
+      logger.info('Internet connection is available');
+      return true;
+    } else {
+      logger.info('No internet access');
+      return false;
+    }
+  }
+
   static Future<bool> isConnectedToWifi() async {
     try {
       ProcessResult result = await Process.run(
@@ -105,6 +119,7 @@ class WifiService {
 
       if (result.exitCode == 0) {
         List<String> connections = result.stdout.toString().trim().split('\n');
+        logger.info('[Check internet] Connections: $connections');
         for (String connection in connections) {
           // Specifically look for the wlan0 interface
           if (connection.contains('wlan0:connected')) {

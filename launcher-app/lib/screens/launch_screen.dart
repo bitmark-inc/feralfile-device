@@ -43,12 +43,11 @@ class _LaunchScreenState extends State<LaunchScreen>
 
       // Check WiFi connection
       logger.info('Checking WiFi connection...');
-      bool isConnected = await WifiService.isConnectedToWifi();
-
+      bool hasInternetAccess = await WifiService.checkInternetConnection();
       if (!mounted) return;
 
-      // Start log server & WebSocket server if connected to WiFi
-      if (isConnected) {
+      // Start log server & WebSocket server if has internet access
+      if (hasInternetAccess) {
         logger.info('Starting log server...');
         await startLogServer();
         logger.info('Starting WebSocket server...');
