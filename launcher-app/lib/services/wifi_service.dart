@@ -96,18 +96,29 @@ class WifiService {
     }
   }
 
+  // Check internet connection by pinging multiple DNS servers
   static Future<bool> checkInternetConnection() async {
-    ProcessResult internetResult = await Process.run(
-      'wget',
-      ['-q', '--spider', 'https://www.google.com'],
-    );
-    if (internetResult.exitCode == 0) {
-      logger.info('Internet connection is available');
-      return true;
-    } else {
-      logger.info('No internet access');
-      return false;
+    final List<String> dnsServers = ['8.8.8.8', '1.1.1.1', '9.9.9.9'];
+
+    for (final server in dnsServers) {
+      try {
+        ProcessResult pingResult = await Process.run(
+          'ping',
+          ['-c', '1', '-W', '1', server],
+        );
+
+        if (pingResult.exitCode == 0) {
+          logger.info(
+              'Internet connection is available (ping to $server successful)');
+          return true;
+        }
+      } catch (e) {
+        logger.info('Ping to $server failed: $e');
+      }
     }
+
+    logger.info('No internet access (all ping attempts failed)');
+    return false;
   }
 
   static Future<bool> isConnectedToWifi() async {
