@@ -42,17 +42,21 @@ class _LaunchScreenState extends State<LaunchScreen>
       final bleConnectionCubit = context.read<BLEConnectionCubit>();
       await bleConnectionCubit.initialize();
 
-      // Check WiFi connection
-      logger.info('Checking WiFi connection...');
-      bool isConnected = await WifiService.isConnectedToWifi();
+      // Initialize WebSocket server
+      await WebSocketService().initServer();
 
-      if (!isConnected) {
-        logger.info('Not connected to WiFi. Checking stored credentials...');
+      // Check Internet connection
+      logger.info('Checking Internet connection...');
+      bool hasInternetAccess = await WifiService.checkInternetConnection();
+
+      if (!hasInternetAccess) {
+        logger.info('No internet access. Checking stored credentials...');
         final config = await ConfigService.loadConfig();
 
         if (config?.wifiCredentials != null) {
           logger.info('Found stored credentials. Attempting to connect...');
-          isConnected = await WifiService.connect(config!.wifiCredentials!);
+          await WifiService.connect(config!.wifiCredentials!);
+          hasInternetAccess = await WifiService.checkInternetConnection();
         } else {
           logger.info('No stored WiFi credentials found.');
         }
@@ -60,12 +64,10 @@ class _LaunchScreenState extends State<LaunchScreen>
 
       if (!mounted) return;
 
-      // Start log server & WebSocket server if connected to WiFi
-      if (isConnected) {
+      // Start log server & WebSocket server if has internet access
+      if (hasInternetAccess) {
         logger.info('Starting log server...');
         await startLogServer();
-        logger.info('Starting WebSocket server...');
-        await WebSocketService().initServer();
 
         logger.info('Starting hardware monitoring...');
         HardwareMonitorService().startMonitoring();
