@@ -953,3 +953,9 @@ const char* bluetooth_get_mac_address() {
     log_info("[%s] Bluetooth MAC address: %s", LOG_TAG, mac_address);
     return mac_address;
 }
+
+void bluetooth_free_data(unsigned char* data) {
+    if (data != NULL) {
+        free(data);
+    }
+}
