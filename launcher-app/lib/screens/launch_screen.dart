@@ -45,18 +45,18 @@ class _LaunchScreenState extends State<LaunchScreen>
       // Initialize WebSocket server
       await WebSocketService().initServer();
 
-      // Check WiFi connection
-      logger.info('Checking WiFi connection...');
+      // Check Internet connection
+      logger.info('Checking Internet connection...');
       bool hasInternetAccess = await WifiService.checkInternetConnection();
 
       if (!hasInternetAccess) {
-        logger.info('Not connected to WiFi. Checking stored credentials...');
+        logger.info('No internet access. Checking stored credentials...');
         final config = await ConfigService.loadConfig();
 
         if (config?.wifiCredentials != null) {
           logger.info('Found stored credentials. Attempting to connect...');
-          hasInternetAccess =
-              await WifiService.connect(config!.wifiCredentials!);
+          await WifiService.connect(config!.wifiCredentials!);
+          hasInternetAccess = await WifiService.checkInternetConnection();
         } else {
           logger.info('No stored WiFi credentials found.');
         }
