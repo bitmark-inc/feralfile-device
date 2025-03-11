@@ -93,6 +93,7 @@ class BluetoothService {
     _setupCallback.close();
     _cmdCallback.close();
     _onCredentialsReceived = null;
+    _commandPort.close();
   }
 
   Stream<CommandData> get commandStream => _commandService.commandStream;
@@ -110,8 +111,9 @@ class BluetoothService {
 
       // Create an immediate copy of the data
       dataCopy = List<int>.unmodifiable(data.asTypedList(length));
-      // Release the FFI data
-      calloc.free(data);
+
+      // Release the FFI data using C's free function
+      _instance._bindings.bluetooth_free_data(data);
 
       // Check if we have enough data to parse
       if (dataCopy.isEmpty) {
@@ -204,8 +206,9 @@ class BluetoothService {
     try {
       // Create an immediate immutable copy of the data
       rawBytes = List<int>.unmodifiable(data.asTypedList(length));
-      // Release the FFI data
-      calloc.free(data);
+
+      // Release the FFI data using C's free function
+      _instance._bindings.bluetooth_free_data(data);
 
       // Print hex-encoded rawBytes
       final hexString =
