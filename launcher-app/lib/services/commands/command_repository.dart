@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:feralfile/services/commands/device_info_handler.dart';
+import 'package:feralfile/services/commands/metrics_streaming_handlers.dart';
 import 'package:feralfile/services/commands/send_log_handler.dart';
 import 'package:feralfile/services/commands/update_orientation_handler.dart';
 import 'package:feralfile/services/commands/version_handler.dart';
@@ -43,6 +44,8 @@ class CommandRepository {
     _handlers['getBluetoothDeviceStatus'] = DeviceStatusHandler();
     _handlers['setTimezone'] = SetTimezoneHandler();
     _handlers['updateToLatestVersion'] = VersionUpdateHandler();
+    _handlers['enableMetricsStreaming'] = EnableMetricsStreamingHandler();
+    _handlers['disableMetricsStreaming'] = DisableMetricsStreamingHandler();
   }
 
   Future<void> executeCommand(String command, String data,

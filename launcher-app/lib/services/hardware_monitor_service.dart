@@ -1,14 +1,21 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:feralfile/generated/protos/system_metrics.pb.dart';
+import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/metric_service.dart';
+import 'package:fixnum/src/int64.dart';
 
 class HardwareMonitorService {
   static final HardwareMonitorService _instance =
       HardwareMonitorService._internal();
   Timer? _monitorTimer;
+  Timer? _streamingTimer;
   static const _monitorInterval = Duration(minutes: 1);
+  static const _streamingInterval = Duration(seconds: 5);
   bool _hasReportedSpecs = false;
+  bool _isStreamingEnabled = false;
+  final BluetoothService _bluetoothService = BluetoothService();
 
   factory HardwareMonitorService() => _instance;
 
@@ -21,6 +28,68 @@ class HardwareMonitorService {
         Timer.periodic(_monitorInterval, (_) => _checkHardwareUsage());
     logger.info(
         'Hardware monitoring started with ${_monitorInterval.inMinutes} minute interval');
+  }
+
+  void startMetricsStreaming() {
+    if (_isStreamingEnabled) return;
+
+    _isStreamingEnabled = true;
+    _streamingTimer?.cancel();
+    _streamingTimer =
+        Timer.periodic(_streamingInterval, (_) => _streamHardwareMetrics());
+
+    logger.info(
+        'Hardware metrics streaming started with ${_streamingInterval.inSeconds} second interval');
+  }
+
+  void stopMetricsStreaming() {
+    _streamingTimer?.cancel();
+    _streamingTimer = null;
+    _isStreamingEnabled = false;
+    logger.info('Hardware metrics streaming stopped');
+  }
+
+  Future<void> _streamHardwareMetrics() async {
+    try {
+      final cpuUsage = await _getCPUUsage();
+      final ramUsage = await _getRAMUsage();
+      final gpuUsage = await _getGPUUsage();
+      final cpuTemp = await _getCPUTemperature();
+      final gpuTemp = await _getGPUTemperature();
+      final screenInfo = await _getScreenInfo();
+      final uptime = await _getSystemUptime();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+      // Create and populate the protobuf message
+      final metrics = SystemMetrics()
+        ..cpuUsage = cpuUsage
+        ..memoryUsage = ramUsage
+        ..gpuUsage = gpuUsage
+        ..cpuTemperature = cpuTemp
+        ..gpuTemperature = gpuTemp
+        ..screenWidth = screenInfo.width.toInt()
+        ..screenHeight = screenInfo.height.toInt()
+        ..uptimeSeconds = uptime as Int64
+        ..timestamp = timestamp as Int64;
+
+      // Serialize to binary format
+      final bytes = metrics.writeToBuffer();
+
+      // Send via Bluetooth engineering characteristic
+      _bluetoothService.sendEngineeringData(bytes);
+
+      logger.info(
+          'Streamed hardware metrics - CPU: ${cpuUsage.toStringAsFixed(2)}%, '
+          'RAM: ${ramUsage.toStringAsFixed(2)}%, '
+          'GPU Clock: ${gpuUsage.toStringAsFixed(2)}MHz, '
+          'CPU Temp: ${cpuTemp.toStringAsFixed(1)}°C, '
+          'GPU Temp: ${gpuTemp.toStringAsFixed(1)}°C, '
+          'Resolution: ${screenInfo.width.toInt()}x${screenInfo.height.toInt()}, '
+          'Uptime: ${Duration(seconds: uptime).toString()}, '
+          'Timestamp: ${DateTime.fromMillisecondsSinceEpoch(timestamp).toIso8601String()}');
+    } catch (e) {
+      logger.severe('Error streaming hardware metrics: $e');
+    }
   }
 
   Future<void> _checkHardwareUsage() async {
@@ -266,9 +335,22 @@ class HardwareMonitorService {
     }
   }
 
+  Future<int> _getSystemUptime() async {
+    try {
+      final uptimeFile = File('/proc/uptime');
+      final uptimeContent = await uptimeFile.readAsString();
+      final uptime = double.parse(uptimeContent.split(' ')[0]);
+      return uptime.round();
+    } catch (e) {
+      logger.warning('Error getting system uptime: $e');
+      return 0;
+    }
+  }
+
   void dispose() {
     _monitorTimer?.cancel();
     _monitorTimer = null;
+    stopMetricsStreaming();
     logger.info('Hardware monitoring stopped');
   }
 }

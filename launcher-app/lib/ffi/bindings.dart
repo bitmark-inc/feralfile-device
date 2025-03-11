@@ -47,6 +47,12 @@ typedef GetMacAddressDart = Pointer<Utf8> Function();
 typedef BluetoothFreeDataNative = Void Function(Pointer<Uint8> data);
 typedef BluetoothFreeDataDart = void Function(Pointer<Uint8> data);
 
+// Add these typedefs
+typedef BluetoothSendEngineeringDataNative = Void Function(
+    Pointer<Uint8> data, Int32 length);
+typedef BluetoothSendEngineeringDataDart = void Function(
+    Pointer<Uint8> data, int length);
+
 class BluetoothBindings {
   late DynamicLibrary _lib;
 
@@ -57,6 +63,7 @@ class BluetoothBindings {
   late BluetoothNotifyDart bluetooth_notify;
   late GetMacAddressDart bluetooth_get_mac_address;
   late BluetoothFreeDataDart bluetooth_free_data;
+  late BluetoothSendEngineeringDataDart bluetooth_send_engineering_data;
 
   BluetoothBindings() {
     // Load the shared library
@@ -99,6 +106,12 @@ class BluetoothBindings {
     // Add this lookup
     bluetooth_free_data = _lib
         .lookup<NativeFunction<BluetoothFreeDataNative>>('bluetooth_free_data')
+        .asFunction();
+
+    // Add this lookup
+    bluetooth_send_engineering_data = _lib
+        .lookup<NativeFunction<BluetoothSendEngineeringDataNative>>(
+            'bluetooth_send_engineering_data')
         .asFunction();
   }
 }
