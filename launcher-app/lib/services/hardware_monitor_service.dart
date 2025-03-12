@@ -69,8 +69,8 @@ class HardwareMonitorService {
         ..gpuTemperature = gpuTemp
         ..screenWidth = screenInfo.width.toInt()
         ..screenHeight = screenInfo.height.toInt()
-        ..uptimeSeconds = uptime as Int64
-        ..timestamp = timestamp as Int64;
+        ..uptimeSeconds = Int64(uptime)
+        ..timestamp = Int64(timestamp);
 
       // Serialize to binary format
       final bytes = metrics.writeToBuffer();
