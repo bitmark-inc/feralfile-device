@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package feralfile;
 
-message SystemMetrics {
+message DeviceRealtimeMetrics {
   double cpu_usage = 1;
   double gpu_usage = 2;
   double memory_usage = 3;

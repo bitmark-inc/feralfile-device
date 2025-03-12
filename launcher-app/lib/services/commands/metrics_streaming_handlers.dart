@@ -13,7 +13,7 @@ class EnableMetricsStreamingHandler implements CommandHandler {
 
     if (replyId != null) {
       bluetoothService.notify(replyId,
-          {'success': true, 'message': 'Hardware metrics streaming enabled'});
+          {'ok': true, 'message': 'Hardware metrics streaming enabled'});
     }
   }
 }
@@ -28,7 +28,7 @@ class DisableMetricsStreamingHandler implements CommandHandler {
 
     if (replyId != null) {
       bluetoothService.notify(replyId,
-          {'success': true, 'message': 'Hardware metrics streaming disabled'});
+          {'ok': true, 'message': 'Hardware metrics streaming disabled'});
     }
   }
 }

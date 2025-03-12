@@ -13,9 +13,9 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
-@$core.Deprecated('Use systemMetricsDescriptor instead')
-const SystemMetrics$json = {
-  '1': 'SystemMetrics',
+@$core.Deprecated('Use deviceRealtimeMetricsDescriptor instead')
+const DeviceRealtimeMetrics$json = {
+  '1': 'DeviceRealtimeMetrics',
   '2': [
     {'1': 'cpu_usage', '3': 1, '4': 1, '5': 1, '10': 'cpuUsage'},
     {'1': 'gpu_usage', '3': 2, '4': 1, '5': 1, '10': 'gpuUsage'},
@@ -29,12 +29,13 @@ const SystemMetrics$json = {
   ],
 };
 
-/// Descriptor for `SystemMetrics`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List systemMetricsDescriptor = $convert.base64Decode(
-    'Cg1TeXN0ZW1NZXRyaWNzEhsKCWNwdV91c2FnZRgBIAEoAVIIY3B1VXNhZ2USGwoJZ3B1X3VzYW'
-    'dlGAIgASgBUghncHVVc2FnZRIhCgxtZW1vcnlfdXNhZ2UYAyABKAFSC21lbW9yeVVzYWdlEicK'
-    'D2NwdV90ZW1wZXJhdHVyZRgEIAEoAVIOY3B1VGVtcGVyYXR1cmUSJwoPZ3B1X3RlbXBlcmF0dX'
-    'JlGAUgASgBUg5ncHVUZW1wZXJhdHVyZRIhCgxzY3JlZW5fd2lkdGgYBiABKAVSC3NjcmVlbldp'
-    'ZHRoEiMKDXNjcmVlbl9oZWlnaHQYByABKAVSDHNjcmVlbkhlaWdodBIlCg51cHRpbWVfc2Vjb2'
-    '5kcxgIIAEoA1INdXB0aW1lU2Vjb25kcxIcCgl0aW1lc3RhbXAYCSABKANSCXRpbWVzdGFtcA==');
+/// Descriptor for `DeviceRealtimeMetrics`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List deviceRealtimeMetricsDescriptor = $convert.base64Decode(
+    'ChVEZXZpY2VSZWFsdGltZU1ldHJpY3MSGwoJY3B1X3VzYWdlGAEgASgBUghjcHVVc2FnZRIbCg'
+    'lncHVfdXNhZ2UYAiABKAFSCGdwdVVzYWdlEiEKDG1lbW9yeV91c2FnZRgDIAEoAVILbWVtb3J5'
+    'VXNhZ2USJwoPY3B1X3RlbXBlcmF0dXJlGAQgASgBUg5jcHVUZW1wZXJhdHVyZRInCg9ncHVfdG'
+    'VtcGVyYXR1cmUYBSABKAFSDmdwdVRlbXBlcmF0dXJlEiEKDHNjcmVlbl93aWR0aBgGIAEoBVIL'
+    'c2NyZWVuV2lkdGgSIwoNc2NyZWVuX2hlaWdodBgHIAEoBVIMc2NyZWVuSGVpZ2h0EiUKDnVwdG'
+    'ltZV9zZWNvbmRzGAggASgDUg11cHRpbWVTZWNvbmRzEhwKCXRpbWVzdGFtcBgJIAEoA1IJdGlt'
+    'ZXN0YW1w');
 

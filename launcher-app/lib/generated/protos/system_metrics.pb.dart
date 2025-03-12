@@ -14,8 +14,8 @@ import 'dart:core' as $core;
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 
-class SystemMetrics extends $pb.GeneratedMessage {
-  factory SystemMetrics({
+class DeviceRealtimeMetrics extends $pb.GeneratedMessage {
+  factory DeviceRealtimeMetrics({
     $core.double? cpuUsage,
     $core.double? gpuUsage,
     $core.double? memoryUsage,
@@ -56,11 +56,11 @@ class SystemMetrics extends $pb.GeneratedMessage {
     }
     return $result;
   }
-  SystemMetrics._() : super();
-  factory SystemMetrics.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
-  factory SystemMetrics.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
+  DeviceRealtimeMetrics._() : super();
+  factory DeviceRealtimeMetrics.fromBuffer($core.List<$core.int> i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(i, r);
+  factory DeviceRealtimeMetrics.fromJson($core.String i, [$pb.ExtensionRegistry r = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(i, r);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'SystemMetrics', package: const $pb.PackageName(_omitMessageNames ? '' : 'feralfile'), createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'DeviceRealtimeMetrics', package: const $pb.PackageName(_omitMessageNames ? '' : 'feralfile'), createEmptyInstance: create)
     ..a<$core.double>(1, _omitFieldNames ? '' : 'cpuUsage', $pb.PbFieldType.OD)
     ..a<$core.double>(2, _omitFieldNames ? '' : 'gpuUsage', $pb.PbFieldType.OD)
     ..a<$core.double>(3, _omitFieldNames ? '' : 'memoryUsage', $pb.PbFieldType.OD)
@@ -77,22 +77,22 @@ class SystemMetrics extends $pb.GeneratedMessage {
   'Using this can add significant overhead to your binary. '
   'Use [GeneratedMessageGenericExtensions.deepCopy] instead. '
   'Will be removed in next major version')
-  SystemMetrics clone() => SystemMetrics()..mergeFromMessage(this);
+  DeviceRealtimeMetrics clone() => DeviceRealtimeMetrics()..mergeFromMessage(this);
   @$core.Deprecated(
   'Using this can add significant overhead to your binary. '
   'Use [GeneratedMessageGenericExtensions.rebuild] instead. '
   'Will be removed in next major version')
-  SystemMetrics copyWith(void Function(SystemMetrics) updates) => super.copyWith((message) => updates(message as SystemMetrics)) as SystemMetrics;
+  DeviceRealtimeMetrics copyWith(void Function(DeviceRealtimeMetrics) updates) => super.copyWith((message) => updates(message as DeviceRealtimeMetrics)) as DeviceRealtimeMetrics;
 
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
-  static SystemMetrics create() => SystemMetrics._();
-  SystemMetrics createEmptyInstance() => create();
-  static $pb.PbList<SystemMetrics> createRepeated() => $pb.PbList<SystemMetrics>();
+  static DeviceRealtimeMetrics create() => DeviceRealtimeMetrics._();
+  DeviceRealtimeMetrics createEmptyInstance() => create();
+  static $pb.PbList<DeviceRealtimeMetrics> createRepeated() => $pb.PbList<DeviceRealtimeMetrics>();
   @$core.pragma('dart2js:noInline')
-  static SystemMetrics getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<SystemMetrics>(create);
-  static SystemMetrics? _defaultInstance;
+  static DeviceRealtimeMetrics getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<DeviceRealtimeMetrics>(create);
+  static DeviceRealtimeMetrics? _defaultInstance;
 
   @$pb.TagNumber(1)
   $core.double get cpuUsage => $_getN(0);

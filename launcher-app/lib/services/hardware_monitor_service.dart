@@ -61,7 +61,7 @@ class HardwareMonitorService {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
 
       // Create and populate the protobuf message
-      final metrics = SystemMetrics()
+      final metrics = DeviceRealtimeMetrics()
         ..cpuUsage = cpuUsage
         ..memoryUsage = ramUsage
         ..gpuUsage = gpuUsage
