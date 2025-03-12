@@ -14,6 +14,16 @@ class WifiService {
     return ConfigService.updateWifiCredentials(credentials);
   }
 
+  static Future<String?> getCurrentWifiSSID() async {
+    final ssids = await getAvailableSSIDs();
+    for (final ssid in ssids.entries) {
+      if (ssid.value) {
+        return ssid.key;
+      }
+    }
+    return null;
+  }
+
   static Future<Map<String, bool>> getAvailableSSIDs() async {
     try {
       ProcessResult scanResult = await Process.run(

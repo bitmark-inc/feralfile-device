@@ -15,5 +15,8 @@ class ScanWifiHandler implements CommandHandler {
             bluetoothService.notify(replyId, {'result': result});
           }
         });
+    if (replyId != null) {
+      bluetoothService.notify(replyId, {'success': true});
+    }
   }
 }
