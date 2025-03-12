@@ -142,7 +142,7 @@ class WebSocketService {
     _heartbeatTimer = Timer.periodic(interval, (_) {
       try {
         if (_watchdogSocket != null &&
-            _watchdogSocket!.readyState == WebSocket.open) {
+            _watchdogSocket!.readyState == WebSocket.open && internetConnected) {
           _sendMessage(
             WebSocketRequestMessage(
                 message: RequestMessageData(command: Command.ping)),
