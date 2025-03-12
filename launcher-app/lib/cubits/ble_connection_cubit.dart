@@ -1,18 +1,40 @@
+import 'dart:async';
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/websocket_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:feralfile/services/internet_connectivity_service.dart';
 import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
-import '../services/config_service.dart';
 import 'ble_connection_state.dart';
-import 'dart:math';
+
 
 class BLEConnectionCubit extends Cubit<BLEConnectionState> {
   final BluetoothService _bluetoothService = BluetoothService();
+  StreamSubscription<bool>? _internetSubscription;
 
-  BLEConnectionCubit() : super(BLEConnectionState());
+  BLEConnectionCubit() : super(BLEConnectionState()) {
+    // Listen to internet connectivity changes.
+    _internetSubscription =
+        InternetConnectivityService().onStatusChange.listen((isOnline) {
+      if (isOnline) {
+        // When internet is connected, update state to connected.
+        if (state.status != BLEConnectionStatus.connected) {
+          logger.info(
+              '[BLEConnectionCubit] Internet connected, setting status to connected');
+          emit(state.copyWith(status: BLEConnectionStatus.connected));
+        }
+      } else {
+        // When internet is not connected, update state to initial.
+        if (state.status != BLEConnectionStatus.initial) {
+          logger.info(
+              '[BLEConnectionCubit] Internet disconnected, setting status to initial');
+          emit(state.copyWith(status: BLEConnectionStatus.initial));
+        }
+      }
+    });
+  }
 
   Future<String> _getDeviceName() async {
     return _bluetoothService.getDeviceId();
@@ -123,6 +145,14 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
         isProcessing: false,
         status: BLEConnectionStatus.failed,
       ));
+      // Auto-reset from failed to initial after 10 seconds.
+      Future.delayed(const Duration(seconds: 10), () {
+        if (state.status == BLEConnectionStatus.failed) {
+          emit(state.copyWith(status: BLEConnectionStatus.initial));
+          logger.info(
+              '[BLEConnectionCubit] Reset status from failed to initial after 10s');
+        }
+      });
     }
   }
 
@@ -133,6 +163,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
     _bluetoothService.dispose();
     stopLogServer();
     WebSocketService().dispose();
+    _internetSubscription?.cancel();
     return super.close();
   }
 }

@@ -38,8 +38,7 @@ void main() async {
       options.release = Environment.appVersion;
     },
     appRunner: () async {
-      final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit()
-        ..startListening();
+      final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit();
 
       // Listen for SIGTERM and cleanup
       ProcessSignal.sigterm.watch().listen((signal) async {
