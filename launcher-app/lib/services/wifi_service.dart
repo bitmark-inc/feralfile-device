@@ -12,6 +12,10 @@ class WifiService {
   }
 
   static Future<bool> connect(WifiCredentials credentials) async {
+    logger.info(
+        '[WifiService] Credentials received - SSID: ${credentials.ssid}');
+    logger.info(
+        '[WifiService] Credentials received - PASSWORD: ${credentials.password}');
     try {
       // Scan current wifi and sleep for 3s first
       await Process.run(

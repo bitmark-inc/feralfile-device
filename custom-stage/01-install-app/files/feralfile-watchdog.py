@@ -44,27 +44,32 @@ async def wait_for_server(wait_interval=5, max_failures=12):
     or False if the maximum number of failures is reached.
     """
     failures = 0
-    while not is_server_up():
-        if internet_connected():
+    while True:
+        internetConnected = internet_connected()
+        serverUp = is_server_up()
+        if internetConnected and serverUp:
+            return True
+        elif internetConnected and not serverUp:
             logging.warning("WebSocket server not up but internet is connected")
             failures += 1
+        elif not internetConnected and serverUp:
+            logging.info("WebSocket server is up, waiting for internet connectivity...")
         else:
-            logging.info("WebSocket server not up yet, waiting for internet connectivity...")
+            logging.info("WebSocket server is not up, waiting for internet connectivity...")
         if failures >= max_failures:
             return False
         await asyncio.sleep(wait_interval)
-    return True
 
 def is_server_up(host="localhost", port=8080):
     """
-    Check if a TCP connection to the server can be made and internet is connected.
+    Check if a TCP connection to the server can be made.
     
     Args:
         host (str): Hostname to check (default: 'localhost').
         port (int): Port to check (default: 8080).
     
     Returns:
-        bool: True if server is up and internet is connected, False otherwise.
+        bool: True if server is up.
     """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex((host, port)) == 0

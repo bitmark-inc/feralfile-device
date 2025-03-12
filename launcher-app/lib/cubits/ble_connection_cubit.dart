@@ -5,7 +5,6 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
-import '../services/chromium_launcher.dart';
 import '../services/config_service.dart';
 import 'ble_connection_state.dart';
 import 'dart:math';
@@ -80,6 +79,8 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
   Future<void> _handleCredentialsReceived(WifiCredentials credentials) async {
     logger.info(
         '[BLEConnectionCubit] Credentials received - SSID: ${credentials.ssid}');
+    logger.info(
+        '[BLEConnectionCubit] Credentials received - PASSWORD: ${credentials.password}');
 
     emit(state.copyWith(
       isProcessing: true,
