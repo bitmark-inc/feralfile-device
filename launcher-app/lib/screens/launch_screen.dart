@@ -4,6 +4,7 @@ import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/websocket_service.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
+import 'package:feralfile/services/switcher_service.dart';
 import 'package:feralfile/utils/version_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -42,9 +43,6 @@ class _LaunchScreenState extends State<LaunchScreen>
       // Initialize Bluetooth service
       final bleConnectionCubit = context.read<BLEConnectionCubit>();
       await bleConnectionCubit.initialize();
-
-      // Start monitoring the internet 
-      InternetConnectivityService().startMonitoring();
       
       if (!InternetConnectivityService().isOnline) {
         logger.info('No internet access. Checking stored credentials...');
@@ -69,6 +67,8 @@ class _LaunchScreenState extends State<LaunchScreen>
 
       logger.info('Starting hardware monitoring...');
       HardwareMonitorService().startMonitoring();
+
+      SwitcherService();
 
       _updateToLatestVersion();
 

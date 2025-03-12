@@ -2,6 +2,7 @@
 import 'dart:io';
 
 import 'package:feralfile/services/hardware_monitor_service.dart';
+import 'package:feralfile/services/internet_connectivity_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -38,6 +39,9 @@ void main() async {
       options.release = Environment.appVersion;
     },
     appRunner: () async {
+      // Start monitoring the internet 
+      InternetConnectivityService().startMonitoring();
+
       final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit();
 
       // Listen for SIGTERM and cleanup

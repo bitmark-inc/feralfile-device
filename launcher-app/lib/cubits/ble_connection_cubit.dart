@@ -101,8 +101,6 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
   Future<void> _handleCredentialsReceived(WifiCredentials credentials) async {
     logger.info(
         '[BLEConnectionCubit] Credentials received - SSID: ${credentials.ssid}');
-    logger.info(
-        '[BLEConnectionCubit] Credentials received - PASSWORD: ${credentials.password}');
 
     emit(state.copyWith(
       isProcessing: true,
