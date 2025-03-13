@@ -371,4 +371,26 @@ class BluetoothService {
     _cachedDeviceId = 'FF-X1-$hashStr';
     return _cachedDeviceId!;
   }
+
+  void sendEngineeringData(List<int> data) {
+    try {
+      final Pointer<Uint8> pointer = calloc<Uint8>(data.length);
+      final bytes = pointer.asTypedList(data.length);
+
+      logger.info('Sending ${data.length} bytes of engineering data');
+
+      for (var i = 0; i < data.length; i++) {
+        bytes[i] = data[i];
+      }
+
+      final hexString =
+          bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      logger.info('Engineering data (hex): $hexString');
+
+      _bindings.bluetooth_send_engineering_data(pointer, data.length);
+      calloc.free(pointer);
+    } catch (e) {
+      logger.severe('Error sending engineering data: $e');
+    }
+  }
 }

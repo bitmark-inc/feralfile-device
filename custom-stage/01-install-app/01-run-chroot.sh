@@ -29,6 +29,12 @@ chmod 644 /etc/apt/trusted.gpg.d/feralfile.asc
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
 chmod 755 /home/feralfile/feralfile/feralfile-watchdog.py
 chmod 755 /home/feralfile/feralfile/feralfile-install-deps.sh
+chmod 755 /home/feralfile/feralfile/mesa-patch.sh
+
+# Patch mesa driver version
+cd /home/feralfile/feralfile
+./mesa-patch.sh
+cd /
 
 # Create autostart
 mkdir -p /home/feralfile/.config/openbox
