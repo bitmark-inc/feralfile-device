@@ -18,6 +18,7 @@
 #define FERALFILE_SERVICE_UUID   "f7826da6-4fa2-4e98-8024-bc5b71e0893e"
 #define FERALFILE_SETUP_CHAR_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define FERALFILE_CMD_CHAR_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+#define FERALFILE_ENG_CHAR_UUID "6e400004-b5a3-f393-e0a9-e50e24dcca9e"
 #define MAX_DEVICE_NAME_LENGTH 32
 #define MAX_ADV_PATH_LENGTH 64
 
@@ -32,6 +33,7 @@ static guint service_reg_id = 0;
 static guint setup_char_reg_id = 0;
 static guint cmd_char_reg_id = 0;
 static guint ad_reg_id = 0;
+static guint eng_char_reg_id = 0;
 
 static GDBusProxy *gatt_manager = NULL;
 static GDBusProxy *advertising_manager = NULL;
@@ -193,6 +195,15 @@ static const gchar service_xml[] =
     "        <method name='StopNotify'/>"
     "      </interface>"
     "    </node>"
+    "    <node name='eng_char'>"
+    "      <interface name='org.bluez.GattCharacteristic1'>"
+    "        <property name='UUID' type='s' access='read'/>"
+    "        <property name='Service' type='o' access='read'/>"
+    "        <property name='Flags' type='as' access='read'/>"
+    "        <method name='StartNotify'/>"
+    "        <method name='StopNotify'/>"
+    "      </interface>"
+    "    </node>"
     "  </node>"
     "</node>";
 
@@ -242,12 +253,17 @@ static GVariant *char_get_property(GDBusConnection *conn,
                 return g_variant_new_string(FERALFILE_SETUP_CHAR_UUID);
             } else if (strstr(object_path, "cmd_char") != NULL) {
                 return g_variant_new_string(FERALFILE_CMD_CHAR_UUID);
+            } else if (strstr(object_path, "eng_char") != NULL) {
+                return g_variant_new_string(FERALFILE_ENG_CHAR_UUID);
             }
         } else if (g_strcmp0(property_name, "Service") == 0) {
             return g_variant_new_object_path("/com/feralfile/display/service0");
         } else if (g_strcmp0(property_name, "Flags") == 0) {
             if (strstr(object_path, "cmd_char") != NULL) {
                 const gchar* flags[] = {"write", "write-without-response", "notify", NULL};
+                return g_variant_new_strv(flags, -1);
+            } else if (strstr(object_path, "eng_char") != NULL) {
+                const gchar* flags[] = {"notify", NULL};
                 return g_variant_new_strv(flags, -1);
             } else {  // setup_char
                 const gchar* flags[] = {"write", NULL};
@@ -389,6 +405,13 @@ static const GDBusInterfaceVTable cmd_char_vtable = {
     .set_property = NULL
 };
 
+// Vtable for engineering characteristic
+static const GDBusInterfaceVTable eng_char_vtable = {
+    .method_call = NULL,  // No write methods needed
+    .get_property = char_get_property,
+    .set_property = NULL
+};
+
 // ----------------------------------------------------------------------------
 // Advertisement interface property getter
 // ----------------------------------------------------------------------------
@@ -456,6 +479,16 @@ static void handle_get_objects(GDBusConnection *conn,
     g_variant_builder_add(cmd_char_builder, "{sa{sv}}", "org.bluez.GattCharacteristic1", cmd_char_props);
     g_variant_builder_add(builder, "{oa{sa{sv}}}", "/com/feralfile/display/service0/cmd_char", cmd_char_builder);
     
+    // Add engineering characteristic object
+    GVariantBuilder *eng_char_builder = g_variant_builder_new(G_VARIANT_TYPE("a{sa{sv}}"));
+    GVariantBuilder *eng_char_props = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(eng_char_props, "{sv}", "UUID", g_variant_new_string(FERALFILE_ENG_CHAR_UUID));
+    g_variant_builder_add(eng_char_props, "{sv}", "Service", g_variant_new_object_path("/com/feralfile/display/service0"));
+    const gchar* eng_flags[] = {"notify", NULL};
+    g_variant_builder_add(eng_char_props, "{sv}", "Flags", g_variant_new_strv(eng_flags, -1));
+    g_variant_builder_add(eng_char_builder, "{sa{sv}}", "org.bluez.GattCharacteristic1", eng_char_props);
+    g_variant_builder_add(builder, "{oa{sa{sv}}}", "/com/feralfile/display/service0/eng_char", eng_char_builder);
+    
     // Return everything
     g_dbus_method_invocation_return_value(invocation, g_variant_new("(a{oa{sa{sv}}})", builder));
     
@@ -466,6 +499,8 @@ static void handle_get_objects(GDBusConnection *conn,
     g_variant_builder_unref(service_props);
     g_variant_builder_unref(setup_char_props);
     g_variant_builder_unref(cmd_char_props);
+    g_variant_builder_unref(eng_char_builder);
+    g_variant_builder_unref(eng_char_props);
 }
 
 static const GDBusInterfaceVTable objects_vtable = {
@@ -513,7 +548,8 @@ static void* bluetooth_thread_func(void* arg) {
     // Find characteristic nodes
     GDBusNodeInfo *setup_char_node = find_node_by_name(service_node, "setup_char");
     GDBusNodeInfo *cmd_char_node   = find_node_by_name(service_node, "cmd_char");
-    if (!setup_char_node || !cmd_char_node) {
+    GDBusNodeInfo *eng_char_node    = find_node_by_name(service_node, "eng_char");
+    if (!setup_char_node || !cmd_char_node || !eng_char_node) {
         log_error("[%s] Characteristic nodes not found", LOG_TAG);
         pthread_exit(NULL);
     }
@@ -590,7 +626,25 @@ static void* bluetooth_thread_func(void* arg) {
         pthread_exit(NULL);
     }
 
-    // Step 7: Get the GattManager1 interface and store it
+    // Step 7: Register the engineering characteristic
+    eng_char_reg_id = g_dbus_connection_register_object(
+        connection,
+        "/com/feralfile/display/service0/eng_char",
+        eng_char_node->interfaces[0],
+        &eng_char_vtable,
+        NULL,
+        NULL,
+        &error
+    );
+    if (error || !eng_char_reg_id) {
+        log_error("[%s] Failed to register engineering characteristic object: %s",
+                  LOG_TAG,
+                  error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        pthread_exit(NULL);
+    }
+
+    // Step 8: Get the GattManager1 interface and store it
     gatt_manager = g_dbus_proxy_new_sync(
         connection,
         G_DBUS_PROXY_FLAGS_NONE,
@@ -609,7 +663,7 @@ static void* bluetooth_thread_func(void* arg) {
         pthread_exit(NULL);
     }
 
-    // Step 8: Register the application
+    // Step 9: Register the application
     g_dbus_proxy_call_sync(
         gatt_manager,
         "RegisterApplication",
@@ -627,7 +681,7 @@ static void* bluetooth_thread_func(void* arg) {
         pthread_exit(NULL);
     }
 
-    // Step 9: Parse advertisement XML
+    // Step 10: Parse advertisement XML
     char *adv_introspection_xml = g_strdup_printf(
         "<node>"
         "  <interface name='org.bluez.LEAdvertisement1'>"
@@ -650,7 +704,7 @@ static void* bluetooth_thread_func(void* arg) {
         pthread_exit(NULL);
     }
 
-    // Step 10: Register advertisement object
+    // Step 11: Register advertisement object
     ad_reg_id = g_dbus_connection_register_object(
         connection,
         advertisement_path,
@@ -669,7 +723,7 @@ static void* bluetooth_thread_func(void* arg) {
         pthread_exit(NULL);
     }
 
-    // Step 11: Get LEAdvertisingManager1 and store it
+    // Step 12: Get LEAdvertisingManager1 and store it
     advertising_manager = g_dbus_proxy_new_sync(
         connection,
         G_DBUS_PROXY_FLAGS_NONE,
@@ -689,7 +743,7 @@ static void* bluetooth_thread_func(void* arg) {
         pthread_exit(NULL);
     }
 
-    // Step 12: Register the advertisement
+    // Step 13: Register the advertisement
     g_dbus_proxy_call_sync(
         advertising_manager,
         "RegisterAdvertisement",
@@ -842,6 +896,10 @@ void bluetooth_stop() {
         g_dbus_connection_unregister_object(connection, ad_reg_id);
         ad_reg_id = 0;
     }
+    if (eng_char_reg_id) {
+        g_dbus_connection_unregister_object(connection, eng_char_reg_id);
+        eng_char_reg_id = 0;
+    }
     if (cmd_char_reg_id) {
         g_dbus_connection_unregister_object(connection, cmd_char_reg_id);
         cmd_char_reg_id = 0;
@@ -958,4 +1016,40 @@ void bluetooth_free_data(unsigned char* data) {
     if (data != NULL) {
         free(data);
     }
+}
+
+void bluetooth_send_engineering_data(const unsigned char* data, int length) {
+    if (!connection) {
+        log_error("[%s] Cannot send engineering data: not connected", LOG_TAG);
+        return;
+    }
+
+    // Log the hex string for debugging
+    char hex_string[length * 3 + 1];
+    for (size_t i = 0; i < length; i++) {
+        sprintf(hex_string + (i * 3), "%02x ", data[i]);
+    }
+    hex_string[length * 3 - 1] = '\0';
+    log_info("[%s] Sending engineering data: %s", LOG_TAG, hex_string);
+
+    // Create GVariant for the notification value
+    GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
+                                              data, length, sizeof(guchar));
+
+    // Emit PropertiesChanged signal
+    GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
+    g_variant_builder_add(builder, "{sv}", "Value", value);
+
+    g_dbus_connection_emit_signal(connection,
+        NULL,
+        "/com/feralfile/display/service0/eng_char",
+        "org.freedesktop.DBus.Properties",
+        "PropertiesChanged",
+        g_variant_new("(sa{sv}as)",
+                     "org.bluez.GattCharacteristic1",
+                     builder,
+                     NULL),
+        NULL);
+
+    g_variant_builder_unref(builder);
 }
