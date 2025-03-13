@@ -6,6 +6,7 @@ import 'package:feralfile/models/command.dart';
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/logger.dart';
+import 'package:feralfile/services/internet_connectivity_service.dart';
 
 class WebSocketService {
   static WebSocketService? _instance;
@@ -17,6 +18,7 @@ class WebSocketService {
   final Set<Function(dynamic)> _messageListeners = {};
   final Map<String, Function(WebSocketResponseMessage)> _messageCallbacks = {};
   Timer? _heartbeatTimer;
+  bool internetConnected = InternetConnectivityService().isOnline;
 
   // Singleton pattern
   factory WebSocketService() {
@@ -24,7 +26,18 @@ class WebSocketService {
     return _instance!;
   }
 
-  WebSocketService._internal();
+  WebSocketService._internal() {
+    // Subscribe to connectivity changes.
+    InternetConnectivityService().onStatusChange.listen((status) {
+      if (status) {
+        logger.info('Internet is online. Processing messages.');
+        internetConnected = true;
+      } else {
+        logger.info('Internet is offline. Pausing message processing.');
+        internetConnected = false;
+      }
+    });
+  }
 
   bool isServerRunning() {
     return _server != null;
@@ -129,7 +142,7 @@ class WebSocketService {
     _heartbeatTimer = Timer.periodic(interval, (_) {
       try {
         if (_watchdogSocket != null &&
-            _watchdogSocket!.readyState == WebSocket.open) {
+            _watchdogSocket!.readyState == WebSocket.open && internetConnected) {
           _sendMessage(
             WebSocketRequestMessage(
                 message: RequestMessageData(command: Command.ping)),
@@ -154,6 +167,10 @@ class WebSocketService {
   /// Sends a message to the website with an optional callback
   void _sendMessage(WebSocketRequestMessage message, bool logging,
       {Function(WebSocketResponseMessage)? callback}) {
+    if (!internetConnected) {
+      logger.info('Internet offline, stop processing messages.');
+      return;
+    }
     if (_websiteSocket?.readyState == WebSocket.open) {
       if (callback != null && message.messageID != null) {
         _messageCallbacks[message.messageID!] = callback;

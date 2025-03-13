@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:feralfile/services/logger.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:feralfile/services/internet_connectivity_service.dart';
 
 import '../models/wifi_credentials.dart';
 import '../services/config_service.dart';
@@ -112,24 +113,17 @@ class WifiService {
         return false;
       }
 
-      logger.info('SSID found, attempting to connect...');
+      logger.info('SSID found.');
 
-      // First, attempt to connect using existing credentials if existed
-      ProcessResult initialConnect = await Process.run(
-        'nmcli',
-        ['dev', 'wifi', 'connect', credentials.ssid],
-        runInShell: true,
-      );
-      if (initialConnect.exitCode == 0) {
-        logger.info(
-            'Connected to Wi-Fi using existing credentials: ${credentials.ssid}');
+      if (InternetConnectivityService().isOnline) {
+        logger.info('Internet already connected.');
         return true;
       }
 
-      logger.info(
-          'Failed to connect with existing credentials, trying new ones...');
+      logger.info('Attempting to connect...');
+      logger.info('Delete existing credential...');
 
-      // Delete existing connection profile if the first attempt fails
+      // Delete existing connection profile
       await Process.run('nmcli', ['connection', 'delete', credentials.ssid]);
 
       // Attempt to connect with new credentials
@@ -147,12 +141,12 @@ class WifiService {
       );
       if (newConnect.exitCode == 0) {
         logger.info(
-            'Connected to Wi-Fi using new credentials: ${credentials.ssid}');
+            'Connected to Wi-Fi using credentials: ${credentials.ssid}');
         await _saveCredentials(credentials);
         return true;
       } else {
         logger.info(
-            'Failed to connect with new credentials: ${newConnect.stderr}');
+            'Failed to connect with credentials: ${newConnect.stderr}');
         return false;
       }
     } catch (e) {

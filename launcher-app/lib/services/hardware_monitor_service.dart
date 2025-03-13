@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/metric_service.dart';
+import 'package:feralfile/services/internet_connectivity_service.dart';
 
 class HardwareMonitorService {
   static final HardwareMonitorService _instance =
@@ -9,16 +10,28 @@ class HardwareMonitorService {
   Timer? _monitorTimer;
   static const _monitorInterval = Duration(minutes: 1);
   bool _hasReportedSpecs = false;
+  bool internetConnected = InternetConnectivityService().isOnline;
 
   factory HardwareMonitorService() => _instance;
 
-  HardwareMonitorService._internal();
+  HardwareMonitorService._internal() {
+    // Subscribe to connectivity changes.
+    InternetConnectivityService().onStatusChange.listen((status) {
+      if (status) {
+        logger.info('Internet is online. Monitoring hardware.');
+        internetConnected = true;
+      } else {
+        logger.info('Internet is offline. Pausing hardware monitoring.');
+        internetConnected = false;
+      }
+    });
+  }
 
   void startMonitoring() {
     _monitorTimer?.cancel();
     _reportHardwareSpecs();
     _monitorTimer =
-        Timer.periodic(_monitorInterval, (_) => _checkHardwareUsage());
+        Timer.periodic(_monitorInterval, (_) {if (internetConnected) {_checkHardwareUsage();}});
     logger.info(
         'Hardware monitoring started with ${_monitorInterval.inMinutes} minute interval');
   }
