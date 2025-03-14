@@ -155,32 +155,6 @@ class WifiService {
     }
   }
 
-  static Future<bool> isConnectedToWifi() async {
-    try {
-      ProcessResult result = await Process.run(
-        'nmcli',
-        ['-t', '-f', 'DEVICE,STATE', 'dev'],
-      );
-
-      if (result.exitCode == 0) {
-        List<String> connections = result.stdout.toString().trim().split('\n');
-        logger.info('[Check internet] Connections: $connections');
-        for (String connection in connections) {
-          // Specifically look for the wlan0 interface
-          if (connection.contains('wlan0:connected')) {
-            logger.info('WiFi interface (wlan0) is connected');
-            return true;
-          }
-        }
-      }
-      logger.info('WiFi interface (wlan0) is not connected');
-      return false;
-    } catch (e) {
-      logger.warning('Error checking WiFi status: $e');
-      return false;
-    }
-  }
-
   static Future<String> getLocalIpAddress() async {
     try {
       final result = await Process.run('hostname', ['-I']);

@@ -25,10 +25,10 @@ class HardwareMonitorService {
   HardwareMonitorService._internal() {
     // Subscribe to connectivity changes.
     InternetConnectivityService().onStatusChange.listen((status) {
-      if (status) {
+      if (status && !internetConnected) {
         logger.info('Internet is online. Monitoring hardware.');
         internetConnected = true;
-      } else {
+      } else if (!status && internetConnected) {
         logger.info('Internet is offline. Pausing hardware monitoring.');
         internetConnected = false;
       }
