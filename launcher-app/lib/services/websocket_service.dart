@@ -29,10 +29,10 @@ class WebSocketService {
   WebSocketService._internal() {
     // Subscribe to connectivity changes.
     InternetConnectivityService().onStatusChange.listen((status) {
-      if (status) {
+      if (status && !internetConnected) {
         logger.info('Internet is online. Processing messages.');
         internetConnected = true;
-      } else {
+      } else if (!status && internetConnected) {
         logger.info('Internet is offline. Pausing message processing.');
         internetConnected = false;
       }

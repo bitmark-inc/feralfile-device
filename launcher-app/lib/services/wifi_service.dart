@@ -155,57 +155,6 @@ class WifiService {
     }
   }
 
-  // Check internet connection by pinging multiple DNS servers
-  static Future<bool> checkInternetConnection() async {
-    final List<String> dnsServers = ['8.8.8.8', '1.1.1.1', '9.9.9.9'];
-
-    for (final server in dnsServers) {
-      try {
-        ProcessResult pingResult = await Process.run(
-          'ping',
-          ['-c', '1', '-W', '1', server],
-        );
-
-        if (pingResult.exitCode == 0) {
-          logger.info(
-              'Internet connection is available (ping to $server successful)');
-          return true;
-        }
-      } catch (e) {
-        logger.info('Ping to $server failed: $e');
-      }
-    }
-
-    logger.info('No internet access (all ping attempts failed)');
-    return false;
-  }
-
-  static Future<bool> isConnectedToWifi() async {
-    try {
-      ProcessResult result = await Process.run(
-        'nmcli',
-        ['-t', '-f', 'DEVICE,STATE', 'dev'],
-      );
-
-      if (result.exitCode == 0) {
-        List<String> connections = result.stdout.toString().trim().split('\n');
-        logger.info('[Check internet] Connections: $connections');
-        for (String connection in connections) {
-          // Specifically look for the wlan0 interface
-          if (connection.contains('wlan0:connected')) {
-            logger.info('WiFi interface (wlan0) is connected');
-            return true;
-          }
-        }
-      }
-      logger.info('WiFi interface (wlan0) is not connected');
-      return false;
-    } catch (e) {
-      logger.warning('Error checking WiFi status: $e');
-      return false;
-    }
-  }
-
   static Future<String> getLocalIpAddress() async {
     try {
       final result = await Process.run('hostname', ['-I']);
