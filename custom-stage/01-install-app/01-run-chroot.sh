@@ -27,7 +27,6 @@ cd /
 chown -R feralfile:feralfile /home/feralfile/feralfile/
 chmod 644 /etc/apt/trusted.gpg.d/feralfile.asc
 chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
-chmod 755 /home/feralfile/feralfile/feralfile-switcher.sh
 chmod 755 /home/feralfile/feralfile/feralfile-watchdog.py
 chmod 755 /home/feralfile/feralfile/feralfile-install-deps.sh
 chmod 755 /home/feralfile/feralfile/mesa-patch.sh
@@ -58,10 +57,6 @@ fi
 if ! sudo systemctl is-enabled feralfile-chromium.service >/dev/null 2>&1; then
     sudo systemctl enable feralfile-chromium.service
     sudo systemctl start feralfile-chromium.service
-fi
-if ! sudo systemctl is-enabled feralfile-switcher.service >/dev/null 2>&1; then
-    sudo systemctl enable feralfile-switcher.service
-    sudo systemctl start feralfile-switcher.service
 fi
 if ! sudo systemctl is-enabled feralfile-watchdog.service >/dev/null 2>&1; then
     sudo systemctl enable feralfile-watchdog.service
@@ -131,22 +126,6 @@ Wants=feralfile-launcher.service
 User=feralfile
 Group=feralfile
 ExecStart=/home/feralfile/feralfile/feralfile-chromium.sh
-Restart=always
-RestartSec=5
-Environment=XDG_RUNTIME_DIR=/run/user/1000
-
-[Install]
-WantedBy=default.target
-EOF
-
-cat > /etc/systemd/system/feralfile-switcher.service << EOF
-[Unit]
-Description=FeralFile Switcher
-
-[Service]
-User=feralfile
-Group=feralfile
-ExecStart=/home/feralfile/feralfile/feralfile-switcher.sh
 Restart=always
 RestartSec=5
 Environment=XDG_RUNTIME_DIR=/run/user/1000

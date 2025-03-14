@@ -1,4 +1,5 @@
 // lib/services/bluetooth_service.dart
+
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:isolate';
@@ -13,6 +14,8 @@ import '../models/wifi_credentials.dart';
 import '../services/command_service.dart';
 import '../services/metric_service.dart';
 import '../utils/varint_parser.dart';
+
+const statusChangedReplyId = 'statusChanged';
 
 class BluetoothService {
   static final BluetoothService _instance = BluetoothService._internal();
@@ -239,7 +242,8 @@ class BluetoothService {
 
   void notify(String replyID, Map<String, dynamic> payload) {
     try {
-      if (chunkedResponseReplyIds.contains(replyID)) {
+      if (chunkedResponseReplyIds.contains(replyID) ||
+          replyID == statusChangedReplyId) {
         _sendDataByChunks(payload, replyID);
         chunkedResponseReplyIds.remove(replyID);
       } else {
