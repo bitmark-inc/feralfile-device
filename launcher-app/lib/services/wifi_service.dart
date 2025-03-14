@@ -1,6 +1,9 @@
 // lib/services/wifi_service.dart
+import 'dart:async';
 import 'dart:io';
+
 import 'package:feralfile/services/logger.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
 
 import '../models/wifi_credentials.dart';
@@ -12,40 +15,102 @@ class WifiService {
     return ConfigService.updateWifiCredentials(credentials);
   }
 
-  static Future<bool> connect(WifiCredentials credentials) async {
+  static Future<String?> getCurrentWifiSSID() async {
+    final ssids = await getAvailableSSIDs();
+    for (final ssid in ssids.entries) {
+      if (ssid.value) {
+        return ssid.key;
+      }
+    }
+    return null;
+  }
+
+  static Future<Map<String, bool>> getAvailableSSIDs() async {
     try {
-      // Scan current wifi and sleep for 3s first
-      await Process.run(
+      ProcessResult scanResult = await Process.run(
         'nmcli',
-        ['device', 'wifi', 'rescan'],
+        ['-t', '-f', 'SSID,ACTIVE', 'dev', 'wifi'],
+        runInShell: true,
       );
 
-      // Retry mechanism to allow Wi-Fi scan to update, up to 10s
-      List<String> availableSSIDs = [];
-      for (int i = 0; i < 5; i++) {
-        await Future.delayed(const Duration(seconds: 2));
+      if (scanResult.exitCode != 0) {
+        throw Exception('nmcli command failed: ${scanResult.stderr}');
+      }
 
-        ProcessResult scanResult = await Process.run(
-          'nmcli',
-          ['-t', '-f', 'SSID', 'device', 'wifi', 'list'],
-          runInShell: true,
-        );
+      Map<String, bool> wifiNetworks = {};
 
-        availableSSIDs = scanResult.stdout
-            .toString()
-            .split('\n')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .toList();
+      for (String line in scanResult.stdout.toString().split('\n')) {
+        if (line.trim().isEmpty) continue;
 
-        if (availableSSIDs.contains(credentials.ssid)) {
-          break;
-        }
+        List<String> parts = line.split(':');
+        if (parts.length < 2) continue;
 
-        if (i == 4) {
-          logger.info('SSID not found after multiple retries.');
-          return false;
-        }
+        String ssid = parts[0].trim();
+        bool isActive = parts[1].trim() == "yes";
+
+        wifiNetworks[ssid] = isActive;
+      }
+
+      return wifiNetworks;
+    } catch (e) {
+      print('Error fetching Wi-Fi networks: $e');
+      return {};
+    }
+  }
+
+  static Future<void> _rescanWifi() async {
+    await Process.run(
+      'nmcli',
+      ['device', 'wifi', 'rescan'],
+    );
+  }
+
+  static Future<void> scanWifiNetwork(
+      {required Duration timeout,
+      required FutureOr<void> Function(Map<String, bool>) onResultScan,
+      FutureOr<bool> Function(Map<String, bool>)? shouldStopScan}) async {
+    try {
+      // Scan current wifi and sleep for 3s first
+      _rescanWifi();
+
+      // Retry mechanism to allow Wi-Fi scan to update, up to timeout duration
+      final delay = Duration(seconds: 2);
+      final startTime = DateTime.now();
+      bool stopScan = false;
+      while (DateTime.now().difference(startTime) < timeout && !stopScan) {
+        await Future.delayed(delay);
+
+        final availableSSIDs = await getAvailableSSIDs();
+
+        _rescanWifi();
+        await onResultScan(availableSSIDs);
+        stopScan = await shouldStopScan?.call(availableSSIDs) ?? false;
+      }
+    } catch (e) {
+      logger.info('Error scanning Wi-Fi: $e');
+      Sentry.captureException('Error scanning Wi-Fi: $e');
+    }
+  }
+
+  static Future<bool> connect(WifiCredentials credentials) async {
+    try {
+      bool isSSIDAvailable = false;
+      await scanWifiNetwork(
+          timeout: Duration(seconds: 15),
+          onResultScan: (result) {
+            final ssids = result.keys;
+            if (ssids.contains(credentials.ssid)) {
+              isSSIDAvailable = true;
+            }
+          },
+          shouldStopScan: (result) {
+            final ssids = result.keys;
+            return !ssids.contains(credentials.ssid);
+          });
+
+      if (!isSSIDAvailable) {
+        logger.info('SSID not found: ${credentials.ssid}');
+        return false;
       }
 
       logger.info('SSID found.');
@@ -88,31 +153,6 @@ class WifiService {
       logger.info('Error connecting to Wi-Fi: $e');
       return false;
     }
-  }
-
-  // Check internet connection by pinging multiple DNS servers
-  static Future<bool> checkInternetConnection() async {
-    final List<String> dnsServers = ['8.8.8.8', '1.1.1.1', '9.9.9.9'];
-
-    for (final server in dnsServers) {
-      try {
-        ProcessResult pingResult = await Process.run(
-          'ping',
-          ['-c', '1', '-W', '1', server],
-        );
-
-        if (pingResult.exitCode == 0) {
-          logger.info(
-              'Internet connection is available (ping to $server successful)');
-          return true;
-        }
-      } catch (e) {
-        logger.info('Ping to $server failed: $e');
-      }
-    }
-
-    logger.info('No internet access (all ping attempts failed)');
-    return false;
   }
 
   static Future<bool> isConnectedToWifi() async {

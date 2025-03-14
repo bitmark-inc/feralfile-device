@@ -79,7 +79,7 @@ class DeviceStatusHandler implements CommandHandler {
     final version = _loadVersion();
     final ipAddress = await WifiService.getLocalIpAddress();
     final isConnectedToWifi = await WifiService.isConnectedToWifi();
-    final connectedWifi = config?.wifiCredentials?.ssid;
+    final connectedWifi = await WifiService.getCurrentWifiSSID();
     final screenRotation = ScreenRotation.fromString(
         config?.screenRotation ?? ScreenRotation.normal.name);
     final artFraming = config?.artFraming;

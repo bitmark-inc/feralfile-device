@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:feralfile/generated/protos/system_metrics.pb.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/logger.dart';
@@ -14,8 +15,8 @@ class HardwareMonitorService {
   Timer? _streamingTimer;
   static const _monitorInterval = Duration(minutes: 1);
   static const _streamingInterval = Duration(seconds: 5);
-  bool _hasReportedSpecs = false;
   bool internetConnected = InternetConnectivityService().isOnline;
+  bool _hasReportedSpecs = false;
   bool _isStreamingEnabled = false;
   final BluetoothService _bluetoothService = BluetoothService();
 
