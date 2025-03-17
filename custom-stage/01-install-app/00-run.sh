@@ -31,5 +31,4 @@ cp "files/apt-public-key.asc" "${ROOTFS_DIR}/etc/apt/trusted.gpg.d/feralfile.asc
 }
 
 # Copy the script to the appropriate location
-sudo cp detect_resolution.sh /home/feralfile/feralfile/
-sudo chmod 755 /home/feralfile/feralfile/detect_resolution.sh
+cp detect_resolution.sh /home/feralfile/feralfile/
