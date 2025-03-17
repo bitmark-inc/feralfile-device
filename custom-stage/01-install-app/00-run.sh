@@ -30,5 +30,7 @@ cp "files/apt-public-key.asc" "${ROOTFS_DIR}/etc/apt/trusted.gpg.d/feralfile.asc
     exit 1
 }
 
-# Copy the script to the appropriate location
-cp detect_resolution.sh /home/feralfile/feralfile/
+cp "files/detect_resolution.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
+    echo "Error: Failed to copy files/detect_resolution.sh"
+    exit 1
+}
