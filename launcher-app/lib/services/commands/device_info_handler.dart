@@ -2,6 +2,7 @@ import 'package:feralfile/environment.dart';
 import 'package:feralfile/models/app_config.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/config_service.dart';
+import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/wifi_service.dart';
 import 'package:feralfile/utils/version_helper.dart';
@@ -21,6 +22,8 @@ class DeviceInfo {
   final String? timezone;
   final String? installedVersion;
   final String? latestVersion;
+  final int screenWidth;
+  final int screenHeight;
 
   DeviceInfo({
     required this.version,
@@ -32,6 +35,8 @@ class DeviceInfo {
     this.timezone,
     this.installedVersion,
     this.latestVersion,
+    this.screenWidth = 0,
+    this.screenHeight = 0,
   });
 
   Map<String, dynamic> toJson() {
@@ -45,6 +50,8 @@ class DeviceInfo {
       'timezone': timezone,
       'installedVersion': installedVersion,
       'latestVersion': latestVersion,
+      'screenWidth': screenWidth,
+      'screenHeight': screenHeight,
     };
   }
 }
@@ -87,6 +94,9 @@ class DeviceStatusHandler implements CommandHandler {
     final timezone = await getTimeZone();
     final installedVersion = await VersionHelper.getInstalledVersion();
     final latestVersion = await VersionHelper.getLatestVersion();
+    final screenInfo = await HardwareMonitorService.getScreenInfo();
+    final screenWidth = screenInfo.width;
+    final screenHeight = screenInfo.height;
     final deviceInfo = DeviceInfo(
       version: version,
       ipAddress: ipAddress,
@@ -97,6 +107,8 @@ class DeviceStatusHandler implements CommandHandler {
       timezone: timezone,
       installedVersion: installedVersion,
       latestVersion: latestVersion,
+      screenWidth: screenWidth.toInt(),
+      screenHeight: screenHeight.toInt(),
     );
 
     if (replyId == null) {

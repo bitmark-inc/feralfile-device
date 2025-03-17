@@ -70,7 +70,7 @@ class HardwareMonitorService {
       final gpuUsage = await _getGPUUsage();
       final cpuTemp = await _getCPUTemperature();
       final gpuTemp = await _getGPUTemperature();
-      final screenInfo = await _getScreenInfo();
+      final screenInfo = await getScreenInfo();
       final uptime = await _getSystemUptime();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
 
@@ -187,25 +187,42 @@ class HardwareMonitorService {
 
   Future<double> _getGPUUsage() async {
     try {
-      // Get GPU clock frequency
-      final ProcessResult result = await Process.run(
-        'vcgencmd',
-        ['measure_clock', 'v3d'],
-      );
+      // Read V3D clock speed from sysfs (more accurate for current usage)
+      ProcessResult result =
+          await Process.run('cat', ['/sys/kernel/debug/clk/clk_summary']);
 
       if (result.exitCode == 0) {
         final output = result.stdout.toString();
-        // Output format is "frequency(1)=XXXXX"
+        // Find the line containing "v3d"
+        final match =
+            RegExp(r'v3d\s+\S+\s+(\d+)\s+(\d+)\s+(\d+)').firstMatch(output);
+        if (match != null) {
+          final double currentFreq =
+              double.parse(match.group(2)!); // Current GPU clock in Hz
+          final double maxFreq =
+              double.parse(match.group(3)!); // Max possible clock
+
+          if (maxFreq > 0) {
+            // Usage = (current clock / max clock) * 100%
+            return (currentFreq / maxFreq) * 100;
+          }
+        }
+      }
+
+      // Fallback to vcgencmd if sysfs doesn't work
+      result = await Process.run('vcgencmd', ['measure_clock', 'v3d']);
+      if (result.exitCode == 0) {
+        final output = result.stdout.toString();
         final match = RegExp(r'=(\d+)').firstMatch(output);
         if (match != null) {
           final clockSpeedHz = double.parse(match.group(1)!);
-          // Convert Hz to MHz
-          return clockSpeedHz / 1000000.0;
+          return clockSpeedHz / 1000000.0; // Convert Hz to MHz (not % usage)
         }
       }
+
       return 0.0;
     } catch (e) {
-      logger.warning('Error getting GPU clock speed: $e');
+      logger.warning('Error getting GPU usage: $e');
       return 0.0;
     }
   }
@@ -248,7 +265,7 @@ class HardwareMonitorService {
 
     try {
       final totalRam = await _getTotalRAM();
-      final screenInfo = await _getScreenInfo();
+      final screenInfo = await getScreenInfo();
 
       logger.info('Hardware specs - '
           'Total RAM: ${(totalRam / 1024).toStringAsFixed(2)}GB, '
@@ -293,7 +310,7 @@ class HardwareMonitorService {
     }
   }
 
-  Future<ScreenInfo> _getScreenInfo() async {
+  static Future<ScreenInfo> getScreenInfo() async {
     try {
       final result = await Process.run('xrandr', ['--current']);
       if (result.exitCode == 0) {
