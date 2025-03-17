@@ -30,6 +30,7 @@ chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
 chmod 755 /home/feralfile/feralfile/feralfile-watchdog.py
 chmod 755 /home/feralfile/feralfile/feralfile-install-deps.sh
 chmod 755 /home/feralfile/feralfile/mesa-patch.sh
+chmod 755 /home/feralfile/feralfile/detect_resolution.sh
 
 # Patch mesa driver version
 cd /home/feralfile/feralfile
@@ -46,6 +47,9 @@ fi
 xset s off
 xset s noblank
 xset -dpms
+
+# Run the resolution detection script
+/home/feralfile/feralfile/detect_resolution.sh
 
 # Start unclutter to hide cursor after 5 seconds of inactivity
 unclutter -idle 5 -root &
@@ -213,3 +217,31 @@ DPkg::Post-Invoke { "systemctl restart feralfile-watchdog.service || true"; };
 DPkg::Post-Invoke { "systemctl restart feralfile-launcher.service || true"; };
 DPkg::Post-Invoke { "systemctl restart feralfile-chromium.service || true"; };
 EOF
+
+# Add this after your other service definitions (around line 150)
+cat > /etc/systemd/system/feralfile-display-detect.service << EOF
+[Unit]
+Description=FeralFile Display Resolution Detection
+After=graphical.target
+
+[Service]
+User=feralfile
+Group=feralfile
+ExecStart=/home/feralfile/feralfile/detect_resolution.sh
+Type=oneshot
+RemainAfterExit=yes
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/feralfile/.Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+[Install]
+WantedBy=graphical.target
+EOF
+
+# Create a udev rule to trigger the script when display changes
+mkdir -p /etc/udev/rules.d
+cat > /etc/udev/rules.d/99-display-hotplug.rules << EOF
+SUBSYSTEM=="drm", ACTION=="change", RUN+="/bin/systemctl restart feralfile-display-detect.service"
+EOF
+
+systemctl enable feralfile-display-detect.service
