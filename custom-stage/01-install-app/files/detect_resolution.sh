@@ -1,7 +1,24 @@
 #!/bin/bash
 
+# At the very start of the script, after the shebang:
+echo "Script started at $(date)" | sudo tee -a /tmp/resolution_script_execution.log
+# This will help verify if the script is being executed at all
+
 # Log file for debugging
+LOG_DIR="/var/log"
 LOG_FILE="/var/log/resolution_detect.log"
+
+# Ensure log directory exists and has proper permissions
+if [ ! -w "$LOG_DIR" ]; then
+    sudo mkdir -p "$LOG_DIR"
+    sudo chown feralfile:feralfile "$LOG_DIR"
+fi
+
+# Create log file if it doesn't exist and set permissions
+if [ ! -f "$LOG_FILE" ]; then
+    sudo touch "$LOG_FILE"
+    sudo chown feralfile:feralfile "$LOG_FILE"
+fi
 
 # Function to log messages
 log_message() {

@@ -223,6 +223,7 @@ cat > /etc/systemd/system/feralfile-display-detect.service << EOF
 [Unit]
 Description=FeralFile Display Resolution Detection
 After=graphical.target
+Wants=graphical.target
 
 [Service]
 User=feralfile
@@ -244,4 +245,5 @@ cat > /etc/udev/rules.d/99-display-hotplug.rules << EOF
 SUBSYSTEM=="drm", ACTION=="change", RUN+="/bin/systemctl restart feralfile-display-detect.service"
 EOF
 
+# Enable the service to run at boot
 systemctl enable feralfile-display-detect.service
