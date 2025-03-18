@@ -213,3 +213,7 @@ DPkg::Post-Invoke { "systemctl restart feralfile-watchdog.service || true"; };
 DPkg::Post-Invoke { "systemctl restart feralfile-launcher.service || true"; };
 DPkg::Post-Invoke { "systemctl restart feralfile-chromium.service || true"; };
 EOF
+
+# Add overclock configuration to /boot/firmware/config.txt
+echo "arm_freq=2760" >> /boot/firmware/config.txt
+echo "gpu_freq=955" >> /boot/firmware/config.txt
