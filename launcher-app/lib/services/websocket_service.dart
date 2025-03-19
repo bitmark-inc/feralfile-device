@@ -1,16 +1,24 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:feralfile/models/command.dart';
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/logger.dart';
+import 'package:feralfile/services/internet_connectivity_service.dart';
 
 class WebSocketService {
   static WebSocketService? _instance;
-  WebSocket? _socket;
+  // WebSocket connection for the website
+  WebSocket? _websiteSocket;
+  // WebSocket connection for watchdog service
+  WebSocket? _watchdogSocket;
   HttpServer? _server;
   final Set<Function(dynamic)> _messageListeners = {};
   final Map<String, Function(WebSocketResponseMessage)> _messageCallbacks = {};
+  Timer? _heartbeatTimer;
+  bool internetConnected = InternetConnectivityService().isOnline;
 
   // Singleton pattern
   factory WebSocketService() {
@@ -18,12 +26,24 @@ class WebSocketService {
     return _instance!;
   }
 
-  WebSocketService._internal();
+  WebSocketService._internal() {
+    // Subscribe to connectivity changes.
+    InternetConnectivityService().onStatusChange.listen((status) {
+      if (status && !internetConnected) {
+        logger.info('Internet is online. Processing messages.');
+        internetConnected = true;
+      } else if (!status && internetConnected) {
+        logger.info('Internet is offline. Pausing message processing.');
+        internetConnected = false;
+      }
+    });
+  }
 
   bool isServerRunning() {
     return _server != null;
   }
 
+  /// Initializes the WebSocket server, handling connections from website and watchdogs, start heartbeat the website
   Future<void> initServer() async {
     try {
       logger.info('Starting WebSocket server...');
@@ -31,50 +51,76 @@ class WebSocketService {
         logger.info('WebSocket server already running');
         return;
       }
-      // Create HTTP server
+      // Bind the server to localhost:8080
       _server = await HttpServer.bind('localhost', 8080);
       logger.info('WebSocket server running on ws://localhost:8080');
 
-      // Listen for WebSocket connections
-      _server!.transform(WebSocketTransformer()).listen((WebSocket ws) {
-        _socket = ws;
-        logger.info('[WebSocket] Client connected');
+      // Trigger the heart beat
+      _startHeartbeat();
 
-        // Handle messages from website
-        ws.listen(
-          (dynamic message) {
-            _handleMessage(message);
-          },
-          onError: (error) {
-            logger.warning('WebSocket error: $error');
-          },
-          onDone: () {
-            logger.info('[WebSocket] Client disconnected');
-            _socket = null;
-          },
-        );
+      // Listen for incoming HTTP requests and upgrade to WebSocket based on path
+      _server!.listen((HttpRequest request) async {
+        if (request.uri.path == '/watchdog') {
+          // Handle watchdog connection
+          WebSocket ws = await WebSocketTransformer.upgrade(request);
+          _watchdogSocket = ws;
+          logger.info('[WebSocket] Watchdog connected');
+
+          ws.listen(
+            (dynamic message) {
+              // do nothing since we won't receive anything from watchdog service
+            },
+            onError: (error) {
+              logger.warning('Watchdog WebSocket error: $error');
+            },
+            onDone: () {
+              logger.info('[WebSocket] Watchdog disconnected');
+              _watchdogSocket = null;
+            },
+          );
+        } else if (request.uri.path == '/') {
+          // Handle website connection
+          WebSocket ws = await WebSocketTransformer.upgrade(request);
+          _websiteSocket = ws;
+          logger.info('[WebSocket] Website connected');
+
+          ws.listen(
+            (dynamic message) {
+              _handleWebsiteMessage(message);
+            },
+            onError: (error) {
+              logger.warning('Website WebSocket error: $error');
+            },
+            onDone: () {
+              logger.info('[WebSocket] Website disconnected');
+              _websiteSocket = null;
+            },
+          );
+        } else {
+          // Handle invalid paths
+          request.response.write('Not found');
+          await request.response.close();
+        }
       });
     } catch (e) {
       logger.warning('Failed to start WebSocket server: $e');
     }
   }
 
-  // Handle messages received from website
-  void _handleMessage(dynamic message) {
+  /// Handles messages received from the website
+  void _handleWebsiteMessage(dynamic message) {
     try {
-      logger.info('Received message: $message');
-
+      logger.info('Received message from website: $message');
       final data = WebSocketResponseMessage.fromJson(jsonDecode(message));
 
-      // Check if there's a callback registered for this messageID
+      // Execute callback if registered for this messageID
       if (_messageCallbacks.containsKey(data.messageID)) {
         _messageCallbacks[data.messageID]?.call(data);
-        _messageCallbacks
-            .remove(data.messageID); // Remove the callback after use
+        _messageCallbacks.remove(data.messageID);
       }
 
-      // Call bluetoothService.notify if messageID is updateIndex
-      if (data.messageID == 'updateIndex') {
+      // Call bluetoothService.notify if messageID is statusChanged
+      if (data.messageID == 'statusChanged') {
         try {
           final message = jsonDecode(data.message) as Map<String, dynamic>;
           BluetoothService().notify(data.messageID!, message);
@@ -83,56 +129,95 @@ class WebSocketService {
         }
       }
 
-      // Notify to all listeners
       for (var listener in _messageListeners) {
         listener(data);
       }
     } catch (e, s) {
-      logger.warning('Error handling message: $e \n stack: $s');
+      logger.warning('Error handling website message: $e \n stack: $s');
     }
   }
 
-  // Send message to website
-  void _sendMessage(WebSocketRequestMessage message,
+  void _startHeartbeat({Duration interval = const Duration(seconds: 10)}) {
+    _stopHeartbeat(); // Cancel any existing timer
+    _heartbeatTimer = Timer.periodic(interval, (_) {
+      try {
+        if (_watchdogSocket != null &&
+            _watchdogSocket!.readyState == WebSocket.open && internetConnected) {
+          _sendMessage(
+            WebSocketRequestMessage(
+                message: RequestMessageData(command: Command.ping)),
+            false,
+            callback: (response) {
+              _watchdogSocket!.add(jsonEncode(response.toJson()));
+            },
+          );
+        }
+      } catch (e, s) {
+        logger
+            .warning('Error trying to heart beating website: $e \n stack: $s');
+      }
+    });
+  }
+
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  /// Sends a message to the website with an optional callback
+  void _sendMessage(WebSocketRequestMessage message, bool logging,
       {Function(WebSocketResponseMessage)? callback}) {
-    if (_socket != null) {
-      if (callback != null) {
+    if (!internetConnected) {
+      logger.info('Internet offline, stop processing messages.');
+      return;
+    }
+    if (_websiteSocket?.readyState == WebSocket.open) {
+      if (callback != null && message.messageID != null) {
         _messageCallbacks[message.messageID!] = callback;
       }
-
-      logger.info('Sending message: ${jsonEncode(message.toJson())}');
-      _socket!.add(jsonEncode(message.toJson()));
-      logger.info('Message sent');
+      if (logging) {
+        logger.info(
+            'Sending message to website: ${jsonEncode(message.toJson())}');
+      }
+      _websiteSocket!.add(jsonEncode(message.toJson()));
+      if (logging) {
+        logger.info('Message sent');
+      }
     } else {
       logger.warning(
-          'Sending message failed. WebSocket connection not available');
+          'Sending message failed. Website WebSocket connection not available');
     }
   }
 
-  void sendMessage(
-    WebSocketRequestMessage message,
-  ) {
-    _sendMessage(message);
+  /// Public method to send a message to the website
+  void sendMessage(WebSocketRequestMessage message) {
+    _sendMessage(message, true);
   }
 
+  /// Public method to send a message to the website and register a callback
   void sendMessageWithCallback(WebSocketRequestMessage message,
       Function(WebSocketResponseMessage) callback) {
-    _sendMessage(message, callback: callback);
+    _sendMessage(message, true, callback: callback);
   }
 
-  // Add/remove listener
+  /// Adds an internal message listener
   void addMessageListener(Function(dynamic) listener) {
     _messageListeners.add(listener);
   }
 
+  /// Removes an internal message listener
   void removeMessageListener(Function(dynamic) listener) {
     _messageListeners.remove(listener);
   }
 
+  /// Cleans up resources when the service is no longer needed
   void dispose() {
-    _socket?.close();
+    _stopHeartbeat();
+    _websiteSocket?.close();
+    _watchdogSocket?.close();
     _server?.close();
     _messageListeners.clear();
     _messageCallbacks.clear();
+    logger.info('WebSocketService disposed');
   }
 }

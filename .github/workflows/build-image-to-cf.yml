@@ -1,4 +1,4 @@
-name: Build Feral File Device Image to Cloudflare R2
+name: Build Feral File Device Image
 
 on:
   workflow_dispatch:
@@ -40,13 +40,16 @@ jobs:
       METRICS_API_KEY: ${{ secrets.METRICS_API_KEY }}
       APT_GPG_SIGN_KEY_PASSPHRASE: ${{ secrets.APT_GPG_SIGN_KEY_PASSPHRASE }}
       APT_GPG_SIGN_KEY_ID: ${{ secrets.APT_GPG_SIGN_KEY_ID }}
-
+      SENTRY_DSN_BLUETOOTH_LIB: ${{ secrets.SENTRY_DSN_BLUETOOTH_LIB }}
+      SENTRY_DSN_APP: ${{ secrets.SENTRY_DSN_APP }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
   # --- STEP 2: Build Raspberry Pi Image ---
   build-image:
     name: Generate Raspberry Pi OS Image
     runs-on: ['self-hosted', 'ARM64']
     needs: [build-app]
     if: ${{ always() && (needs.build-app.result == 'success' || needs.build-app.result == 'skipped') }}
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
 
     steps:
       - name: Checkout Repository
@@ -74,19 +77,13 @@ jobs:
           no_check_bucket = true
           EOF
 
-      - name: Download Launcher App from R2
+      - name: Set settings to device
         run: |
-          APP_VERSION="${{ github.event.inputs.existing_app_version || github.event.inputs.version }}"
-          rclone copyto "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile-launcher_${APP_VERSION}_arm64.deb" "custom-stage/01-install-app/feralfile-launcher_arm64.deb" \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=32 \
-            --verbose \
-            --stats=1s
           cat > custom-stage/01-install-app/feralfile-launcher.conf << EOF
           app_branch = ${{ github.ref_name }}
           distribution_auth_user = ${{ secrets.DISTRIBUTION_AUTH_USER }}
           distribution_auth_password = ${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}
+          sentry_dsn = ${{ secrets.SENTRY_DSN_APP }}
           EOF
 
       - name: Build Pi OS Image with pi-gen-action

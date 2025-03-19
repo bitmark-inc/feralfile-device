@@ -19,7 +19,8 @@ enum Command {
   updateToLatestVersion,
   tapGesture,
   dragGesture,
-  castDaily;
+  castDaily,
+  ping;
 
   static Command fromString(String command) {
     switch (command) {
@@ -65,6 +66,8 @@ enum Command {
         return Command.tapGesture;
       case 'dragGesture':
         return Command.dragGesture;
+      case 'ping':
+        return Command.ping;
       default:
         throw ArgumentError('Unknown command: $command');
     }

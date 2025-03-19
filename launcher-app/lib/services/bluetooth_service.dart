@@ -1,4 +1,5 @@
 // lib/services/bluetooth_service.dart
+
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:isolate';
@@ -13,6 +14,8 @@ import '../models/wifi_credentials.dart';
 import '../services/command_service.dart';
 import '../services/metric_service.dart';
 import '../utils/varint_parser.dart';
+
+const statusChangedReplyId = 'statusChanged';
 
 class BluetoothService {
   static final BluetoothService _instance = BluetoothService._internal();
@@ -93,6 +96,7 @@ class BluetoothService {
     _setupCallback.close();
     _cmdCallback.close();
     _onCredentialsReceived = null;
+    _commandPort.close();
   }
 
   Stream<CommandData> get commandStream => _commandService.commandStream;
@@ -102,10 +106,23 @@ class BluetoothService {
       int success, Pointer<Uint8> data, int length) {
     List<int>? dataCopy;
     try {
+      // Check if we have valid data
+      if (data == nullptr || length <= 0) {
+        logger.warning('Received empty or invalid command data');
+        return;
+      }
+
       // Create an immediate copy of the data
       dataCopy = List<int>.unmodifiable(data.asTypedList(length));
-      // Release the FFI data
-      calloc.free(data);
+
+      // Release the FFI data using C's free function
+      _instance._bindings.bluetooth_free_data(data);
+
+      // Check if we have enough data to parse
+      if (dataCopy.isEmpty) {
+        logger.warning('Empty data after copying');
+        return;
+      }
 
       final chunkInfo = ChunkInfo.fromData(dataCopy);
       _validateChunkIndices(chunkInfo);
@@ -192,8 +209,9 @@ class BluetoothService {
     try {
       // Create an immediate immutable copy of the data
       rawBytes = List<int>.unmodifiable(data.asTypedList(length));
-      // Release the FFI data
-      calloc.free(data);
+
+      // Release the FFI data using C's free function
+      _instance._bindings.bluetooth_free_data(data);
 
       // Print hex-encoded rawBytes
       final hexString =
@@ -224,7 +242,8 @@ class BluetoothService {
 
   void notify(String replyID, Map<String, dynamic> payload) {
     try {
-      if (chunkedResponseReplyIds.contains(replyID)) {
+      if (chunkedResponseReplyIds.contains(replyID) ||
+          replyID == statusChangedReplyId) {
         _sendDataByChunks(payload, replyID);
         chunkedResponseReplyIds.remove(replyID);
       } else {
@@ -355,5 +374,27 @@ class BluetoothService {
 
     _cachedDeviceId = 'FF-X1-$hashStr';
     return _cachedDeviceId!;
+  }
+
+  void sendEngineeringData(List<int> data) {
+    try {
+      final Pointer<Uint8> pointer = calloc<Uint8>(data.length);
+      final bytes = pointer.asTypedList(data.length);
+
+      logger.info('Sending ${data.length} bytes of engineering data');
+
+      for (var i = 0; i < data.length; i++) {
+        bytes[i] = data[i];
+      }
+
+      final hexString =
+          bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      logger.info('Engineering data (hex): $hexString');
+
+      _bindings.bluetooth_send_engineering_data(pointer, data.length);
+      calloc.free(pointer);
+    } catch (e) {
+      logger.severe('Error sending engineering data: $e');
+    }
   }
 }

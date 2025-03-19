@@ -3,12 +3,15 @@ import 'package:feralfile/cubits/ble_connection_cubit.dart';
 import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/websocket_service.dart';
+import 'package:feralfile/services/internet_connectivity_service.dart';
+import 'package:feralfile/services/switcher_service.dart';
 import 'package:feralfile/utils/version_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../services/commands/cursor_handler.dart';
+import '../services/config_service.dart';
 import '../services/logger.dart';
 import '../services/wifi_service.dart';
 import 'home_screen.dart';
@@ -40,24 +43,34 @@ class _LaunchScreenState extends State<LaunchScreen>
       // Initialize Bluetooth service
       final bleConnectionCubit = context.read<BLEConnectionCubit>();
       await bleConnectionCubit.initialize();
+      
+      if (!InternetConnectivityService().isOnline) {
+        logger.info('No internet access. Checking stored credentials...');
+        final config = await ConfigService.loadConfig();
 
-      // Initialize WebSocket server
-      await WebSocketService().initServer();
+        if (config?.wifiCredentials != null) {
+          logger.info('Found stored credentials. Attempting to connect...');
+          await WifiService.connect(config!.wifiCredentials!);
+        } else {
+          logger.info('No stored WiFi credentials found.');
+        }
+      }
 
-      // Check WiFi connection
-      logger.info('Checking WiFi connection...');
-      bool hasInternetAccess = await WifiService.checkInternetConnection();
       if (!mounted) return;
 
-      // Start log server & WebSocket server if has internet access
-      if (hasInternetAccess) {
-        logger.info('Starting log server...');
-        await startLogServer();
+      // Initialize WebSocket server
+      logger.info('Starting websocket server...');
+      await WebSocketService().initServer();
 
-        logger.info('Starting hardware monitoring...');
-        HardwareMonitorService().startMonitoring();
-        _updateToLatestVersion();
-      }
+      logger.info('Starting log server...');
+      await startLogServer();
+
+      logger.info('Starting hardware monitoring...');
+      HardwareMonitorService().startMonitoring();
+
+      SwitcherService();
+
+      _updateToLatestVersion();
 
       // Navigate to home screen
       if (!mounted) return;
@@ -76,12 +89,14 @@ class _LaunchScreenState extends State<LaunchScreen>
   }
 
   Future<void> _updateToLatestVersion() async {
-    // Update to latest version
-    logger.info('Updating to latest version...');
-    try {
-      await VersionHelper.updateToLatestVersion();
-    } catch (e) {
-      logger.severe('Error updating to latest version: $e');
+    if (InternetConnectivityService().isOnline) {
+      // Update to latest version
+      logger.info('Updating to latest version...');
+      try {
+        await VersionHelper.updateToLatestVersion();
+      } catch (e) {
+        logger.severe('Error updating to latest version: $e');
+      }
     }
   }
 
