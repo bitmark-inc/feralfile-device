@@ -10,6 +10,56 @@ import '../models/wifi_credentials.dart';
 import '../services/config_service.dart';
 
 class WifiService {
+  // Singleton instance
+  static WifiService? _instance;
+  // Singleton pattern
+  factory WifiService() {
+    _instance ??= WifiService._internal();
+    return _instance!;
+  }
+
+  Timer? _scanningTimer;
+  bool internetConnected = InternetConnectivityService().isOnline;
+
+  WifiService._internal() {
+    if (InternetConnectivityService().isOnline) {
+      _stopScanning();
+    } else {
+      _startScanning();
+    }
+    // Subscribe to connectivity changes.
+    InternetConnectivityService().onStatusChange.listen((status) {
+      if (status && !internetConnected) {
+        logger.info('Internet is online. Stopping wifi scanning.');
+        internetConnected = true;
+        _stopScanning();
+      } else if (!status && internetConnected) {
+        logger.info('Internet is offline. Starting wifi scanning.');
+        internetConnected = false;
+        _startScanning();
+      }
+    });
+  }
+
+  void _startScanning({Duration interval = const Duration(seconds: 10)}) async {
+    if (_scanningTimer != null && _scanningTimer!.isActive) return;
+    await Process.run(
+      'nmcli',
+      ['device', 'wifi', 'rescan'],
+    );
+    _scanningTimer = Timer.periodic(interval, (_) async {
+      await Process.run(
+        'nmcli',
+        ['device', 'wifi', 'rescan'],
+      );
+    });
+  }
+
+  void _stopScanning() {
+    _scanningTimer?.cancel();
+    _scanningTimer = null;
+  }
+
   // Connect to Wi-Fi using nmcli
   static Future<bool> _saveCredentials(WifiCredentials credentials) async {
     return ConfigService.updateWifiCredentials(credentials);
@@ -66,27 +116,17 @@ class WifiService {
     try {
       const scanInterval = Duration(seconds: 3);
       final endTime = DateTime.now().add(timeout);
-      
-      // Initial scan
-      var networkMap = await getAvailableSSIDs();
-      await onResultScan(networkMap);
-      
-      // Check if we should terminate after the initial scan
-      if (await shouldStopScan?.call(networkMap) ?? false) {
-        return;
-      }
-      
+
       // Continue scanning until timeout or explicit stop condition
       while (DateTime.now().isBefore(endTime)) {
-        await Future.delayed(scanInterval);
-        
-        networkMap = await getAvailableSSIDs();
+        var networkMap = await getAvailableSSIDs();
         await onResultScan(networkMap);
         
         // Check if we should stop scanning
         if (await shouldStopScan?.call(networkMap) ?? false) {
           break;
         }
+        await Future.delayed(scanInterval);
       }
     } catch (e) {
       logger.info('Error scanning Wi-Fi: $e');
@@ -107,7 +147,7 @@ class WifiService {
           },
           shouldStopScan: (result) {
             final ssids = result.keys;
-            return !ssids.contains(credentials.ssid);
+            return ssids.contains(credentials.ssid);
           });
 
       if (!isSSIDAvailable) {
