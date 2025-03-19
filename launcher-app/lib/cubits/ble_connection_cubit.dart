@@ -1,14 +1,16 @@
 import 'dart:async';
+
+import 'package:feralfile/services/internet_connectivity_service.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/websocket_service.dart';
+import 'package:feralfile/utils/version_helper.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:feralfile/services/internet_connectivity_service.dart';
+
 import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
 import 'ble_connection_state.dart';
-
 
 class BLEConnectionCubit extends Cubit<BLEConnectionState> {
   final BluetoothService _bluetoothService = BluetoothService();
@@ -91,6 +93,10 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
     emit(state.copyWith(deviceId: deviceName));
 
     startListening();
+
+    final installedVersion = await VersionHelper.getInstalledVersion();
+
+    emit(state.copyWith(version: installedVersion));
   }
 
   void startListening() {

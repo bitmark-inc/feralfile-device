@@ -2,9 +2,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:feralfile/services/internet_connectivity_service.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:feralfile/services/internet_connectivity_service.dart';
 
 import '../models/wifi_credentials.dart';
 import '../services/config_service.dart';
@@ -78,13 +78,12 @@ class WifiService {
       final startTime = DateTime.now();
       bool stopScan = false;
       while (DateTime.now().difference(startTime) < timeout && !stopScan) {
-        await Future.delayed(delay);
-
         final availableSSIDs = await getAvailableSSIDs();
 
         _rescanWifi();
         await onResultScan(availableSSIDs);
         stopScan = await shouldStopScan?.call(availableSSIDs) ?? false;
+        await Future.delayed(delay);
       }
     } catch (e) {
       logger.info('Error scanning Wi-Fi: $e');
@@ -140,13 +139,12 @@ class WifiService {
         runInShell: true,
       );
       if (newConnect.exitCode == 0) {
-        logger.info(
-            'Connected to Wi-Fi using credentials: ${credentials.ssid}');
+        logger
+            .info('Connected to Wi-Fi using credentials: ${credentials.ssid}');
         await _saveCredentials(credentials);
         return true;
       } else {
-        logger.info(
-            'Failed to connect with credentials: ${newConnect.stderr}');
+        logger.info('Failed to connect with credentials: ${newConnect.stderr}');
         return false;
       }
     } catch (e) {

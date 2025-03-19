@@ -11,6 +11,7 @@ class BLEConnectionState {
   final bool isProcessing;
   final String localIp;
   final String deviceId;
+  final String version;
 
   BLEConnectionState({
     this.status = BLEConnectionStatus.initial,
@@ -18,6 +19,7 @@ class BLEConnectionState {
     this.isProcessing = false,
     this.localIp = '',
     this.deviceId = '',
+    this.version = '',
   });
 
   BLEConnectionState copyWith({
@@ -26,6 +28,7 @@ class BLEConnectionState {
     bool? isProcessing,
     String? localIp,
     String? deviceId,
+    String? version,
   }) {
     return BLEConnectionState(
       status: status ?? this.status,
@@ -33,6 +36,7 @@ class BLEConnectionState {
       isProcessing: isProcessing ?? this.isProcessing,
       localIp: localIp ?? this.localIp,
       deviceId: deviceId ?? this.deviceId,
+      version: version ?? this.version,
     );
   }
 }
