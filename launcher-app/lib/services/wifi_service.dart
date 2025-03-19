@@ -10,6 +10,56 @@ import '../models/wifi_credentials.dart';
 import '../services/config_service.dart';
 
 class WifiService {
+  // Singleton instance
+  static WifiService? _instance;
+  // Singleton pattern
+  factory WifiService() {
+    _instance ??= WifiService._internal();
+    return _instance!;
+  }
+
+  Timer? _scanningTimer;
+  bool internetConnected = InternetConnectivityService().isOnline;
+
+  WifiService._internal() {
+    if (InternetConnectivityService().isOnline) {
+      _stopScanning();
+    } else {
+      _startScanning();
+    }
+    // Subscribe to connectivity changes.
+    InternetConnectivityService().onStatusChange.listen((status) {
+      if (status && !internetConnected) {
+        logger.info('Internet is online. Stopping wifi scanning.');
+        internetConnected = true;
+        _stopScanning();
+      } else if (!status && internetConnected) {
+        logger.info('Internet is offline. Starting wifi scanning.');
+        internetConnected = false;
+        _startScanning();
+      }
+    });
+  }
+
+  void _startScanning({Duration interval = const Duration(seconds: 10)}) async {
+    if (_scanningTimer != null && _scanningTimer!.isActive) return;
+    await Process.run(
+      'nmcli',
+      ['device', 'wifi', 'rescan'],
+    );
+    _scanningTimer = Timer.periodic(interval, (_) async {
+      await Process.run(
+        'nmcli',
+        ['device', 'wifi', 'rescan'],
+      );
+    });
+  }
+
+  void _stopScanning() {
+    _scanningTimer?.cancel();
+    _scanningTimer = null;
+  }
+
   // Connect to Wi-Fi using nmcli
   static Future<bool> _saveCredentials(WifiCredentials credentials) async {
     return ConfigService.updateWifiCredentials(credentials);
@@ -58,33 +108,25 @@ class WifiService {
     }
   }
 
-  static Future<void> _rescanWifi() async {
-    await Process.run(
-      'nmcli',
-      ['device', 'wifi', 'rescan'],
-    );
-  }
-
-  static Future<void> scanWifiNetwork(
-      {required Duration timeout,
-      required FutureOr<void> Function(Map<String, bool>) onResultScan,
-      FutureOr<bool> Function(Map<String, bool>)? shouldStopScan}) async {
+  static Future<void> scanWifiNetwork({
+    required Duration timeout,
+    required FutureOr<void> Function(Map<String, bool>) onResultScan,
+    FutureOr<bool> Function(Map<String, bool>)? shouldStopScan,
+  }) async {
     try {
-      // Scan current wifi and sleep for 3s first
-      _rescanWifi();
+      const scanInterval = Duration(seconds: 3);
+      final endTime = DateTime.now().add(timeout);
 
-      // Retry mechanism to allow Wi-Fi scan to update, up to timeout duration
-      final delay = Duration(seconds: 2);
-      final startTime = DateTime.now();
-      bool stopScan = false;
-      while (DateTime.now().difference(startTime) < timeout && !stopScan) {
-        await Future.delayed(delay);
-
-        final availableSSIDs = await getAvailableSSIDs();
-
-        _rescanWifi();
-        await onResultScan(availableSSIDs);
-        stopScan = await shouldStopScan?.call(availableSSIDs) ?? false;
+      // Continue scanning until timeout or explicit stop condition
+      while (DateTime.now().isBefore(endTime)) {
+        var networkMap = await getAvailableSSIDs();
+        await onResultScan(networkMap);
+        
+        // Check if we should stop scanning
+        if (await shouldStopScan?.call(networkMap) ?? false) {
+          break;
+        }
+        await Future.delayed(scanInterval);
       }
     } catch (e) {
       logger.info('Error scanning Wi-Fi: $e');
@@ -92,11 +134,11 @@ class WifiService {
     }
   }
 
-  static Future<bool> connect(WifiCredentials credentials) async {
+  static Future<bool> connect(WifiCredentials credentials, int timeoutSeconds) async {
     try {
       bool isSSIDAvailable = false;
       await scanWifiNetwork(
-          timeout: Duration(seconds: 15),
+          timeout: Duration(seconds: timeoutSeconds),
           onResultScan: (result) {
             final ssids = result.keys;
             if (ssids.contains(credentials.ssid)) {
@@ -105,7 +147,7 @@ class WifiService {
           },
           shouldStopScan: (result) {
             final ssids = result.keys;
-            return !ssids.contains(credentials.ssid);
+            return ssids.contains(credentials.ssid);
           });
 
       if (!isSSIDAvailable) {

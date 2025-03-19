@@ -50,7 +50,7 @@ class _LaunchScreenState extends State<LaunchScreen>
 
         if (config?.wifiCredentials != null) {
           logger.info('Found stored credentials. Attempting to connect...');
-          await WifiService.connect(config!.wifiCredentials!);
+          await WifiService.connect(config!.wifiCredentials!, 90);
         } else {
           logger.info('No stored WiFi credentials found.');
         }

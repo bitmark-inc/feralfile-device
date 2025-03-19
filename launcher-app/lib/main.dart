@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
+import 'package:feralfile/services/wifi_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -41,6 +42,7 @@ void main() async {
     appRunner: () async {
       // Start monitoring the internet 
       InternetConnectivityService().startMonitoring();
+      WifiService();
 
       final BLEConnectionCubit bleConnectionCubit = BLEConnectionCubit();
 
