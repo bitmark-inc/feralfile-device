@@ -90,6 +90,18 @@ class HomeScreen extends StatelessWidget {
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
+                                if (state.version.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Version: ${state.version}',
+                                    style: TextStyle(
+                                      fontFamily: 'PPMori',
+                                      fontSize: 16,
+                                      color: Colors.grey[400],
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
                               ],
                             ],
                           ),
