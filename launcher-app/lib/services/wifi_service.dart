@@ -10,6 +10,56 @@ import '../models/wifi_credentials.dart';
 import '../services/config_service.dart';
 
 class WifiService {
+  // Singleton instance
+  static WifiService? _instance;
+  // Singleton pattern
+  factory WifiService() {
+    _instance ??= WifiService._internal();
+    return _instance!;
+  }
+
+  Timer? _scanningTimer;
+  bool internetConnected = InternetConnectivityService().isOnline;
+
+  WifiService._internal() {
+    if (InternetConnectivityService().isOnline) {
+      _stopScanning();
+    } else {
+      _startScanning();
+    }
+    // Subscribe to connectivity changes.
+    InternetConnectivityService().onStatusChange.listen((status) {
+      if (status && !internetConnected) {
+        logger.info('Internet is online. Stopping wifi scanning.');
+        internetConnected = true;
+        _stopScanning();
+      } else if (!status && internetConnected) {
+        logger.info('Internet is offline. Starting wifi scanning.');
+        internetConnected = false;
+        _startScanning();
+      }
+    });
+  }
+
+  void _startScanning({Duration interval = const Duration(seconds: 10)}) async {
+    if (_scanningTimer != null && _scanningTimer!.isActive) return;
+    await Process.run(
+      'nmcli',
+      ['device', 'wifi', 'rescan'],
+    );
+    _scanningTimer = Timer.periodic(interval, (_) async {
+      await Process.run(
+        'nmcli',
+        ['device', 'wifi', 'rescan'],
+      );
+    });
+  }
+
+  void _stopScanning() {
+    _scanningTimer?.cancel();
+    _scanningTimer = null;
+  }
+
   // Connect to Wi-Fi using nmcli
   static Future<bool> _saveCredentials(WifiCredentials credentials) async {
     return ConfigService.updateWifiCredentials(credentials);
@@ -58,32 +108,25 @@ class WifiService {
     }
   }
 
-  static Future<void> _rescanWifi() async {
-    await Process.run(
-      'nmcli',
-      ['device', 'wifi', 'rescan'],
-    );
-  }
-
-  static Future<void> scanWifiNetwork(
-      {required Duration timeout,
-      required FutureOr<void> Function(Map<String, bool>) onResultScan,
-      FutureOr<bool> Function(Map<String, bool>)? shouldStopScan}) async {
+  static Future<void> scanWifiNetwork({
+    required Duration timeout,
+    required FutureOr<void> Function(Map<String, bool>) onResultScan,
+    FutureOr<bool> Function(Map<String, bool>)? shouldStopScan,
+  }) async {
     try {
-      // Scan current wifi and sleep for 3s first
-      _rescanWifi();
+      const scanInterval = Duration(seconds: 3);
+      final endTime = DateTime.now().add(timeout);
 
-      // Retry mechanism to allow Wi-Fi scan to update, up to timeout duration
-      final delay = Duration(seconds: 2);
-      final startTime = DateTime.now();
-      bool stopScan = false;
-      while (DateTime.now().difference(startTime) < timeout && !stopScan) {
-        final availableSSIDs = await getAvailableSSIDs();
-
-        _rescanWifi();
-        await onResultScan(availableSSIDs);
-        stopScan = await shouldStopScan?.call(availableSSIDs) ?? false;
-        await Future.delayed(delay);
+      // Continue scanning until timeout or explicit stop condition
+      while (DateTime.now().isBefore(endTime)) {
+        var networkMap = await getAvailableSSIDs();
+        await onResultScan(networkMap);
+        
+        // Check if we should stop scanning
+        if (await shouldStopScan?.call(networkMap) ?? false) {
+          break;
+        }
+        await Future.delayed(scanInterval);
       }
     } catch (e) {
       logger.info('Error scanning Wi-Fi: $e');
@@ -91,11 +134,11 @@ class WifiService {
     }
   }
 
-  static Future<bool> connect(WifiCredentials credentials) async {
+  static Future<bool> connect(WifiCredentials credentials, int timeoutSeconds) async {
     try {
       bool isSSIDAvailable = false;
       await scanWifiNetwork(
-          timeout: Duration(seconds: 15),
+          timeout: Duration(seconds: timeoutSeconds),
           onResultScan: (result) {
             final ssids = result.keys;
             if (ssids.contains(credentials.ssid)) {
@@ -104,7 +147,7 @@ class WifiService {
           },
           shouldStopScan: (result) {
             final ssids = result.keys;
-            return !ssids.contains(credentials.ssid);
+            return ssids.contains(credentials.ssid);
           });
 
       if (!isSSIDAvailable) {
@@ -149,57 +192,6 @@ class WifiService {
       }
     } catch (e) {
       logger.info('Error connecting to Wi-Fi: $e');
-      return false;
-    }
-  }
-
-  // Check internet connection by pinging multiple DNS servers
-  static Future<bool> checkInternetConnection() async {
-    final List<String> dnsServers = ['8.8.8.8', '1.1.1.1', '9.9.9.9'];
-
-    for (final server in dnsServers) {
-      try {
-        ProcessResult pingResult = await Process.run(
-          'ping',
-          ['-c', '1', '-W', '1', server],
-        );
-
-        if (pingResult.exitCode == 0) {
-          logger.info(
-              'Internet connection is available (ping to $server successful)');
-          return true;
-        }
-      } catch (e) {
-        logger.info('Ping to $server failed: $e');
-      }
-    }
-
-    logger.info('No internet access (all ping attempts failed)');
-    return false;
-  }
-
-  static Future<bool> isConnectedToWifi() async {
-    try {
-      ProcessResult result = await Process.run(
-        'nmcli',
-        ['-t', '-f', 'DEVICE,STATE', 'dev'],
-      );
-
-      if (result.exitCode == 0) {
-        List<String> connections = result.stdout.toString().trim().split('\n');
-        logger.info('[Check internet] Connections: $connections');
-        for (String connection in connections) {
-          // Specifically look for the wlan0 interface
-          if (connection.contains('wlan0:connected')) {
-            logger.info('WiFi interface (wlan0) is connected');
-            return true;
-          }
-        }
-      }
-      logger.info('WiFi interface (wlan0) is not connected');
-      return false;
-    } catch (e) {
-      logger.warning('Error checking WiFi status: $e');
       return false;
     }
   }

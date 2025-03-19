@@ -13,14 +13,22 @@ class SwitcherService {
   bool _isChromiumRetrying = false;
 
   SwitcherService._internal() {
+    // First focus
+    if (internetConnected) {
+      _focusChromium();
+    } else {
+      _focusFeralfile();
+    }
     // Subscribe to connectivity changes.
     InternetConnectivityService().onStatusChange.listen((status) async {
-      if (status) {
+      if (status && !internetConnected) {
         logger.info('Connectivity online. Focusing Chromium.');
         await _focusChromium();
-      } else {
+        internetConnected = true;
+      } else if (!status && internetConnected) {
         logger.info('Connectivity offline. Focusing Feralfile.');
         await _focusFeralfile();
+        internetConnected = false;
       }
     });
   }

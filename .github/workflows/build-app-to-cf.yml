@@ -69,6 +69,38 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install rclone
+        run: |
+          sudo apt-get update && sudo apt-get install -y rclone
+
+      - name: Configure rclone
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf << EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+          secret_access_key = ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
+          endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          acl = private
+          no_check_bucket = true
+          EOF
+
+      - name: Check if .deb file already exists in R2
+        run: |
+          DEB_FILE="feralfile-launcher_${{ inputs.version }}_arm64.deb"
+          R2_DIR="r2:${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}/${{ github.ref_name }}"
+          R2_PATH="$R2_DIR/$DEB_FILE"
+          
+          echo "Checking if $DEB_FILE exists in R2 at $R2_PATH..."
+          if rclone lsl "$R2_DIR" --include "$DEB_FILE" 2>/dev/null | grep -q "$DEB_FILE"; then
+            echo "Error: $DEB_FILE already exists in R2 bucket under ${{ github.ref_name }} branch."
+            exit 1
+          else
+            echo "$DEB_FILE does not exist in R2 at $R2_PATH. Proceeding with build."
+          fi
+
       - name: Install dependencies
         run: |
           sudo apt-get install -y \
@@ -93,7 +125,7 @@ jobs:
             libdbus-glib-1-dev \
             bluetooth \
             bluez \
-            bluez-tools            bluez-tools \
+            bluez-tools \
             libcurl4-openssl-dev \
             zlib1g-dev
 
@@ -243,24 +275,6 @@ jobs:
           chmod -R 755 package$INSTALL_DIR
           dpkg-deb --build package ${APP_NAME}_${VERSION}_arm64.deb
 
-      - name: Install rclone
-        run: |
-          sudo apt-get update && sudo apt-get install -y rclone
-
-      - name: Configure rclone
-        run: |
-          mkdir -p ~/.config/rclone
-          cat > ~/.config/rclone/rclone.conf << EOF
-          [r2]
-          type = s3
-          provider = Cloudflare
-          access_key_id = ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
-          secret_access_key = ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
-          endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          acl = private
-          no_check_bucket = true
-          EOF
-
       - name: Download all deb files from the same branch
         run: |
           mkdir -p dist/pool/${{ github.ref_name }}
@@ -271,8 +285,8 @@ jobs:
             --s3-chunk-size=100M \
             --transfers=32 \
             --verbose \
-            --stats=1s      
-      
+            --stats=1s
+
       - name: Form the APT release files
         run: |
           cd dist

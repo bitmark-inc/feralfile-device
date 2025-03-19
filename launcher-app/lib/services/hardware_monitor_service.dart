@@ -5,6 +5,7 @@ import 'package:feralfile/generated/protos/system_metrics.pb.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/metric_service.dart';
+import 'package:feralfile/services/internet_connectivity_service.dart';
 import 'package:fixnum/src/int64.dart';
 
 class HardwareMonitorService {
@@ -14,19 +15,31 @@ class HardwareMonitorService {
   Timer? _streamingTimer;
   static const _monitorInterval = Duration(minutes: 1);
   static const _streamingInterval = Duration(seconds: 5);
+  bool internetConnected = InternetConnectivityService().isOnline;
   bool _hasReportedSpecs = false;
   bool _isStreamingEnabled = false;
   final BluetoothService _bluetoothService = BluetoothService();
 
   factory HardwareMonitorService() => _instance;
 
-  HardwareMonitorService._internal();
+  HardwareMonitorService._internal() {
+    // Subscribe to connectivity changes.
+    InternetConnectivityService().onStatusChange.listen((status) {
+      if (status && !internetConnected) {
+        logger.info('Internet is online. Monitoring hardware.');
+        internetConnected = true;
+      } else if (!status && internetConnected) {
+        logger.info('Internet is offline. Pausing hardware monitoring.');
+        internetConnected = false;
+      }
+    });
+  }
 
   void startMonitoring() {
     _monitorTimer?.cancel();
     _reportHardwareSpecs();
     _monitorTimer =
-        Timer.periodic(_monitorInterval, (_) => _checkHardwareUsage());
+        Timer.periodic(_monitorInterval, (_) {if (internetConnected) {_checkHardwareUsage();}});
     logger.info(
         'Hardware monitoring started with ${_monitorInterval.inMinutes} minute interval');
   }

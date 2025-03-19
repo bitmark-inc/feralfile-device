@@ -24,6 +24,7 @@ class InternetConnectivityService {
     if (_timer != null && _timer!.isActive) return;
     _timer = Timer.periodic(Duration(seconds: 5), (_) async {
       _updateConnectivity();
+      _connectivityController.add(isOnline);
     });
   }
 
@@ -36,7 +37,6 @@ class InternetConnectivityService {
     bool online = await _checkConnectivity();
     if (online != isOnline) {
       isOnline = online;
-      _connectivityController.add(isOnline);
       print('Internet connectivity changed: $isOnline');
     }
   }
