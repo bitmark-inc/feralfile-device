@@ -58,33 +58,35 @@ class WifiService {
     }
   }
 
-  static Future<void> _rescanWifi() async {
-    await Process.run(
-      'nmcli',
-      ['device', 'wifi', 'rescan'],
-    );
-  }
-
-  static Future<void> scanWifiNetwork(
-      {required Duration timeout,
-      required FutureOr<void> Function(Map<String, bool>) onResultScan,
-      FutureOr<bool> Function(Map<String, bool>)? shouldStopScan}) async {
+  static Future<void> scanWifiNetwork({
+    required Duration timeout,
+    required FutureOr<void> Function(Map<String, bool>) onResultScan,
+    FutureOr<bool> Function(Map<String, bool>)? shouldStopScan,
+  }) async {
     try {
-      // Scan current wifi and sleep for 3s first
-      _rescanWifi();
-
-      // Retry mechanism to allow Wi-Fi scan to update, up to timeout duration
-      final delay = Duration(seconds: 2);
-      final startTime = DateTime.now();
-      bool stopScan = false;
-      while (DateTime.now().difference(startTime) < timeout && !stopScan) {
-        await Future.delayed(delay);
-
-        final availableSSIDs = await getAvailableSSIDs();
-
-        _rescanWifi();
-        await onResultScan(availableSSIDs);
-        stopScan = await shouldStopScan?.call(availableSSIDs) ?? false;
+      const scanInterval = Duration(seconds: 3);
+      final endTime = DateTime.now().add(timeout);
+      
+      // Initial scan
+      var networkMap = await getAvailableSSIDs();
+      await onResultScan(networkMap);
+      
+      // Check if we should terminate after the initial scan
+      if (await shouldStopScan?.call(networkMap) ?? false) {
+        return;
+      }
+      
+      // Continue scanning until timeout or explicit stop condition
+      while (DateTime.now().isBefore(endTime)) {
+        await Future.delayed(scanInterval);
+        
+        networkMap = await getAvailableSSIDs();
+        await onResultScan(networkMap);
+        
+        // Check if we should stop scanning
+        if (await shouldStopScan?.call(networkMap) ?? false) {
+          break;
+        }
       }
     } catch (e) {
       logger.info('Error scanning Wi-Fi: $e');
@@ -92,11 +94,11 @@ class WifiService {
     }
   }
 
-  static Future<bool> connect(WifiCredentials credentials) async {
+  static Future<bool> connect(WifiCredentials credentials, int timeoutSeconds) async {
     try {
       bool isSSIDAvailable = false;
       await scanWifiNetwork(
-          timeout: Duration(seconds: 15),
+          timeout: Duration(seconds: timeoutSeconds),
           onResultScan: (result) {
             final ssids = result.keys;
             if (ssids.contains(credentials.ssid)) {
