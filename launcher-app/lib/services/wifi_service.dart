@@ -134,40 +134,12 @@ class WifiService {
     }
   }
 
-  static Future<bool> connect(WifiCredentials credentials, int timeoutSeconds) async {
+  static Future<bool> connect(WifiCredentials credentials) async {
     try {
-      bool isSSIDAvailable = false;
-      await scanWifiNetwork(
-          timeout: Duration(seconds: timeoutSeconds),
-          onResultScan: (result) {
-            final ssids = result.keys;
-            if (ssids.contains(credentials.ssid)) {
-              isSSIDAvailable = true;
-            }
-          },
-          shouldStopScan: (result) {
-            final ssids = result.keys;
-            return ssids.contains(credentials.ssid);
-          });
-
-      if (!isSSIDAvailable) {
-        logger.info('SSID not found: ${credentials.ssid}');
-        return false;
-      }
-
-      logger.info('SSID found.');
-
-      if (InternetConnectivityService().isOnline) {
-        logger.info('Internet already connected.');
-        return true;
-      }
-
-      logger.info('Attempting to connect...');
       logger.info('Delete existing credential...');
-
       // Delete existing connection profile
       await Process.run('nmcli', ['connection', 'delete', credentials.ssid]);
-
+      logger.info('Attempting to connect...');
       // Attempt to connect with new credentials
       ProcessResult newConnect = await Process.run(
         'nmcli',

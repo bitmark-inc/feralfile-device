@@ -26,8 +26,7 @@ class SwitcherService {
         await _focusChromium();
         internetConnected = true;
       } else if (!status && internetConnected) {
-        logger.info('Connectivity offline. Focusing Feralfile.');
-        await _focusFeralfile();
+        // don't focus to launcher when the internet is off
         internetConnected = false;
       }
     });
