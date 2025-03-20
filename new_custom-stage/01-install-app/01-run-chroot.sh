@@ -45,6 +45,13 @@ EOF
 
 chown -R feralfile:feralfile /home/feralfile/.config
 
+# Don't use polkit to manage NetworkManager which will cause bugs
+mkdir -p /etc/NetworkManager/conf.d
+cat > /etc/NetworkManager/conf.d/feralfile.conf <<EOF
+[main]
+auth-polkit=false
+EOF
+
 # Enable Just Work bluetooth connection
 mkdir -p /etc/bluetooth
 cat > /etc/bluetooth/main.conf <<EOF

@@ -79,7 +79,7 @@ jobs:
 
       - name: Set settings to device
         run: |
-          cat > new_custom-stage/06-install-app/feralfile-launcher.conf << EOF
+          cat > new_custom-stage/01-install-app/feralfile-launcher.conf << EOF
           app_branch = ${{ github.ref_name }}
           distribution_auth_user = ${{ secrets.DISTRIBUTION_AUTH_USER }}
           distribution_auth_password = ${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}
@@ -90,7 +90,7 @@ jobs:
         uses: usimd/pi-gen-action@v1
         with:
           image-name: feralfile-device-${{ github.event.inputs.version }}
-          stage-list: stage0 stage1 stage2 stage3 ./new_custom-stage
+          stage-list: stage0 stage1 stage2 ./new_custom-stage
           compression: zip
           compression-level: 6
           username: feralfile
