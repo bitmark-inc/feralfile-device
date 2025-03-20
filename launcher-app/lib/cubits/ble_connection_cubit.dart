@@ -115,7 +115,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
     ));
 
     logger.info('[BLEConnectionCubit] Attempting to connect to WiFi network');
-    bool connected = await WifiService.connect(credentials, 15);
+    bool connected = await WifiService.connect(credentials);
     logger.info('[BLEConnectionCubit] WiFi connection result: $connected');
 
     if (connected) {

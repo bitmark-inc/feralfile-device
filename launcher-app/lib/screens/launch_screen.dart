@@ -50,7 +50,28 @@ class _LaunchScreenState extends State<LaunchScreen>
 
         if (config?.wifiCredentials != null) {
           logger.info('Found stored credentials. Attempting to connect...');
-          await WifiService.connect(config!.wifiCredentials!, 90);
+          bool isSSIDAvailable = false;
+          await WifiService.scanWifiNetwork(
+              timeout: const Duration(seconds: 90),
+              onResultScan: (result) {
+                final ssids = result.keys;
+                if (ssids.contains(config?.wifiCredentials!.ssid)) {
+                  isSSIDAvailable = true;
+                }
+              },
+              shouldStopScan: (result) {
+                final ssids = result.keys;
+                return ssids.contains(config?.wifiCredentials!.ssid);
+              });
+          if (isSSIDAvailable) {
+            logger.info('Stored SSID found.');
+            if (InternetConnectivityService().isOnline) {
+              logger.info('Internet already connected.');
+            } else {
+              await WifiService.connect(config!.wifiCredentials!);
+            }
+          }
+          logger.info('Stored SSID not found: ${config?.wifiCredentials!.ssid}');
         } else {
           logger.info('No stored WiFi credentials found.');
         }
