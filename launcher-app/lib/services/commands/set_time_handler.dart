@@ -21,6 +21,10 @@ class SetTimezoneHandler implements CommandHandler {
 
         // If time is provided, set it
         if (time != null) {
+          // turn off ntp
+          var ntpResult =
+              await Process.run('sudo', ['timedatectl', 'set-ntp', 'false']);
+          logger.info('Set ntp result: ${ntpResult.stdout}');
           var timeResult =
               await Process.run('sudo', ['timedatectl', 'set-time', time]);
           logger.info('Set time result: ${timeResult.stdout}');
