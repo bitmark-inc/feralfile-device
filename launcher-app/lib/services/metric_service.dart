@@ -110,7 +110,7 @@ class MetricService {
 
       logger.info('Successfully flushed ${events.length} events');
     } catch (e) {
-      logger.warning('Error flushing metrics: $e');
+      // logger.warning('Error flushing metrics: $e');
     }
   }
 
