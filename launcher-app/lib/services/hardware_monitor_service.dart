@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:feralfile/environment.dart';
 import 'package:feralfile/generated/protos/system_metrics.pb.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/logger.dart';
@@ -38,8 +39,11 @@ class HardwareMonitorService {
   void startMonitoring() {
     _monitorTimer?.cancel();
     _reportHardwareSpecs();
-    _monitorTimer =
-        Timer.periodic(_monitorInterval, (_) {if (internetConnected) {_checkHardwareUsage();}});
+    _monitorTimer = Timer.periodic(_monitorInterval, (_) {
+      if (internetConnected) {
+        _checkHardwareUsage();
+      }
+    });
     logger.info(
         'Hardware monitoring started with ${_monitorInterval.inMinutes} minute interval');
   }
@@ -114,6 +118,8 @@ class HardwareMonitorService {
       final cpuTemp = await _getCPUTemperature();
       final gpuTemp = await _getGPUTemperature();
       final isChromiumRunning = await _isChromiumRunning();
+      final systemUptime = await _getSystemUptime();
+      final softwareVersion = Environment.appVersion;
 
       logger.info('Hardware usage - CPU: ${cpuUsage.toStringAsFixed(2)}%, '
           'RAM: ${ramUsage.toStringAsFixed(2)}%, '
@@ -125,13 +131,15 @@ class HardwareMonitorService {
       // Send metrics
       MetricService().sendEvent(
         'hardware_usage',
+        stringData: [softwareVersion],
         doubleData: [
           cpuUsage,
           ramUsage,
           gpuUsage,
           cpuTemp,
           gpuTemp,
-          isChromiumRunning ? 1.0 : 0.0
+          isChromiumRunning ? 1.0 : 0.0,
+          systemUptime.toDouble(),
         ],
       );
     } catch (e) {
