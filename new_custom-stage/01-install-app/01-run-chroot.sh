@@ -40,6 +40,8 @@ cd /
 # Create autostart
 mkdir -p /home/feralfile/.config/lxsession/LXDE
 cat > /home/feralfile/.config/lxsession/LXDE/autostart <<EOF
+@env vblank_mode=1
+@unclutter -idle 1
 @/home/feralfile/feralfile/lxde-startup.sh
 EOF
 
