@@ -119,7 +119,6 @@ class HardwareMonitorService {
       final gpuTemp = await _getGPUTemperature();
       final isChromiumRunning = await _isChromiumRunning();
       final systemUptime = await _getSystemUptime();
-      final softwareVersion = Environment.appVersion;
 
       logger.info('Hardware usage - CPU: ${cpuUsage.toStringAsFixed(2)}%, '
           'RAM: ${ramUsage.toStringAsFixed(2)}%, '
@@ -131,7 +130,6 @@ class HardwareMonitorService {
       // Send metrics
       MetricService().sendEvent(
         'hardware_usage',
-        stringData: [softwareVersion],
         doubleData: [
           cpuUsage,
           ramUsage,
@@ -257,6 +255,7 @@ class HardwareMonitorService {
     try {
       final totalRam = await _getTotalRAM();
       final screenInfo = await _getScreenInfo();
+      final softwareVersion = Environment.appVersion;
 
       logger.info('Hardware specs - '
           'Total RAM: ${(totalRam / 1024).toStringAsFixed(2)}GB, '
@@ -266,6 +265,7 @@ class HardwareMonitorService {
       // Send hardware specs as a separate metric event
       MetricService().sendEvent(
         'hardware_specs',
+        stringData: [softwareVersion],
         doubleData: [
           totalRam,
           screenInfo.width,
