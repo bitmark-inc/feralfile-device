@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:feralfile/services/rotate_service.dart';
+
 import 'wifi_credentials.dart';
 
 class AppConfig {
   final WifiCredentials? wifiCredentials;
-  final String? screenRotation;
+  final ScreenRotation? screenRotation;
   final String deviceName;
   final ArtFraming? artFraming;
 
@@ -21,7 +23,9 @@ class AppConfig {
       wifiCredentials: data['wifiCredentials'] != null
           ? WifiCredentials.fromJson(jsonEncode(data['wifiCredentials']))
           : null,
-      screenRotation: data['screenRotation'],
+      screenRotation: data['screenRotation'] == null
+          ? null
+          : ScreenRotation.fromString(data['screenRotation']),
       deviceName: data['deviceName'] ?? '',
       artFraming: int.tryParse(data['artFraming'] ?? '') != null
           ? ArtFraming.fromValue(int.parse(data['artFraming']))
@@ -34,7 +38,7 @@ class AppConfig {
       'wifiCredentials': wifiCredentials != null
           ? json.decode(wifiCredentials!.toJson())
           : null,
-      'screenRotation': screenRotation,
+      'screenRotation': screenRotation?.name,
       'deviceName': deviceName,
       'artFraming': artFraming?.value.toString(),
     });
@@ -42,7 +46,7 @@ class AppConfig {
 
   AppConfig copyWith({
     WifiCredentials? wifiCredentials,
-    String? screenRotation,
+    ScreenRotation? screenRotation,
     String? deviceName,
     ArtFraming? artFraming,
   }) {

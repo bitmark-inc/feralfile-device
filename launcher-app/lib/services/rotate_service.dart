@@ -51,14 +51,15 @@ class RotateService {
   static String? _primaryDisplay;
 
   static Future<void> _saveRotation(ScreenRotation rotation) async {
-    await ConfigService.updateScreenRotation(rotation.name);
+    await ConfigService.updateScreenRotation(rotation);
   }
 
-  static Future<ScreenRotation?> _loadSavedRotation() async {
+  static Future<ScreenRotation?> loadSavedRotation() async {
     final config = await ConfigService.loadConfig();
     final rotation = config?.screenRotation;
     if (rotation != null) {
-      return ScreenRotation.fromString(rotation);
+      logger.info('Loaded saved rotation: $rotation');
+      return rotation;
     }
     return null;
   }
@@ -115,7 +116,7 @@ class RotateService {
 
   static Future<void> initializeRotation() async {
     await _initializePrimaryDisplay(); // Initialize display name early
-    final savedRotation = await _loadSavedRotation();
+    final savedRotation = await loadSavedRotation();
     if (savedRotation != null) {
       try {
         final result = await rotateScreen(savedRotation);
