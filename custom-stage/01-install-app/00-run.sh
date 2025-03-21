@@ -23,6 +23,10 @@ cp "files/mesa-patch.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
     echo "Error: Failed to copy files/mesa-patch.sh"
     exit 1
 }
+cp "files/lxde-startup.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
+    echo "Error: Failed to copy files/lxde-startup.sh"
+    exit 1
+}
 
 mkdir -p "${ROOTFS_DIR}/etc/apt/trusted.gpg.d/"
 cp "files/apt-public-key.asc" "${ROOTFS_DIR}/etc/apt/trusted.gpg.d/feralfile.asc" || {

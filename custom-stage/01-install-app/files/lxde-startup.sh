@@ -10,9 +10,6 @@ xset s off
 xset s noblank
 xset -dpms
 
-# Start unclutter to hide the cursor after 5 seconds of inactivity
-unclutter -idle 5 -root &
-
 # Enable and start necessary systemd services if not already enabled
 for service in feralfile-launcher feralfile-chromium feralfile-watchdog feralfile-install-deps; do
     if ! sudo systemctl is-enabled "$service.service" >/dev/null 2>&1; then

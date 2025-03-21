@@ -30,6 +30,7 @@ chmod 755 /home/feralfile/feralfile/feralfile-chromium.sh
 chmod 755 /home/feralfile/feralfile/feralfile-watchdog.py
 chmod 755 /home/feralfile/feralfile/feralfile-install-deps.sh
 chmod 755 /home/feralfile/feralfile/mesa-patch.sh
+chmod 755 /home/feralfile/feralfile/lxde-startup.sh
 
 # Patch mesa driver version
 cd /home/feralfile/feralfile
@@ -37,46 +38,14 @@ cd /home/feralfile/feralfile
 cd /
 
 # Create autostart
-mkdir -p /home/feralfile/.config/openbox
-cat > /home/feralfile/.config/openbox/autostart <<EOF
-if ! grep -q "quiet" "/boot/firmware/cmdline.txt"; then
-    sudo sed -i 's/$/ quiet/' "/boot/firmware/cmdline.txt"
-fi
-
-xset s off
-xset s noblank
-xset -dpms
-
-# Start unclutter to hide cursor after 5 seconds of inactivity
-unclutter -idle 5 -root &
-
-if ! sudo systemctl is-enabled feralfile-launcher.service >/dev/null 2>&1; then
-    sudo systemctl enable feralfile-launcher.service
-    sudo systemctl start feralfile-launcher.service
-fi
-if ! sudo systemctl is-enabled feralfile-chromium.service >/dev/null 2>&1; then
-    sudo systemctl enable feralfile-chromium.service
-    sudo systemctl start feralfile-chromium.service
-fi
-if ! sudo systemctl is-enabled feralfile-watchdog.service >/dev/null 2>&1; then
-    sudo systemctl enable feralfile-watchdog.service
-    sudo systemctl start feralfile-watchdog.service
-fi
-if ! sudo systemctl is-enabled feralfile-install-deps.service >/dev/null 2>&1; then
-    sudo systemctl enable feralfile-install-deps.service
-    sudo systemctl start feralfile-install-deps.service
-fi
+mkdir -p /home/feralfile/.config/lxsession/LXDE
+cat > /home/feralfile/.config/lxsession/LXDE/autostart <<EOF
+@env vblank_mode=1
+@unclutter -idle 1
+@/home/feralfile/feralfile/lxde-startup.sh
 EOF
 
 chown -R feralfile:feralfile /home/feralfile/.config
-
-# Configure auto-login for feralfile user
-mkdir -p /etc/lightdm/lightdm.conf.d
-cat > /etc/lightdm/lightdm.conf.d/12-autologin.conf <<EOF
-[Seat:*]
-autologin-user=feralfile
-autologin-user-timeout=0
-EOF
 
 # Don't use polkit to manage NetworkManager which will cause bugs
 mkdir -p /etc/NetworkManager/conf.d
