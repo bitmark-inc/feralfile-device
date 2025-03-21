@@ -11,23 +11,38 @@ class SetTimezoneHandler implements CommandHandler {
       [String? replyId]) async {
     try {
       final timezone = data['timezone'] as String;
+      final time = data['time'] as String?;
+
       try {
-        var result = await Process.run(
+        // Set timezone first
+        var timezoneResult = await Process.run(
             'sudo', ['timedatectl', 'set-timezone', timezone]);
-        logger.info('Set timezone result: ${result.stdout}');
+        logger.info('Set timezone result: ${timezoneResult.stdout}');
+
+        // If time is provided, set it
+        if (time != null) {
+          // turn off ntp
+          var ntpResult =
+              await Process.run('sudo', ['timedatectl', 'set-ntp', 'false']);
+          logger.info('Set ntp result: ${ntpResult.stdout}');
+          var timeResult =
+              await Process.run('sudo', ['timedatectl', 'set-time', time]);
+          logger.info('Set time result: ${timeResult.stdout}');
+        }
+
         if (replyId != null) {
           bluetoothService.notify(replyId, {'success': true});
         }
       } catch (e) {
-        logger.severe('Error setting timezone: $e');
+        logger.severe('Error setting timezone/time: $e');
         rethrow;
       }
     } catch (e) {
-      logger.severe('Error setting timezone: $e');
+      logger.severe('Error setting timezone/time: $e');
       if (replyId != null) {
         bluetoothService.notify(replyId, {
           'success': false,
-          'error': 'Failed to set timezone: ${e.toString()}'
+          'error': 'Failed to set timezone/time: ${e.toString()}'
         });
       }
     }
