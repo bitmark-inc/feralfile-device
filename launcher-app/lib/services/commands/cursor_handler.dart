@@ -49,14 +49,14 @@ class CursorHandler implements CommandHandler {
             _stdin!.writeln(item.command);
             // Đợi một khoảng thời gian ngắn trước khi xử lý movement tiếp theo
             await Future.delayed(Duration(milliseconds: MOVEMENT_DELAY));
-            item.onComplete?.call({'success': true});
+            item.onComplete?.call({'ok': true});
           } else {
             logger.severe('stdin is null, cannot write command');
-            item.onComplete?.call({'success': false, 'error': 'stdin is null'});
+            item.onComplete?.call({'ok': false, 'error': 'stdin is null'});
           }
         } catch (e) {
           logger.severe('Error processing command: $e');
-          item.onComplete?.call({'success': false, 'error': e.toString()});
+          item.onComplete?.call({'ok': false, 'error': e.toString()});
         }
       }
     } finally {
@@ -158,8 +158,8 @@ class CursorHandler implements CommandHandler {
           final coefficientY = (movement['coefficientY'] as num).toDouble();
 
           // Calculate actual pixel movement with screen size scaling
-          final moveX = (dx * coefficientX * screenWidth).round();
-          final moveY = (dy * coefficientY * screenHeight).round();
+          final moveX = (dx * 3).round();
+          final moveY = (dy * 3).round();
 
           final command = 'xdotool mousemove_relative -- $moveX $moveY';
 
