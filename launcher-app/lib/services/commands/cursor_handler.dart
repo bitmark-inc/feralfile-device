@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io';
 
 import '../bluetooth_service.dart';
 import '../logger.dart';
@@ -43,10 +43,16 @@ class CursorHandler implements CommandHandler {
       while (_commandQueue.isNotEmpty) {
         final item = _commandQueue.removeFirst();
         try {
-          _stdin?.writeln(item.command);
-          // Đợi một khoảng thời gian ngắn trước khi xử lý movement tiếp theo
-          await Future.delayed(Duration(milliseconds: MOVEMENT_DELAY));
-          item.onComplete?.call({'success': true});
+          logger.info('Processing command: ${item.command}');
+          if (_stdin != null) {
+            _stdin!.writeln(item.command);
+            // Đợi một khoảng thời gian ngắn trước khi xử lý movement tiếp theo
+            await Future.delayed(Duration(milliseconds: MOVEMENT_DELAY));
+            item.onComplete?.call({'success': true});
+          } else {
+            logger.severe('stdin is null, cannot write command');
+            item.onComplete?.call({'success': false, 'error': 'stdin is null'});
+          }
         } catch (e) {
           logger.severe('Error processing command: $e');
           item.onComplete?.call({'success': false, 'error': e.toString()});
@@ -94,6 +100,7 @@ class CursorHandler implements CommandHandler {
 
       // Theo dõi process death để tự động khởi tạo lại
       _xdotoolProcess?.exitCode.then((_) {
+        logger.info('Xdotool process died');
         _isInitialized = false;
         initialize(); // Tự động khởi tạo lại nếu process die
       });
