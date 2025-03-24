@@ -97,7 +97,7 @@ class CursorHandler implements CommandHandler {
       if (_xdotoolProcess != null) {
         await dispose(); // Cleanup existing process if any
       }
-      _xdotoolProcess = await Process.start('xdotool', ['sleep', '1000000']);
+      _xdotoolProcess = await Process.start('bash', []);
       _stdin = _xdotoolProcess?.stdin;
 
       _xdotoolProcess!.stdout.transform(utf8.decoder).listen((data) {
@@ -144,7 +144,7 @@ class CursorHandler implements CommandHandler {
 
       if (data.isEmpty) {
         // Xử lý tap gesture
-        _commandQueue.add(CommandItem('click 1',
+        _commandQueue.add(CommandItem('xdotool click 1',
             (_) => bluetoothService.notify('tapGesture', {'success': true})));
       } else {
         final List<dynamic> movements = data['cursorOffsets'] as List<dynamic>;
@@ -158,7 +158,7 @@ class CursorHandler implements CommandHandler {
           final moveX = (dx).round();
           final moveY = (dy).round();
 
-          final command = 'mousemove_relative -- $moveX $moveY';
+          final command = 'xdotool mousemove_relative -- $moveX $moveY';
 
           // Chỉ notify complete ở movement cuối cùng
           bool isLastMovement = movement == movements.last;
