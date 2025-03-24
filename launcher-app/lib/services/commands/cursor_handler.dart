@@ -33,7 +33,7 @@ class CursorHandler implements CommandHandler {
   bool _isProcessingQueue = false;
 
   // Thêm hằng số để điều chỉnh thời gian giữa các movements
-  static const int MOVEMENT_DELAY = 16; // milliseconds (~60fps)
+  static const int MOVEMENT_DELAY = 1; // milliseconds (~60fps)
 
   // Xử lý queue an toàn
   Future<void> _processCommandQueue() async {
@@ -47,7 +47,6 @@ class CursorHandler implements CommandHandler {
           logger.info('Processing command: ${item.command}');
           if (_stdin != null) {
             _stdin!.writeln(item.command);
-            await _stdin!.flush();
             // Đợi một khoảng thời gian ngắn trước khi xử lý movement tiếp theo
             await Future.delayed(Duration(milliseconds: MOVEMENT_DELAY));
             item.onComplete?.call({'success': true});
@@ -155,8 +154,12 @@ class CursorHandler implements CommandHandler {
           final dx = (movement['dx'] as num).toDouble();
           final dy = (movement['dy'] as num).toDouble();
 
-          final moveX = (dx).round();
-          final moveY = (dy).round();
+          final coefficientX = (movement['coefficientX'] as num).toDouble();
+          final coefficientY = (movement['coefficientY'] as num).toDouble();
+
+          // Calculate actual pixel movement with screen size scaling
+          final moveX = (dx * coefficientX * screenWidth).round();
+          final moveY = (dy * coefficientY * screenHeight).round();
 
           final command = 'xdotool mousemove_relative -- $moveX $moveY';
 
