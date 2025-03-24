@@ -47,6 +47,7 @@ class CursorHandler implements CommandHandler {
           logger.info('Processing command: ${item.command}');
           if (_stdin != null) {
             _stdin!.writeln(item.command);
+            await _stdin!.flush();
             // Đợi một khoảng thời gian ngắn trước khi xử lý movement tiếp theo
             await Future.delayed(Duration(milliseconds: MOVEMENT_DELAY));
             item.onComplete?.call({'success': true});
