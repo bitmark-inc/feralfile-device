@@ -50,6 +50,20 @@ enum ScreenRotation {
 class RotateService {
   static String? _primaryDisplay;
 
+  static Future<void> _saveRotation(ScreenRotation rotation) async {
+    await ConfigService.updateScreenRotation(rotation);
+  }
+
+  static Future<ScreenRotation?> loadSavedRotation() async {
+    final config = await ConfigService.loadConfig();
+    final rotation = config?.screenRotation;
+    if (rotation != null) {
+      logger.info('Loaded saved rotation: $rotation');
+      return rotation;
+    }
+    return null;
+  }
+
   static Future<ProcessResult> rotateScreen(
       ScreenRotation screenRotation) async {
     try {
@@ -60,6 +74,7 @@ class RotateService {
         logger.warning('System rotation script failed: ${result.stderr}');
       } else {
         logger.info('Screen rotated to ${screenRotation.name}');
+        _saveRotation(screenRotation);
       }
       return result;
     } catch (e) {
