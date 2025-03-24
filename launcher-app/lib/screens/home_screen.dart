@@ -74,7 +74,7 @@ class HomeScreen extends StatelessWidget {
                                   ),
                                   child: QrImageView(
                                     data:
-                                        'feralfile://device_connect/${state.deviceId}',
+                                        'https://link.feralfile.com/device_connect/${state.deviceId}',
                                     version: QrVersions.auto,
                                     size: 600,
                                     backgroundColor: Colors.white,
