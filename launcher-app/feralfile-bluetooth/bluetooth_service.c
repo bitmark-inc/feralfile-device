@@ -67,6 +67,23 @@ static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t log_thread;
 static int log_thread_running = 0;
 
+typedef struct {
+    unsigned char* data;
+    int length;
+    int success;
+} CallbackData;
+
+static pthread_mutex_t callback_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t callback_cond = PTHREAD_COND_INITIALIZER;
+static pthread_t callback_thread;
+static int callback_thread_running = 0;
+
+#define CALLBACK_QUEUE_SIZE 20
+static CallbackData callback_queue[CALLBACK_QUEUE_SIZE];
+static int callback_queue_head = 0;
+static int callback_queue_tail = 0;
+static int callback_type_queue[CALLBACK_QUEUE_SIZE]; // 0 for setup, 1 for cmd
+
 static void* log_thread_func(void* arg) {
     while (log_thread_running) {
         LogMessage msg;
@@ -347,20 +364,23 @@ static void handle_write_value(GDBusConnection *conn,
     hex_string[n_elements * 3 - 1] = '\0';
     log_info("[%s] (setup_char) Data: %s", LOG_TAG, hex_string);
 
-    // If you want to pass these bytes to your existing 'result_callback'
-    if (result_callback) {
-        result_callback(1, data_copy, (int)n_elements);
+    // Queue the callback
+    pthread_mutex_lock(&callback_mutex);
+    if ((callback_queue_head + 1) % CALLBACK_QUEUE_SIZE != callback_queue_tail) {
+        CallbackData *data = &callback_queue[callback_queue_head];
+        data->data = data_copy;
+        data->length = n_elements;
+        data->success = 1;
+        callback_type_queue[callback_queue_head] = 0;  // setup callback
+        callback_queue_head = (callback_queue_head + 1) % CALLBACK_QUEUE_SIZE;
+        pthread_cond_signal(&callback_cond);
+    } else {
+        // Queue full, handle error
+        free(data_copy);
+        log_error("[%s] Callback queue full, dropping message", LOG_TAG);
     }
-
-    // Add Sentry breadcrumb
-    #ifdef SENTRY_DSN
-    if (sentry_initialized) {
-        sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received setup data");
-        sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
-        sentry_add_breadcrumb(crumb);
-    }
-    #endif
-
+    pthread_mutex_unlock(&callback_mutex);
+    
     g_variant_unref(array_variant);
     if (options_variant) {
         g_variant_unref(options_variant);
@@ -401,20 +421,23 @@ static void handle_command_write(GDBusConnection *conn,
     hex_string[n_elements * 3 - 1] = '\0';
     log_info("[%s] (cmd_char) Data: %s", LOG_TAG, hex_string);
 
-    // Use cmd_callback with the copied data
-    if (cmd_callback) {
-        cmd_callback(1, data_copy, (int)n_elements);
+    // Queue the callback
+    pthread_mutex_lock(&callback_mutex);
+    if ((callback_queue_head + 1) % CALLBACK_QUEUE_SIZE != callback_queue_tail) {
+        CallbackData *data = &callback_queue[callback_queue_head];
+        data->data = data_copy;
+        data->length = n_elements;
+        data->success = 1;
+        callback_type_queue[callback_queue_head] = 1;  // cmd callback
+        callback_queue_head = (callback_queue_head + 1) % CALLBACK_QUEUE_SIZE;
+        pthread_cond_signal(&callback_cond);
+    } else {
+        // Queue full, handle error
+        free(data_copy);
+        log_error("[%s] Callback queue full, dropping message", LOG_TAG);
     }
-
-    // Add Sentry breadcrumb
-    #ifdef SENTRY_DSN
-    if (sentry_initialized) {
-        sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received command data");
-        sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
-        sentry_add_breadcrumb(crumb);
-    }
-    #endif
-
+    pthread_mutex_unlock(&callback_mutex);
+    
     g_variant_unref(array_variant);
     if (options_variant) {
         g_variant_unref(options_variant);
@@ -1093,4 +1116,47 @@ void bluetooth_send_engineering_data(const unsigned char* data, int length) {
         NULL);
 
     g_variant_builder_unref(builder);
+}
+
+static void* callback_thread_func(void* arg) {
+    while (callback_thread_running) {
+        CallbackData data;
+        int type;
+        int have_data = 0;
+        
+        // Get data from queue
+        pthread_mutex_lock(&callback_mutex);
+        if (callback_queue_head != callback_queue_tail) {
+            data = callback_queue[callback_queue_tail];
+            type = callback_type_queue[callback_queue_tail];
+            callback_queue_tail = (callback_queue_tail + 1) % CALLBACK_QUEUE_SIZE;
+            have_data = 1;
+        } else {
+            // Wait for new data
+            pthread_cond_wait(&callback_cond, &callback_mutex);
+        }
+        pthread_mutex_unlock(&callback_mutex);
+        
+        if (have_data) {
+            if (type == 0 && result_callback) {
+                result_callback(data.success, data.data, data.length);
+            } else if (type == 1 && cmd_callback) {
+                cmd_callback(data.success, data.data, data.length);
+            }
+            
+            // No need to free data here as it's managed by the caller
+        }
+    }
+    return NULL;
+}
+
+static void start_callback_thread() {
+    callback_thread_running = 1;
+    pthread_create(&callback_thread, NULL, callback_thread_func, NULL);
+}
+
+static void stop_callback_thread() {
+    callback_thread_running = 0;
+    pthread_cond_signal(&callback_cond);  // Wake up the thread
+    pthread_join(callback_thread, NULL);
 }
