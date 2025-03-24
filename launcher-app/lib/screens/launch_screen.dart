@@ -1,16 +1,15 @@
 import 'package:after_layout/after_layout.dart';
 import 'package:feralfile/cubits/ble_connection_cubit.dart';
 import 'package:feralfile/services/hardware_monitor_service.dart';
-import 'package:feralfile/services/rotate_service.dart';
-import 'package:feralfile/services/websocket_service.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
+import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/switcher_service.dart';
+import 'package:feralfile/services/websocket_service.dart';
 import 'package:feralfile/utils/version_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../services/commands/cursor_handler.dart';
 import '../services/config_service.dart';
 import '../services/logger.dart';
 import '../services/wifi_service.dart';
@@ -38,12 +37,12 @@ class _LaunchScreenState extends State<LaunchScreen>
       // Initialize screen rotation
       logger.info('Initializing screen rotation...');
       await RotateService.initializeRotation();
-      await CursorHandler.initializeScreenDimensions();
+      // await CursorHandler.initializeScreenDimensions();
 
       // Initialize Bluetooth service
       final bleConnectionCubit = context.read<BLEConnectionCubit>();
       await bleConnectionCubit.initialize();
-      
+
       if (!InternetConnectivityService().isOnline) {
         logger.info('No internet access. Checking stored credentials...');
         final config = await ConfigService.loadConfig();
@@ -71,7 +70,8 @@ class _LaunchScreenState extends State<LaunchScreen>
               await WifiService.connect(config!.wifiCredentials!);
             }
           }
-          logger.info('Stored SSID not found: ${config?.wifiCredentials!.ssid}');
+          logger
+              .info('Stored SSID not found: ${config?.wifiCredentials!.ssid}');
         } else {
           logger.info('No stored WiFi credentials found.');
         }
