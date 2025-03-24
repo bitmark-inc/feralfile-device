@@ -913,6 +913,12 @@ int bluetooth_init(const char* custom_device_name) {
         log_error("[%s] Failed to create Bluetooth thread", LOG_TAG);
         return -1;
     }
+
+    // Start background threads
+    start_log_thread();
+    start_callback_thread();
+    start_notify_thread();
+    
     return 0;
 }
 
@@ -1031,6 +1037,11 @@ void bluetooth_stop() {
         log_info("[%s] Sentry closed successfully", LOG_TAG);
     }
     #endif
+
+    // Stop background threads
+    stop_notify_thread();
+    stop_callback_thread();
+    stop_log_thread();
 
     log_info("[%s] Bluetooth service stopped", LOG_TAG);
 }
