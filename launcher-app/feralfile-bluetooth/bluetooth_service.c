@@ -84,6 +84,21 @@ static int callback_queue_head = 0;
 static int callback_queue_tail = 0;
 static int callback_type_queue[CALLBACK_QUEUE_SIZE]; // 0 for setup, 1 for cmd
 
+typedef struct {
+    unsigned char* data;
+    int length;
+    int type;  // 0 for command, 1 for engineering
+} NotifyData;
+
+#define NOTIFY_QUEUE_SIZE 20
+static NotifyData notify_queue[NOTIFY_QUEUE_SIZE];
+static int notify_queue_head = 0;
+static int notify_queue_tail = 0;
+static pthread_mutex_t notify_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t notify_cond = PTHREAD_COND_INITIALIZER;
+static pthread_t notify_thread;
+static int notify_thread_running = 0;
+
 static void* log_thread_func(void* arg) {
     while (log_thread_running) {
         LogMessage msg;
@@ -1021,6 +1036,31 @@ void bluetooth_stop() {
 }
 
 void bluetooth_notify(const unsigned char* data, int length) {
+    // Create a copy of the data
+    unsigned char* data_copy = malloc(length);
+    if (!data_copy) {
+        log_error("[%s] Failed to allocate memory for notification data", LOG_TAG);
+        return;
+    }
+    memcpy(data_copy, data, length);
+    
+    // Queue the notification
+    pthread_mutex_lock(&notify_mutex);
+    if ((notify_queue_head + 1) % NOTIFY_QUEUE_SIZE != notify_queue_tail) {
+        NotifyData *notify = &notify_queue[notify_queue_head];
+        notify->data = data_copy;
+        notify->length = length;
+        notify->type = 0;  // command characteristic
+        notify_queue_head = (notify_queue_head + 1) % NOTIFY_QUEUE_SIZE;
+        pthread_cond_signal(&notify_cond);
+    } else {
+        // Queue full, handle error
+        free(data_copy);
+        log_error("[%s] Notification queue full, dropping message", LOG_TAG);
+    }
+    pthread_mutex_unlock(&notify_mutex);
+    
+    // Log still happens in the calling thread
     // Log the hex string for debugging
     char hex_string[length * 3 + 1];
     for (size_t i = 0; i < length; i++) {
@@ -1028,27 +1068,6 @@ void bluetooth_notify(const unsigned char* data, int length) {
     }
     hex_string[length * 3 - 1] = '\0';
     log_info("[%s] Notifying data: %s", LOG_TAG, hex_string);
-
-    // Create GVariant for the notification value
-    GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
-                                              data, length, sizeof(guchar));
-
-    // Emit PropertiesChanged signal
-    GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
-    g_variant_builder_add(builder, "{sv}", "Value", value);
-
-    g_dbus_connection_emit_signal(connection,
-        NULL,
-        "/com/feralfile/display/service0/cmd_char",
-        "org.freedesktop.DBus.Properties",
-        "PropertiesChanged",
-        g_variant_new("(sa{sv}as)",
-                     "org.bluez.GattCharacteristic1",
-                     builder,
-                     NULL),
-        NULL);
-
-    g_variant_builder_unref(builder);
 }
 
 const char* bluetooth_get_mac_address() {
@@ -1159,4 +1178,64 @@ static void stop_callback_thread() {
     callback_thread_running = 0;
     pthread_cond_signal(&callback_cond);  // Wake up the thread
     pthread_join(callback_thread, NULL);
+}
+
+static void* notify_thread_func(void* arg) {
+    while (notify_thread_running) {
+        NotifyData data;
+        int have_data = 0;
+        
+        // Get data from queue
+        pthread_mutex_lock(&notify_mutex);
+        if (notify_queue_head != notify_queue_tail) {
+            data = notify_queue[notify_queue_tail];
+            notify_queue_tail = (notify_queue_tail + 1) % NOTIFY_QUEUE_SIZE;
+            have_data = 1;
+        } else {
+            // Wait for new data
+            pthread_cond_wait(&notify_cond, &notify_mutex);
+        }
+        pthread_mutex_unlock(&notify_mutex);
+        
+        if (have_data) {
+            // Process notification
+            const char* path = (data.type == 0) ? 
+                "/com/feralfile/display/service0/cmd_char" : 
+                "/com/feralfile/display/service0/eng_char";
+                
+            // Create GVariant for the notification value
+            GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
+                                                       data.data, data.length, sizeof(guchar));
+
+            // Emit PropertiesChanged signal
+            GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
+            g_variant_builder_add(builder, "{sv}", "Value", value);
+
+            g_dbus_connection_emit_signal(connection,
+                NULL,
+                path,
+                "org.freedesktop.DBus.Properties",
+                "PropertiesChanged",
+                g_variant_new("(sa{sv}as)",
+                             "org.bluez.GattCharacteristic1",
+                             builder,
+                             NULL),
+                NULL);
+
+            g_variant_builder_unref(builder);
+            free(data.data);  // Free the copied data
+        }
+    }
+    return NULL;
+}
+
+static void start_notify_thread() {
+    notify_thread_running = 1;
+    pthread_create(&notify_thread, NULL, notify_thread_func, NULL);
+}
+
+static void stop_notify_thread() {
+    notify_thread_running = 0;
+    pthread_cond_signal(&notify_cond);  // Wake up the thread
+    pthread_join(notify_thread, NULL);
 }
