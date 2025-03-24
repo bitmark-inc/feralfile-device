@@ -100,11 +100,11 @@ class CursorHandler implements CommandHandler {
       _stdin = _xdotoolProcess?.stdin;
 
       _xdotoolProcess!.stdout.transform(utf8.decoder).listen((data) {
-        print("xdotool output: $data");
+        logger.info("xdotool output: $data");
       });
 
       _xdotoolProcess!.stderr.transform(utf8.decoder).listen((data) {
-        print("xdotool error: $data");
+        logger.info("xdotool error: $data");
       });
 
       // Theo dõi process death để tự động khởi tạo lại
