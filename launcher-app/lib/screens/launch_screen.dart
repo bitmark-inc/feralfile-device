@@ -37,13 +37,12 @@ class _LaunchScreenState extends State<LaunchScreen>
     try {
       // Initialize screen rotation
       logger.info('Initializing screen rotation...');
-      await RotateService.initializeRotation();
       await CursorHandler.initializeScreenDimensions();
 
       // Initialize Bluetooth service
       final bleConnectionCubit = context.read<BLEConnectionCubit>();
       await bleConnectionCubit.initialize();
-      
+
       if (!InternetConnectivityService().isOnline) {
         logger.info('No internet access. Checking stored credentials...');
         final config = await ConfigService.loadConfig();
@@ -71,7 +70,8 @@ class _LaunchScreenState extends State<LaunchScreen>
               await WifiService.connect(config!.wifiCredentials!);
             }
           }
-          logger.info('Stored SSID not found: ${config?.wifiCredentials!.ssid}');
+          logger
+              .info('Stored SSID not found: ${config?.wifiCredentials!.ssid}');
         } else {
           logger.info('No stored WiFi credentials found.');
         }
