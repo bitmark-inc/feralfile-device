@@ -99,6 +99,18 @@ static pthread_cond_t notify_cond = PTHREAD_COND_INITIALIZER;
 static pthread_t notify_thread;
 static int notify_thread_running = 0;
 
+// Add forward declarations for thread functions after the type definitions
+// and before they're used in bluetooth_init() and bluetooth_stop()
+static void* log_thread_func(void* arg);
+static void start_log_thread();
+static void stop_log_thread();
+static void* callback_thread_func(void* arg);
+static void start_callback_thread();
+static void stop_callback_thread();
+static void* notify_thread_func(void* arg);
+static void start_notify_thread();
+static void stop_notify_thread();
+
 static void* log_thread_func(void* arg) {
     while (log_thread_running) {
         LogMessage msg;
