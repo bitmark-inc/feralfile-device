@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 
 import '../bluetooth_service.dart';
@@ -97,6 +98,14 @@ class CursorHandler implements CommandHandler {
       }
       _xdotoolProcess = await Process.start('xdotool', ['sleep', '1000000']);
       _stdin = _xdotoolProcess?.stdin;
+
+      _xdotoolProcess!.stdout.transform(utf8.decoder).listen((data) {
+        print("xdotool output: $data");
+      });
+
+      _xdotoolProcess!.stderr.transform(utf8.decoder).listen((data) {
+        print("xdotool error: $data");
+      });
 
       // Theo dõi process death để tự động khởi tạo lại
       _xdotoolProcess?.exitCode.then((_) {
