@@ -53,58 +53,99 @@ static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/ad
 
 static int sentry_initialized = 0;
 
-void bluetooth_set_logfile(const char* path) {
-    if (log_file != NULL) {
-        fclose(log_file);
+typedef struct {
+    char message[1024];
+    int level;  // 0 for info, 1 for error
+    time_t timestamp;
+} LogMessage;
+
+#define LOG_QUEUE_SIZE 100
+static LogMessage log_queue[LOG_QUEUE_SIZE];
+static int log_queue_head = 0;
+static int log_queue_tail = 0;
+static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t log_thread;
+static int log_thread_running = 0;
+
+static void* log_thread_func(void* arg) {
+    while (log_thread_running) {
+        LogMessage msg;
+        int have_message = 0;
+        
+        // Get message from queue
+        pthread_mutex_lock(&log_mutex);
+        if (log_queue_head != log_queue_tail) {
+            msg = log_queue[log_queue_tail];
+            log_queue_tail = (log_queue_tail + 1) % LOG_QUEUE_SIZE;
+            have_message = 1;
+        }
+        pthread_mutex_unlock(&log_mutex);
+        
+        if (have_message) {
+            // Format timestamp
+            char timestamp[26];
+            ctime_r(&msg.timestamp, timestamp);
+            timestamp[24] = '\0'; // Remove newline
+            
+            if (msg.level == 0) {  // Info
+                // Write to syslog, stdout, file
+                syslog(LOG_INFO, "%s", msg.message);
+                fprintf(stdout, "%s: INFO: %s\n", timestamp, msg.message);
+                if (log_file != NULL) {
+                    fprintf(log_file, "%s: INFO: %s\n", timestamp, msg.message);
+                    fflush(log_file);
+                }
+            } else {  // Error
+                syslog(LOG_ERR, "%s", msg.message);
+                fprintf(stderr, "%s: ERROR: %s\n", timestamp, msg.message);
+                if (log_file != NULL) {
+                    fprintf(log_file, "%s: ERROR: %s\n", timestamp, msg.message);
+                    fflush(log_file);
+                }
+            }
+        } else {
+            // Sleep a bit if no messages
+            usleep(10000);  // 10ms
+        }
     }
-    log_file = fopen(path, "a");
+    return NULL;
 }
 
-static void log_info(const char* format, ...) {
-    va_list args, args_copy;
+static void start_log_thread() {
+    log_thread_running = 1;
+    pthread_create(&log_thread, NULL, log_thread_func, NULL);
+}
+
+static void stop_log_thread() {
+    log_thread_running = 0;
+    pthread_join(log_thread, NULL);
+}
+
+void log_info(const char* format, ...) {
+    va_list args;
     va_start(args, format);
-    va_copy(args_copy, args);
     
-    // Get current time
-    time_t now;
-    time(&now);
-    char timestamp[26];
-    ctime_r(&now, timestamp);
-    timestamp[24] = '\0'; // Remove newline
+    // Format the message
+    LogMessage msg;
+    msg.level = 0;  // info
+    time(&msg.timestamp);
+    vsnprintf(msg.message, sizeof(msg.message), format, args);
     
-    // Log to syslog
-    vsyslog(LOG_INFO, format, args);
+    // Add to queue
+    pthread_mutex_lock(&log_mutex);
+    log_queue[log_queue_head] = msg;
+    log_queue_head = (log_queue_head + 1) % LOG_QUEUE_SIZE;
+    pthread_mutex_unlock(&log_mutex);
     
-    // Log to console (stdout)
-    fprintf(stdout, "%s: INFO: ", timestamp);
-    vfprintf(stdout, format, args_copy);
-    fprintf(stdout, "\n");
-    fflush(stdout);  // Ensure immediate output
-    
-    // Log to file if available
-    if (log_file != NULL) {
-        fprintf(log_file, "%s: INFO: ", timestamp);
-        vfprintf(log_file, format, args);
-        fprintf(log_file, "\n");
-        fflush(log_file);
-    }
-    
-    // Add Sentry breadcrumb for info messages
+    // Add Sentry breadcrumb (still synchronous)
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
-        char message[1024];
-        va_list args_crumb;
-        va_copy(args_crumb, args);
-        vsnprintf(message, sizeof(message), format, args_crumb);
-        va_end(args_crumb);
-        
-        sentry_value_t crumb = sentry_value_new_breadcrumb("info", message);
+        sentry_value_t crumb = sentry_value_new_breadcrumb("info", msg.message);
         sentry_value_set_by_key(crumb, "category", sentry_value_new_string("bluetooth"));
         sentry_add_breadcrumb(crumb);
     }
     #endif
     
-    va_end(args_copy);
     va_end(args);
 }
 
