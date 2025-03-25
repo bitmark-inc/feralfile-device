@@ -265,7 +265,7 @@ class HardwareMonitorService {
       // Send hardware specs as a separate metric event
       MetricService().sendEvent(
         'hardware_specs',
-        stringData: [softwareVersion],
+        stringData: [softwareVersion, screenInfo.brand],
         doubleData: [
           totalRam,
           screenInfo.width,
