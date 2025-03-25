@@ -53,143 +53,58 @@ static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/ad
 
 static int sentry_initialized = 0;
 
-typedef struct {
-    char message[1024];
-    int level;  // 0 for info, 1 for error
-    time_t timestamp;
-} LogMessage;
-
-#define LOG_QUEUE_SIZE 100
-static LogMessage log_queue[LOG_QUEUE_SIZE];
-static int log_queue_head = 0;
-static int log_queue_tail = 0;
-static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_t log_thread;
-static int log_thread_running = 0;
-
-typedef struct {
-    unsigned char* data;
-    int length;
-    int success;
-} CallbackData;
-
-static pthread_mutex_t callback_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t callback_cond = PTHREAD_COND_INITIALIZER;
-static pthread_t callback_thread;
-static int callback_thread_running = 0;
-
-#define CALLBACK_QUEUE_SIZE 20
-static CallbackData callback_queue[CALLBACK_QUEUE_SIZE];
-static int callback_queue_head = 0;
-static int callback_queue_tail = 0;
-static int callback_type_queue[CALLBACK_QUEUE_SIZE]; // 0 for setup, 1 for cmd
-
-typedef struct {
-    unsigned char* data;
-    int length;
-    int type;  // 0 for command, 1 for engineering
-} NotifyData;
-
-#define NOTIFY_QUEUE_SIZE 20
-static NotifyData notify_queue[NOTIFY_QUEUE_SIZE];
-static int notify_queue_head = 0;
-static int notify_queue_tail = 0;
-static pthread_mutex_t notify_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t notify_cond = PTHREAD_COND_INITIALIZER;
-static pthread_t notify_thread;
-static int notify_thread_running = 0;
-
-// Add forward declarations for thread functions after the type definitions
-// and before they're used in bluetooth_init() and bluetooth_stop()
-static void* log_thread_func(void* arg);
-static void start_log_thread();
-static void stop_log_thread();
-static void* callback_thread_func(void* arg);
-static void start_callback_thread();
-static void stop_callback_thread();
-static void* notify_thread_func(void* arg);
-static void start_notify_thread();
-static void stop_notify_thread();
-
-static void* log_thread_func(void* arg) {
-    while (log_thread_running) {
-        LogMessage msg;
-        int have_message = 0;
-        
-        // Get message from queue
-        pthread_mutex_lock(&log_mutex);
-        if (log_queue_head != log_queue_tail) {
-            msg = log_queue[log_queue_tail];
-            log_queue_tail = (log_queue_tail + 1) % LOG_QUEUE_SIZE;
-            have_message = 1;
-        }
-        pthread_mutex_unlock(&log_mutex);
-        
-        if (have_message) {
-            // Format timestamp
-            char timestamp[26];
-            ctime_r(&msg.timestamp, timestamp);
-            timestamp[24] = '\0'; // Remove newline
-            
-            if (msg.level == 0) {  // Info
-                // Write to syslog, stdout, file
-                syslog(LOG_INFO, "%s", msg.message);
-                fprintf(stdout, "%s: INFO: %s\n", timestamp, msg.message);
-                if (log_file != NULL) {
-                    fprintf(log_file, "%s: INFO: %s\n", timestamp, msg.message);
-                    fflush(log_file);
-                }
-            } else {  // Error
-                syslog(LOG_ERR, "%s", msg.message);
-                fprintf(stderr, "%s: ERROR: %s\n", timestamp, msg.message);
-                if (log_file != NULL) {
-                    fprintf(log_file, "%s: ERROR: %s\n", timestamp, msg.message);
-                    fflush(log_file);
-                }
-            }
-        } else {
-            // Sleep a bit if no messages
-            usleep(10000);  // 10ms
-        }
+void bluetooth_set_logfile(const char* path) {
+    if (log_file != NULL) {
+        fclose(log_file);
     }
-    return NULL;
+    log_file = fopen(path, "a");
 }
 
-static void start_log_thread() {
-    log_thread_running = 1;
-    pthread_create(&log_thread, NULL, log_thread_func, NULL);
-}
-
-static void stop_log_thread() {
-    log_thread_running = 0;
-    pthread_join(log_thread, NULL);
-}
-
-void log_info(const char* format, ...) {
-    va_list args;
+static void log_info(const char* format, ...) {
+    va_list args, args_copy;
     va_start(args, format);
+    va_copy(args_copy, args);
     
-    // Format the message
-    LogMessage msg;
-    msg.level = 0;  // info
-    time(&msg.timestamp);
-    vsnprintf(msg.message, sizeof(msg.message), format, args);
+    // Get current time
+    time_t now;
+    time(&now);
+    char timestamp[26];
+    ctime_r(&now, timestamp);
+    timestamp[24] = '\0'; // Remove newline
     
-    // Add to queue
-    pthread_mutex_lock(&log_mutex);
-    log_queue[log_queue_head] = msg;
-    log_queue_head = (log_queue_head + 1) % LOG_QUEUE_SIZE;
-    pthread_mutex_unlock(&log_mutex);
+    // Log to syslog
+    vsyslog(LOG_INFO, format, args);
     
-    // Add Sentry breadcrumb (still synchronous)
+    // Log to console (stdout)
+    fprintf(stdout, "%s: INFO: ", timestamp);
+    vfprintf(stdout, format, args_copy);
+    fprintf(stdout, "\n");
+    fflush(stdout);  // Ensure immediate output
+    
+    // Log to file if available
+    if (log_file != NULL) {
+        fprintf(log_file, "%s: INFO: ", timestamp);
+        vfprintf(log_file, format, args);
+        fprintf(log_file, "\n");
+        fflush(log_file);
+    }
+    
+    // Add Sentry breadcrumb for info messages
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
-        sentry_value_t crumb = sentry_value_new_breadcrumb("info", msg.message);
+        char message[1024];
+        va_list args_crumb;
+        va_copy(args_crumb, args);
+        vsnprintf(message, sizeof(message), format, args_crumb);
+        va_end(args_crumb);
+        
+        sentry_value_t crumb = sentry_value_new_breadcrumb("info", message);
         sentry_value_set_by_key(crumb, "category", sentry_value_new_string("bluetooth"));
         sentry_add_breadcrumb(crumb);
     }
     #endif
     
+    va_end(args_copy);
     va_end(args);
 }
 
@@ -391,23 +306,20 @@ static void handle_write_value(GDBusConnection *conn,
     hex_string[n_elements * 3 - 1] = '\0';
     log_info("[%s] (setup_char) Data: %s", LOG_TAG, hex_string);
 
-    // Queue the callback
-    pthread_mutex_lock(&callback_mutex);
-    if ((callback_queue_head + 1) % CALLBACK_QUEUE_SIZE != callback_queue_tail) {
-        CallbackData *data = &callback_queue[callback_queue_head];
-        data->data = data_copy;
-        data->length = n_elements;
-        data->success = 1;
-        callback_type_queue[callback_queue_head] = 0;  // setup callback
-        callback_queue_head = (callback_queue_head + 1) % CALLBACK_QUEUE_SIZE;
-        pthread_cond_signal(&callback_cond);
-    } else {
-        // Queue full, handle error
-        free(data_copy);
-        log_error("[%s] Callback queue full, dropping message", LOG_TAG);
+    // If you want to pass these bytes to your existing 'result_callback'
+    if (result_callback) {
+        result_callback(1, data_copy, (int)n_elements);
     }
-    pthread_mutex_unlock(&callback_mutex);
-    
+
+    // Add Sentry breadcrumb
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received setup data");
+        sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
+        sentry_add_breadcrumb(crumb);
+    }
+    #endif
+
     g_variant_unref(array_variant);
     if (options_variant) {
         g_variant_unref(options_variant);
@@ -448,23 +360,20 @@ static void handle_command_write(GDBusConnection *conn,
     hex_string[n_elements * 3 - 1] = '\0';
     log_info("[%s] (cmd_char) Data: %s", LOG_TAG, hex_string);
 
-    // Queue the callback
-    pthread_mutex_lock(&callback_mutex);
-    if ((callback_queue_head + 1) % CALLBACK_QUEUE_SIZE != callback_queue_tail) {
-        CallbackData *data = &callback_queue[callback_queue_head];
-        data->data = data_copy;
-        data->length = n_elements;
-        data->success = 1;
-        callback_type_queue[callback_queue_head] = 1;  // cmd callback
-        callback_queue_head = (callback_queue_head + 1) % CALLBACK_QUEUE_SIZE;
-        pthread_cond_signal(&callback_cond);
-    } else {
-        // Queue full, handle error
-        free(data_copy);
-        log_error("[%s] Callback queue full, dropping message", LOG_TAG);
+    // Use cmd_callback with the copied data
+    if (cmd_callback) {
+        cmd_callback(1, data_copy, (int)n_elements);
     }
-    pthread_mutex_unlock(&callback_mutex);
-    
+
+    // Add Sentry breadcrumb
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received command data");
+        sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
+        sentry_add_breadcrumb(crumb);
+    }
+    #endif
+
     g_variant_unref(array_variant);
     if (options_variant) {
         g_variant_unref(options_variant);
@@ -925,12 +834,6 @@ int bluetooth_init(const char* custom_device_name) {
         log_error("[%s] Failed to create Bluetooth thread", LOG_TAG);
         return -1;
     }
-
-    // Start background threads
-    start_log_thread();
-    start_callback_thread();
-    start_notify_thread();
-    
     return 0;
 }
 
@@ -1050,40 +953,10 @@ void bluetooth_stop() {
     }
     #endif
 
-    // Stop background threads
-    stop_notify_thread();
-    stop_callback_thread();
-    stop_log_thread();
-
     log_info("[%s] Bluetooth service stopped", LOG_TAG);
 }
 
 void bluetooth_notify(const unsigned char* data, int length) {
-    // Create a copy of the data
-    unsigned char* data_copy = malloc(length);
-    if (!data_copy) {
-        log_error("[%s] Failed to allocate memory for notification data", LOG_TAG);
-        return;
-    }
-    memcpy(data_copy, data, length);
-    
-    // Queue the notification
-    pthread_mutex_lock(&notify_mutex);
-    if ((notify_queue_head + 1) % NOTIFY_QUEUE_SIZE != notify_queue_tail) {
-        NotifyData *notify = &notify_queue[notify_queue_head];
-        notify->data = data_copy;
-        notify->length = length;
-        notify->type = 0;  // command characteristic
-        notify_queue_head = (notify_queue_head + 1) % NOTIFY_QUEUE_SIZE;
-        pthread_cond_signal(&notify_cond);
-    } else {
-        // Queue full, handle error
-        free(data_copy);
-        log_error("[%s] Notification queue full, dropping message", LOG_TAG);
-    }
-    pthread_mutex_unlock(&notify_mutex);
-    
-    // Log still happens in the calling thread
     // Log the hex string for debugging
     char hex_string[length * 3 + 1];
     for (size_t i = 0; i < length; i++) {
@@ -1091,6 +964,27 @@ void bluetooth_notify(const unsigned char* data, int length) {
     }
     hex_string[length * 3 - 1] = '\0';
     log_info("[%s] Notifying data: %s", LOG_TAG, hex_string);
+
+    // Create GVariant for the notification value
+    GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
+                                              data, length, sizeof(guchar));
+
+    // Emit PropertiesChanged signal
+    GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
+    g_variant_builder_add(builder, "{sv}", "Value", value);
+
+    g_dbus_connection_emit_signal(connection,
+        NULL,
+        "/com/feralfile/display/service0/cmd_char",
+        "org.freedesktop.DBus.Properties",
+        "PropertiesChanged",
+        g_variant_new("(sa{sv}as)",
+                     "org.bluez.GattCharacteristic1",
+                     builder,
+                     NULL),
+        NULL);
+
+    g_variant_builder_unref(builder);
 }
 
 const char* bluetooth_get_mac_address() {
@@ -1158,107 +1052,4 @@ void bluetooth_send_engineering_data(const unsigned char* data, int length) {
         NULL);
 
     g_variant_builder_unref(builder);
-}
-
-static void* callback_thread_func(void* arg) {
-    while (callback_thread_running) {
-        CallbackData data;
-        int type;
-        int have_data = 0;
-        
-        // Get data from queue
-        pthread_mutex_lock(&callback_mutex);
-        if (callback_queue_head != callback_queue_tail) {
-            data = callback_queue[callback_queue_tail];
-            type = callback_type_queue[callback_queue_tail];
-            callback_queue_tail = (callback_queue_tail + 1) % CALLBACK_QUEUE_SIZE;
-            have_data = 1;
-        } else {
-            // Wait for new data
-            pthread_cond_wait(&callback_cond, &callback_mutex);
-        }
-        pthread_mutex_unlock(&callback_mutex);
-        
-        if (have_data) {
-            if (type == 0 && result_callback) {
-                result_callback(data.success, data.data, data.length);
-            } else if (type == 1 && cmd_callback) {
-                cmd_callback(data.success, data.data, data.length);
-            }
-            
-            // No need to free data here as it's managed by the caller
-        }
-    }
-    return NULL;
-}
-
-static void start_callback_thread() {
-    callback_thread_running = 1;
-    pthread_create(&callback_thread, NULL, callback_thread_func, NULL);
-}
-
-static void stop_callback_thread() {
-    callback_thread_running = 0;
-    pthread_cond_signal(&callback_cond);  // Wake up the thread
-    pthread_join(callback_thread, NULL);
-}
-
-static void* notify_thread_func(void* arg) {
-    while (notify_thread_running) {
-        NotifyData data;
-        int have_data = 0;
-        
-        // Get data from queue
-        pthread_mutex_lock(&notify_mutex);
-        if (notify_queue_head != notify_queue_tail) {
-            data = notify_queue[notify_queue_tail];
-            notify_queue_tail = (notify_queue_tail + 1) % NOTIFY_QUEUE_SIZE;
-            have_data = 1;
-        } else {
-            // Wait for new data
-            pthread_cond_wait(&notify_cond, &notify_mutex);
-        }
-        pthread_mutex_unlock(&notify_mutex);
-        
-        if (have_data) {
-            // Process notification
-            const char* path = (data.type == 0) ? 
-                "/com/feralfile/display/service0/cmd_char" : 
-                "/com/feralfile/display/service0/eng_char";
-                
-            // Create GVariant for the notification value
-            GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
-                                                       data.data, data.length, sizeof(guchar));
-
-            // Emit PropertiesChanged signal
-            GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
-            g_variant_builder_add(builder, "{sv}", "Value", value);
-
-            g_dbus_connection_emit_signal(connection,
-                NULL,
-                path,
-                "org.freedesktop.DBus.Properties",
-                "PropertiesChanged",
-                g_variant_new("(sa{sv}as)",
-                             "org.bluez.GattCharacteristic1",
-                             builder,
-                             NULL),
-                NULL);
-
-            g_variant_builder_unref(builder);
-            free(data.data);  // Free the copied data
-        }
-    }
-    return NULL;
-}
-
-static void start_notify_thread() {
-    notify_thread_running = 1;
-    pthread_create(&notify_thread, NULL, notify_thread_func, NULL);
-}
-
-static void stop_notify_thread() {
-    notify_thread_running = 0;
-    pthread_cond_signal(&notify_cond);  // Wake up the thread
-    pthread_join(notify_thread, NULL);
 }
