@@ -2,6 +2,7 @@ import 'package:feralfile/environment.dart';
 import 'package:feralfile/models/app_config.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/config_service.dart';
+import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/wifi_service.dart';
@@ -21,6 +22,10 @@ class DeviceInfo {
   final String? timezone;
   final String? installedVersion;
   final String? latestVersion;
+  final double screenWidth;
+  final double screenHeight;
+  final String screenBrand;
+  final bool isScreenConnected;
 
   DeviceInfo({
     required this.version,
@@ -32,6 +37,10 @@ class DeviceInfo {
     this.timezone,
     this.installedVersion,
     this.latestVersion,
+    this.screenWidth = 0,
+    this.screenHeight = 0,
+    this.screenBrand = '',
+    this.isScreenConnected = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -45,6 +54,10 @@ class DeviceInfo {
       'timezone': timezone,
       'installedVersion': installedVersion,
       'latestVersion': latestVersion,
+      'screenWidth': screenWidth,
+      'screenHeight': screenHeight,
+      'screenBrand': screenBrand,
+      'isScreenConnected': isScreenConnected,
     };
   }
 }
@@ -86,6 +99,7 @@ class DeviceStatusHandler implements CommandHandler {
     final timezone = await getTimeZone();
     final installedVersion = await VersionHelper.getInstalledVersion();
     final latestVersion = await VersionHelper.getLatestVersion();
+    final screenInfo = await HardwareMonitorService.getScreenInfo();
     final deviceInfo = DeviceInfo(
       version: version,
       ipAddress: ipAddress,
@@ -96,6 +110,10 @@ class DeviceStatusHandler implements CommandHandler {
       timezone: timezone,
       installedVersion: installedVersion,
       latestVersion: latestVersion,
+      screenWidth: screenInfo.width,
+      screenHeight: screenInfo.height,
+      screenBrand: screenInfo.brand,
+      isScreenConnected: screenInfo.connected,
     );
 
     if (replyId == null) {

@@ -74,7 +74,7 @@ class HardwareMonitorService {
       final gpuUsage = await _getGPUUsage();
       final cpuTemp = await _getCPUTemperature();
       final gpuTemp = await _getGPUTemperature();
-      final screenInfo = await _getScreenInfo();
+      final screenInfo = await getScreenInfo();
       final uptime = await _getSystemUptime();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
 
@@ -254,7 +254,7 @@ class HardwareMonitorService {
 
     try {
       final totalRam = await _getTotalRAM();
-      final screenInfo = await _getScreenInfo();
+      final screenInfo = await getScreenInfo();
       final softwareVersion = Environment.appVersion;
 
       logger.info('Hardware specs - '
@@ -301,48 +301,58 @@ class HardwareMonitorService {
     }
   }
 
-  Future<ScreenInfo> _getScreenInfo() async {
+  static Future<ScreenInfo> getScreenInfo() async {
     try {
-      final result = await Process.run('xrandr', ['--current']);
+      final result = await Process.run('xrandr', ['--props']);
       if (result.exitCode == 0) {
         final output = result.stdout.toString();
         final lines = output.split('\n');
+        String? manufacturerCode;
+        double width = 0;
+        double height = 0;
+        bool connected = false;
 
-        for (final line in lines) {
-          // Look for connected HDMI output
-          if (line.contains('HDMI') && line.contains(' connected ')) {
-            // Parse current resolution
-            final match = RegExp(r'(\d+)x(\d+)').firstMatch(line);
-            if (match != null) {
-              return ScreenInfo(
-                width: double.parse(match.group(1)!),
-                height: double.parse(match.group(2)!),
-                connected: true,
-              );
-            }
-          }
-        }
+        for (int i = 0; i < lines.length; i++) {
+          final line = lines[i];
 
-        // If no HDMI display found, look for any connected display
-        for (final line in lines) {
           if (line.contains(' connected ')) {
-            final match = RegExp(r'(\d+)x(\d+)').firstMatch(line);
-            if (match != null) {
-              return ScreenInfo(
-                width: double.parse(match.group(1)!),
-                height: double.parse(match.group(2)!),
-                connected: true,
-              );
+            connected = true;
+            // Parse resolution
+            final resMatch = RegExp(r'(\d+)x(\d+)').firstMatch(line);
+            if (resMatch != null) {
+              width = double.parse(resMatch.group(1)!);
+              height = double.parse(resMatch.group(2)!);
             }
+
+            // Look for EDID data in subsequent lines
+            for (int j = i + 1; j < lines.length && j < i + 20; j++) {
+              if (lines[j].contains('EDID:')) {
+                final edidResult = await Process.run('get-edid', []);
+                if (edidResult.exitCode == 0) {
+                  final edidOutput = edidResult.stdout.toString();
+                  final manufacturerMatch =
+                      RegExp(r'Manufacturer:\s+(\w+)').firstMatch(edidOutput);
+                  manufacturerCode = manufacturerMatch?.group(1);
+                }
+                break;
+              }
+            }
+            break;
           }
         }
+
+        return ScreenInfo(
+          width: width,
+          height: height,
+          connected: connected,
+          brand: manufacturerCode ?? '',
+        );
       }
 
-      // Return default values if no display info found
-      return ScreenInfo(width: 0, height: 0, connected: false);
+      return ScreenInfo(width: 0, height: 0, connected: false, brand: '');
     } catch (e) {
       logger.warning('Error getting screen information: $e');
-      return ScreenInfo(width: 0, height: 0, connected: false);
+      return ScreenInfo(width: 0, height: 0, connected: false, brand: '');
     }
   }
 
@@ -381,10 +391,12 @@ class ScreenInfo {
   final double width;
   final double height;
   final bool connected;
+  final String brand;
 
   ScreenInfo({
     required this.width,
     required this.height,
     required this.connected,
+    this.brand = '',
   });
 }
