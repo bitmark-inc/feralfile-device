@@ -4,6 +4,7 @@ import subprocess
 import asyncio
 import websockets
 import sentry_sdk
+import os
 
 # Constants
 LOG_PATH = "/var/log/chromium/chrome_debug.log"
@@ -11,8 +12,22 @@ HEARTBEAT_TIMEOUT = 15  # Seconds to wait for a heartbeat
 MAX_HEARTBEAT_FAILURES = 4  # Number of heartbeat failures before rebooting
 PING_IPS = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]  # IPs to check internet connectivity
 
-# Sentry DSN (replaced during pi-gen build)
-SENTRY_DSN = "REPLACE_SENTRY_DSN"
+CONFIG_PATH = "/home/feralfile/.config/feralfile/feralfile-launcher.conf"
+
+def get_config_value(key, config_path=CONFIG_PATH):
+    if not os.path.exists(config_path):
+        return None
+    with open(config_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith(f"{key}"):
+                # Split on ' = ' and strip spaces
+                parts = line.split("=", 1)
+                if len(parts) == 2:
+                    return parts[1].strip()
+    return None
+
+SENTRY_DSN = get_config_value("sentry_dsn")
 
 # Initialize Sentry SDK
 sentry_sdk.init(
