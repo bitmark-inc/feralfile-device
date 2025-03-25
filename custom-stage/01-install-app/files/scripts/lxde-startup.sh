@@ -11,9 +11,16 @@ xset s noblank
 xset -dpms
 
 # Enable and start necessary systemd services if not already enabled
-for service in feralfile-launcher feralfile-chromium feralfile-watchdog feralfile-install-deps; do
+for service in feralfile-launcher feralfile-chromium feralfile-watchdog; do
     if ! sudo systemctl is-enabled "$service.service" >/dev/null 2>&1; then
         sudo systemctl enable "$service.service"
         sudo systemctl start "$service.service"
+    fi
+done
+
+for timer in feralfile-updater@08:00 feralfile-updater@16:00 feralfile-updater@24:00; do
+    if ! sudo systemctl is-enabled "$timer.timer" >/dev/null 2>&1; then
+        sudo systemctl enable "$timer.timer"
+        sudo systemctl start "$timer.timer"
     fi
 done
