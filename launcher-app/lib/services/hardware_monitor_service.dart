@@ -103,6 +103,7 @@ class HardwareMonitorService {
           'CPU Temp: ${cpuTemp.toStringAsFixed(1)}°C, '
           'GPU Temp: ${gpuTemp.toStringAsFixed(1)}°C, '
           'Resolution: ${screenInfo.width.toInt()}x${screenInfo.height.toInt()}, '
+          'Brand: ${screenInfo.brand}, '
           'Uptime: ${Duration(seconds: uptime).toString()}, '
           'Timestamp: ${DateTime.fromMillisecondsSinceEpoch(timestamp).toIso8601String()}');
     } catch (e) {
