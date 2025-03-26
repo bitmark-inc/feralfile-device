@@ -100,7 +100,7 @@ class WifiService {
         String ssid = parts[0].trim();
         bool isActive = parts[1].trim() == "yes";
 
-        wifiNetworks[ssid] = isActive;
+        wifiNetworks[ssid] = isActive || wifiNetworks[ssid] == true;
       }
 
       return wifiNetworks;
