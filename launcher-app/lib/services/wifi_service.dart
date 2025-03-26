@@ -66,22 +66,11 @@ class WifiService {
   }
 
   static Future<String?> getCurrentWifiSSID() async {
-    try {
-      ProcessResult scanResult = await Process.run(
-        'nmcli',
-        ['-t', '-f', 'SSID', 'dev', 'wifi'],
-        runInShell: true,
-      );
-      if (scanResult.exitCode != 0) {
-        throw Exception('nmcli command failed: ${scanResult.stderr}');
+    final ssids = await getAvailableSSIDs();
+    for (final ssid in ssids.entries) {
+      if (ssid.value) {
+        return ssid.key;
       }
-
-      String ssid = scanResult.stdout.toString().trim();
-      if (ssid.isNotEmpty) {
-        return ssid;
-      }
-    } catch (e) {
-      logger.info('Error getting current Wi-Fi SSID: $e');
     }
     return null;
   }
@@ -132,7 +121,7 @@ class WifiService {
       while (DateTime.now().isBefore(endTime)) {
         var networkMap = await getAvailableSSIDs();
         await onResultScan(networkMap);
-
+        
         // Check if we should stop scanning
         if (await shouldStopScan?.call(networkMap) ?? false) {
           break;
