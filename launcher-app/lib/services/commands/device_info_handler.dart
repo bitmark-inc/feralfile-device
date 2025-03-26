@@ -2,10 +2,10 @@ import 'package:feralfile/environment.dart';
 import 'package:feralfile/models/app_config.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/config_service.dart';
+import 'package:feralfile/services/internet_connectivity_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/wifi_service.dart';
 import 'package:feralfile/utils/version_helper.dart';
-import 'package:feralfile/services/internet_connectivity_service.dart';
 import 'package:process_run/stdio.dart';
 
 import '../logger.dart';
@@ -79,7 +79,8 @@ class DeviceStatusHandler implements CommandHandler {
     final config = await ConfigService.loadConfig();
     final version = _loadVersion();
     final ipAddress = await WifiService.getLocalIpAddress();
-    final isConnectedToWifi = InternetConnectivityService().isOnline;
+    final isConnectedToWifi =
+        await InternetConnectivityService().checkConnectivity();
     final connectedWifi = await WifiService.getCurrentWifiSSID();
     final screenRotation = ScreenRotation.fromString(
         config?.screenRotation ?? ScreenRotation.normal.name);
