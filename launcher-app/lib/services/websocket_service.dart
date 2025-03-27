@@ -30,10 +30,10 @@ class WebSocketService {
     // Subscribe to connectivity changes.
     InternetConnectivityService().onStatusChange.listen((status) {
       if (status && !internetConnected) {
-        logger.info('Internet is online. Processing messages.');
+        logger.info('Internet is online. Starting heartbeat.');
         internetConnected = true;
       } else if (!status && internetConnected) {
-        logger.info('Internet is offline. Pausing message processing.');
+        logger.info('Internet is offline. Pausing heartbeat.');
         internetConnected = false;
       }
     });
@@ -167,10 +167,6 @@ class WebSocketService {
   /// Sends a message to the website with an optional callback
   void _sendMessage(WebSocketRequestMessage message, bool logging,
       {Function(WebSocketResponseMessage)? callback}) {
-    if (!internetConnected) {
-      logger.info('Internet offline, stop processing messages.');
-      return;
-    }
     if (_websiteSocket?.readyState == WebSocket.open) {
       if (callback != null && message.messageID != null) {
         _messageCallbacks[message.messageID!] = callback;
