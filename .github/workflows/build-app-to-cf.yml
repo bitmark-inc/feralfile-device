@@ -254,7 +254,7 @@ jobs:
           DESCRIPTION: "Feral File Connection Assistant"
           MAINTAINER: "Bitmark Inc <support@feralfile.com>"
           INSTALL_DIR: "/opt/feralfile"
-          DEPENDS: "gldriver-test, chromium, rpi-chromium-mods, fonts-droid-fallback, fonts-liberation2, x11-xserver-utils, xdotool, xserver-xorg, xserver-xorg-video-fbdev, xinit, openbox, lightdm, bluez, zenity, jq, unattended-upgrades"
+          DEPENDS: "git, alsa-utils, policykit-1, chromium, rpi-chromium-mods, libwidevinecdm0, gldriver-test, fonts-droid-fallback, fonts-liberation2, obconf, python3-sentry-sdk, python3-websockets, vulkan-tools, mesa-vulkan-drivers, xcompmgr, ffmpeg, xserver-xorg, xinit, unclutter, mousepad, eom, lxde, zenity, xdg-utils, lightdm"
         run: |
           mkdir -p package/DEBIAN
           mkdir -p package$INSTALL_DIR/lib

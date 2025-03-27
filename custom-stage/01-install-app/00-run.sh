@@ -1,35 +1,38 @@
 #!/bin/bash
 
-mkdir -p "${ROOTFS_DIR}/home/feralfile/feralfile/"
+cp -r "files/migrations" "${ROOTFS_DIR}/home/feralfile/migrations" || {
+    echo "Error: Failed to copy files/migrations"
+    exit 1
+}
+chmod -R 755 "${ROOTFS_DIR}/home/feralfile/migrations"
 
-# Copy from the stage directory to the ROOTFS
-cp "feralfile-launcher.conf" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
+cp -r "files/scripts" "${ROOTFS_DIR}/home/feralfile/scripts" || {
+    echo "Error: Failed to copy files/scripts"
+    exit 1
+}
+chmod -R 755 "${ROOTFS_DIR}/home/feralfile/scripts"
+
+cp -r "files/services" "${ROOTFS_DIR}/home/feralfile/services" || {
+    echo "Error: Failed to copy files/services"
+    exit 1
+}
+chmod -R 755 "${ROOTFS_DIR}/home/feralfile/services"
+
+cp "files/migrate.sh" "${ROOTFS_DIR}/home/feralfile/migrate.sh" || {
+    echo "Error: Failed to copy files/migrate.sh"
+    exit 1
+}
+chmod 755 "${ROOTFS_DIR}/home/feralfile/migrate.sh"
+
+mkdir -p "${ROOTFS_DIR}/home/feralfile/.config/feralfile"
+cp "feralfile-launcher.conf" "${ROOTFS_DIR}/home/feralfile/.config/feralfile/feralfile-launcher.conf" || {
     echo "Error: Failed to copy feralfile-launcher.conf"
     exit 1
 } 
-cp "files/feralfile-chromium.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
-    echo "Error: Failed to copy files/feralfile-chromium.sh"
-    exit 1
-}
-cp "files/feralfile-watchdog.py" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
-    echo "Error: Failed to copy files/feralfile-watchdog.py"
-    exit 1
-}
-cp "files/feralfile-install-deps.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
-    echo "Error: Failed to copy files/feralfile-install-deps.sh"
-    exit 1
-}
-cp "files/mesa-patch.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
-    echo "Error: Failed to copy files/mesa-patch.sh"
-    exit 1
-}
-cp "files/lxde-startup.sh" "${ROOTFS_DIR}/home/feralfile/feralfile/" || {
-    echo "Error: Failed to copy files/lxde-startup.sh"
-    exit 1
-}
 
 mkdir -p "${ROOTFS_DIR}/etc/apt/trusted.gpg.d/"
 cp "files/apt-public-key.asc" "${ROOTFS_DIR}/etc/apt/trusted.gpg.d/feralfile.asc" || {
     echo "Error: Failed to copy files/apt-public-key.asc"
     exit 1
 }
+chmod 644 "${ROOTFS_DIR}/etc/apt/trusted.gpg.d/feralfile.asc"
