@@ -5,11 +5,13 @@ import '../logger.dart';
 import 'command_repository.dart';
 
 class ScreenRotationHandler implements CommandHandler {
-  static ScreenRotation _currentRotation = ScreenRotation.normal;
+  static ScreenRotation? _currentRotation;
 
-  ScreenRotation _getNextRotation(bool clockwise) {
-    _currentRotation = _currentRotation.next(clockwise: clockwise);
-    return _currentRotation;
+  Future<ScreenRotation> _getNextRotation(bool clockwise) async {
+    _currentRotation ??=
+        await RotateService.loadSavedRotation() ?? ScreenRotation.normal;
+    _currentRotation = _currentRotation!.next(clockwise: clockwise);
+    return _currentRotation!;
   }
 
   @override
@@ -19,7 +21,7 @@ class ScreenRotationHandler implements CommandHandler {
     logger.info('Current rotation: $_currentRotation');
 
     final bool clockwise = data['clockwise'] ?? false;
-    final ScreenRotation rotation = _getNextRotation(clockwise);
+    final ScreenRotation rotation = await _getNextRotation(clockwise);
     logger.info('Next rotation: $rotation');
 
     try {

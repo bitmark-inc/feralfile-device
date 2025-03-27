@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:feralfile/services/rotate_service.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/app_config.dart';
@@ -55,7 +56,7 @@ class ConfigService {
     return saveConfig(newConfig);
   }
 
-  static Future<bool> updateScreenRotation(String rotation) async {
+  static Future<bool> updateScreenRotation(ScreenRotation rotation) async {
     final currentConfig = await loadConfig();
     final newConfig = currentConfig?.copyWith(screenRotation: rotation) ??
         AppConfig(screenRotation: rotation);
