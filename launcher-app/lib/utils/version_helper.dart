@@ -88,47 +88,21 @@ class VersionHelper {
     }
   }
 
-  static Future<ProcessResult> _updateToVersion(String version) async {
-    logger.info("Installing feralfile-launcher version: $version");
+  static Future<ProcessResult> _updateSystem() async {
+    logger.info("Updating the system...");
     ProcessResult result = await Process.run(
       'sudo',
-      ['apt-get', 'install', 'feralfile-launcher=$version'],
+      ['/home/feralfile/services/feralfile-updater.sh'],
     );
 
     if (result.exitCode == 0) {
-      logger.info("Successfully installed version $version.");
-      _installedVersion = version;
+      logger.info("Successfully installed latest version.");
+      await getInstalledVersion();
     } else {
       // if there was an error, clear apt cache, update package list and try again
-      logger.info("Error installing package: ${result.stderr}");
+      logger.info("Error installing latest version: ${result.stderr}");
     }
     return result;
-  }
-
-  /// Install a specific version of feralfile-launcher
-  static Future<void> updateToVersion(String version) async {
-    try {
-      await updatePackageList(
-          forceUpdate: true); // First, update the package list
-
-      ProcessResult result = await _updateToVersion(version);
-
-      if (result.exitCode != 0) {
-        logger.info("Trying to update package list and install again...");
-        await Future.delayed(const Duration(seconds: 3));
-        await updatePackageList(
-            forceUpdate: true); // First, update the package list
-        result = await _updateToVersion(version);
-        if (result.exitCode != 0) {
-          logger.info("Failed to install version $version: ${result.stderr}");
-        } else {
-          logger.info(
-              "Successfully installed version $version after trying again.");
-        }
-      }
-    } catch (e) {
-      logger.info("Exception during installation: $e");
-    }
   }
 
   // update to latest version
@@ -142,7 +116,12 @@ class VersionHelper {
       return;
     }
     if (latestVersion != null) {
-      await updateToVersion(latestVersion);
+      try {
+          logger.info("Trying to update the system...");
+          await _updateSystem();
+      } catch (e) {
+        logger.info("Exception during system upgrade: $e");
+      }
     } else {
       logger.info("Failed to get latest version.");
     }
