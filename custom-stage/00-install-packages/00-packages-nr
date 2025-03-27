@@ -1,4 +1,4 @@
-xserver-xorg xinit
+xserver-xorg xinit xdotool
 unclutter
 mousepad
 eom
