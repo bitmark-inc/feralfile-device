@@ -89,6 +89,8 @@ class WifiService {
 
       Map<String, bool> wifiNetworks = {};
 
+      logger.info('Wi-Fi networks: ${scanResult.stdout}');
+
       for (String line in scanResult.stdout.toString().split('\n')) {
         if (line.trim().isEmpty) continue;
 
@@ -98,7 +100,7 @@ class WifiService {
         String ssid = parts[0].trim();
         bool isActive = parts[1].trim() == "yes";
 
-        wifiNetworks[ssid] = isActive;
+        wifiNetworks[ssid] = isActive || wifiNetworks[ssid] == true;
       }
 
       return wifiNetworks;
@@ -121,7 +123,7 @@ class WifiService {
       while (DateTime.now().isBefore(endTime)) {
         var networkMap = await getAvailableSSIDs();
         await onResultScan(networkMap);
-        
+
         // Check if we should stop scanning
         if (await shouldStopScan?.call(networkMap) ?? false) {
           break;

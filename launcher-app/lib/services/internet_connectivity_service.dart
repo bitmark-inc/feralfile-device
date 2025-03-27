@@ -34,7 +34,7 @@ class InternetConnectivityService {
   }
 
   void _updateConnectivity() async {
-    bool online = await _checkConnectivity();
+    bool online = await checkConnectivity();
     if (online != isOnline) {
       isOnline = online;
       print('Internet connectivity changed: $isOnline');
@@ -42,12 +42,11 @@ class InternetConnectivityService {
   }
 
   /// Pings each target address. Returns true if at least one responds.
-  Future<bool> _checkConnectivity() async {
+  Future<bool> checkConnectivity() async {
     for (var address in _pingAddresses) {
       try {
         // Use the Linux ping command; '-c 1' sends one ping.
-        ProcessResult result =
-            await Process.run('ping', ['-c', '1', address]);
+        ProcessResult result = await Process.run('ping', ['-c', '1', address]);
         if (result.exitCode == 0) {
           return true;
         }
