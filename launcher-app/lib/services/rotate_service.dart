@@ -64,71 +64,80 @@ class RotateService {
     return null;
   }
 
-  static Future<void> _initializePrimaryDisplay() async {
-    if (_primaryDisplay != null) return;
-
+  static Future<ProcessResult> rotateScreen(
+      ScreenRotation screenRotation) async {
     try {
-      final result = await Process.run('xrandr', ['--query', '--current']);
-      if (result.exitCode == 0) {
-        // Parse output to find primary display
-        final lines = result.stdout.toString().split('\n');
-        for (final line in lines) {
-          if (line.contains(' connected') && line.contains(' primary ')) {
-            _primaryDisplay = line.split(' ')[0];
-            logger.info('Primary display detected: $_primaryDisplay');
-            break;
+      // Convert enum to number value expected by the script
+      final displayRotateValue = _getDisplayRotateValue(screenRotation);
+      final result = await Process.run('sudo',
+          ['/home/feralfile/scripts/rotate-display.sh', displayRotateValue.toString()]);
+
+      if (result.exitCode != 0) {
+        logger.warning('System rotation script failed: ${result.stderr}');
+      } else {
+        logger.info('Screen rotated to ${screenRotation.name}');
+        _saveRotation(screenRotation);
+      }
+      return result;
+    } catch (e) {
+      logger.severe('Error applying rotation: $e');
+      return ProcessResult(1, 1, '', e.toString());
+    }
+  }
+
+  // Get the current rotation from the system
+  static Future<ScreenRotation> getCurrentRotation() async {
+    try {
+      // First try to read from the system file
+      final orientationFile = File('/var/lib/display-orientation');
+      if (await orientationFile.exists()) {
+        final value = await orientationFile.readAsString();
+        final rotationValue = int.tryParse(value.trim());
+        if (rotationValue != null) {
+          switch (rotationValue) {
+            case 0:
+              return ScreenRotation.normal;
+            case 1:
+              return ScreenRotation.right;
+            case 2:
+              return ScreenRotation.inverted;
+            case 3:
+              return ScreenRotation.left;
           }
         }
       }
 
-      if (_primaryDisplay == null) {
-        logger.warning(
-            'Could not detect primary display, falling back to default xrandr command');
+      // Fallback to xrandr if file reading fails
+      final result = await Process.run('xrandr', ['--query', '--current']);
+      if (result.exitCode == 0) {
+        final lines = result.stdout.toString().split('\n');
+        for (final line in lines) {
+          if (line.contains(' connected')) {
+            if (line.contains(' normal ')) return ScreenRotation.normal;
+            if (line.contains(' right ')) return ScreenRotation.right;
+            if (line.contains(' inverted ')) return ScreenRotation.inverted;
+            if (line.contains(' left ')) return ScreenRotation.left;
+          }
+        }
       }
     } catch (e) {
-      logger.severe('Error detecting primary display: $e');
+      logger.warning('Error getting current rotation: $e');
     }
+    // Default if we can't determine
+    return ScreenRotation.normal;
   }
 
-  static Future<ProcessResult> rotateScreen(
-      ScreenRotation screenRotation) async {
-    await _initializePrimaryDisplay();
-    final ProcessResult result;
-    final rotation = screenRotation.name;
-    if (_primaryDisplay != null) {
-      // Use faster command with specific display
-      result = await Process.run(
-          'xrandr', ['--output', _primaryDisplay!, '--rotate', rotation]);
-    } else {
-      // Fallback to original command
-      result = await Process.run('xrandr', ['-o', rotation]);
-    }
-
-    if (result.exitCode != 0) {
-      logger.warning('Failed to rotate screen: ${result.stderr}');
-    } else {
-      await _saveRotation(screenRotation);
-      logger.info('Screen rotated to $rotation and saved setting');
-    }
-
-    return result;
-  }
-
-  static Future<void> initializeRotation() async {
-    await _initializePrimaryDisplay(); // Initialize display name early
-    final savedRotation = await loadSavedRotation();
-    if (savedRotation != null) {
-      try {
-        final result = await rotateScreen(savedRotation);
-        if (result.exitCode != 0) {
-          logger.warning('Failed to rotate screen: ${result.stderr}');
-        } else {
-          await _saveRotation(savedRotation);
-          logger.info('Screen rotated to $savedRotation and saved setting');
-        }
-      } catch (e) {
-        logger.severe('Error applying saved rotation: $e');
-      }
+  // Helper to convert ScreenRotation to display_rotate values
+  static int _getDisplayRotateValue(ScreenRotation rotation) {
+    switch (rotation) {
+      case ScreenRotation.normal:
+        return 0;
+      case ScreenRotation.right:
+        return 1;
+      case ScreenRotation.inverted:
+        return 2;
+      case ScreenRotation.left:
+        return 3;
     }
   }
 }
