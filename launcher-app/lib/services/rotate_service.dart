@@ -70,7 +70,7 @@ class RotateService {
       // Convert enum to number value expected by the script
       final displayRotateValue = _getDisplayRotateValue(screenRotation);
       final result = await Process.run('sudo',
-          ['/usr/local/bin/rotate-display.sh', displayRotateValue.toString()]);
+          ['/home/feralfile/scripts/rotate-display.sh', displayRotateValue.toString()]);
 
       if (result.exitCode != 0) {
         logger.warning('System rotation script failed: ${result.stderr}');

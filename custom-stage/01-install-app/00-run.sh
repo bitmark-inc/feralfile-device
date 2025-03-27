@@ -36,8 +36,3 @@ cp "files/apt-public-key.asc" "${ROOTFS_DIR}/etc/apt/trusted.gpg.d/feralfile.asc
     exit 1
 }
 chmod 644 "${ROOTFS_DIR}/etc/apt/trusted.gpg.d/feralfile.asc"
-
-cp "files/rotate-display.sh" "${ROOTFS_DIR}/usr/local/bin/rotate-display.sh" || {
-    echo "Error: Failed to copy files/rotate-display.sh"
-    exit 1
-}

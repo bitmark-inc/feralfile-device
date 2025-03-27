@@ -1,5 +1,5 @@
 #!/bin/bash
-# File: /usr/local/bin/rotate-display
+# File: /home/feralfile/scripts/rotate-display
 
 # Usage: rotate-display [0-3]
 # 0 = normal (0°), 1 = right (90°), 2 = inverted (180°), 3 = left (270°)
