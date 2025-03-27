@@ -1,28 +1,70 @@
+import 'dart:async';
 import 'dart:io';
 import '../bluetooth_service.dart';
 import '../logger.dart';
 import 'command_repository.dart';
 
-class CursorHandler implements CommandHandler {
-  static double screenWidth = 0;
-  static double screenHeight = 0;
+class CommandItem {
+  final String command;
+  final Function? onComplete;
+  CommandItem(this.command, this.onComplete);
+}
 
-  static Future<void> initializeScreenDimensions() async {
+class CursorHandler implements CommandHandler {
+  // Singleton pattern
+  static final CursorHandler _instance = CursorHandler._internal();
+  factory CursorHandler() => _instance;
+  CursorHandler._internal();
+
+  Process? _xdotoolProcess;
+  IOSink? _stdin;
+  Timer? _autoDisposeTimer;
+  bool _isProcessingQueue = false;
+  final List<CommandItem> _commandQueue = [];
+
+  static const int MOVEMENT_DELAY = 1; // milliseconds
+  static const int AUTO_DISPOSE_DELAY = 3000; // 3 seconds
+
+  // Core function to process commands
+  Future<void> _processCommands() async {
+    if (_isProcessingQueue) return;
+    _isProcessingQueue = true;
+
     try {
-      final result = await Process.run('xrandr', ['--current']);
-      if (result.exitCode == 0) {
-        // Parse xrandr output to get current resolution
-        final output = result.stdout.toString();
-        final match = RegExp(r'current (\d+) x (\d+)').firstMatch(output);
-        if (match != null) {
-          screenWidth = double.parse(match.group(1)!);
-          screenHeight = double.parse(match.group(2)!);
-          logger.info(
-              'Screen dimensions initialized: ${screenWidth}x$screenHeight');
-        }
+      await _ensureProcessRunning();
+
+      while (_commandQueue.isNotEmpty) {
+        final item = _commandQueue.removeAt(0);
+        _stdin?.writeln(item.command);
+        await Future.delayed(Duration(milliseconds: MOVEMENT_DELAY));
+        item.onComplete?.call({'success': true});
       }
+
+      // Auto dispose after 3 seconds of inactivity
+      _autoDisposeTimer?.cancel();
+      _autoDisposeTimer =
+          Timer(Duration(milliseconds: AUTO_DISPOSE_DELAY), () => dispose());
+    } finally {
+      _isProcessingQueue = false;
+    }
+  }
+
+  // Initialize xdotool process
+  Future<void> _ensureProcessRunning() async {
+    if (_xdotoolProcess != null) return;
+
+    try {
+      _xdotoolProcess = await Process.start('bash', []);
+      _stdin = _xdotoolProcess?.stdin;
+
+      // Restart process if it dies
+      _xdotoolProcess?.exitCode.then((_) {
+        _xdotoolProcess = null;
+        _stdin = null;
+      });
     } catch (e) {
-      logger.severe('Error getting screen dimensions: $e');
+      logger.severe('Failed to start xdotool process: $e');
+      rethrow;
     }
   }
 
@@ -31,57 +73,47 @@ class CursorHandler implements CommandHandler {
       Map<String, dynamic> data, BluetoothService bluetoothService,
       [String? replyId]) async {
     try {
-      // Check if this is a tap or drag gesture based on the command type
+      _autoDisposeTimer?.cancel();
+
       if (data.isEmpty) {
-        // Handle tap gesture - simple click at current position
-        final result = await Process.run('xdotool', ['click', '1']);
-        if (result.exitCode != 0) {
-          logger.warning('Failed to perform tap click: ${result.stderr}');
-          return;
-        }
-
-        logger.info('Tap gesture executed');
-        bluetoothService.notify('tapGesture', {'success': true});
+        // Handle tap
+        _commandQueue.add(CommandItem('xdotool click 1',
+            (_) => bluetoothService.notify('tapGesture', {'success': true})));
       } else {
-        // Handle drag gesture (existing code)
+        // Handle movements
         final List<dynamic> movements = data['cursorOffsets'] as List<dynamic>;
-
         for (var movement in movements) {
           final dx = (movement['dx'] as num).toDouble();
           final dy = (movement['dy'] as num).toDouble();
-          final coefficientX = (movement['coefficientX'] as num).toDouble();
-          final coefficientY = (movement['coefficientY'] as num).toDouble();
 
-          // Calculate actual pixel movement with screen size scaling
-          final moveX = (dx * coefficientX * screenWidth).round();
-          final moveY = (dy * coefficientY * screenHeight).round();
+          final moveX = (dx * 3).round();
+          final moveY = (dy * 3).round();
 
-          // Use xdotool to move mouse relative to current position
-          final result = await Process.run('xdotool', [
-            'mousemove_relative',
-            '--', // Required for negative values
-            moveX.toString(),
-            moveY.toString()
-          ]);
-
-          if (result.exitCode != 0) {
-            logger.warning('Failed to move cursor: ${result.stderr}');
-            break;
-          }
-        }
-
-        logger.info('Cursor movement completed');
-        if (replyId != null) {
-          bluetoothService.notify(replyId, {'success': true});
+          bool isLastMovement = movement == movements.last;
+          _commandQueue.add(CommandItem(
+              'xdotool mousemove_relative -- $moveX $moveY',
+              isLastMovement
+                  ? (_) => bluetoothService.notify(replyId!, {'success': true})
+                  : null));
         }
       }
+
+      _processCommands();
     } catch (e) {
-      logger.severe('Error in cursor handler: $e');
+      logger.severe('Error: $e');
       if (replyId != null) {
         bluetoothService
             .notify(replyId, {'success': false, 'error': e.toString()});
       }
-      rethrow;
     }
+  }
+
+  Future<void> dispose() async {
+    _autoDisposeTimer?.cancel();
+    _commandQueue.clear();
+    await _stdin?.close();
+    await _xdotoolProcess?.kill();
+    _xdotoolProcess = null;
+    _stdin = null;
   }
 }

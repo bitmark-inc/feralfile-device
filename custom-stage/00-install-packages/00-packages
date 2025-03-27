@@ -1,8 +1,14 @@
+alsa-utils
+policykit-1
+chromium rpi-chromium-mods libwidevinecdm0
 gldriver-test
-chromium rpi-chromium-mods
 fonts-droid-fallback
 fonts-liberation2
-x11-xserver-utils
-xdotool
-python3-websockets
+obconf
+python3-pyqt5
+python3-opengl
 python3-sentry-sdk
+python3-websockets
+vulkan-tools mesa-vulkan-drivers
+xcompmgr
+ffmpeg

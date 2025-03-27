@@ -1,6 +1,8 @@
+xserver-xorg xinit
 unclutter
-xserver-xorg xserver-xorg-video-fbdev xinit
-openbox lightdm
-bluez
-zenity jq
-unattended-upgrades
+mousepad
+eom
+lxde
+zenity xdg-utils
+lightdm
+git
