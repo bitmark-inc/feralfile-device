@@ -54,5 +54,5 @@ EOF
 mkdir -p "/etc/udev/rules.d/"
 rm -f /etc/udev/rules.d/99-hdmi-hotplug.rules
 cat > /etc/udev/rules.d/99-hdmi-hotplug.rules << EOF
-SUBSYSTEM=="drm", ACTION=="change", RUN+="/home/feralfile/scripts/detect-monitor.sh"
+SUBSYSTEM=="drm", ACTION=="change", RUN+="/usr/bin/systemctl start detect-monitor.service"
 EOF

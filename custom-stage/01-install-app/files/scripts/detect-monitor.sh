@@ -5,21 +5,21 @@
 set -e
 
 # File paths
-CMDLINE_FILE="/boot/cmdline.txt"
+CMDLINE_FILE="/boot/firmware/cmdline.txt"
 TEMP_FILE="/tmp/cmdline.txt.new"
 
 # Detect connected display using xrandr
-DISPLAY=$(xrandr --query | grep " connected" | cut -d " " -f1 | head -1)
+DISPLAY=$(DISPLAY=:0 XAUTHORITY="/home/feralfile/.Xauthority" xrandr --query | grep " connected" | cut -d " " -f1 | head -1)
 if [ -z "$DISPLAY" ]; then
   echo "Error: No connected display found."
   exit 1
 fi
 
 # Get current resolution and frame rate
-MODE_LINE=$(xrandr --query | grep " connected" -A 1 | grep "*")
+MODE_LINE=$(DISPLAY=:0 XAUTHORITY="/home/feralfile/.Xauthority" xrandr --query | grep " connected" -A 1 | grep "\*")
 RESOLUTION=$(echo "$MODE_LINE" | awk '{print $1}')
-FPS=$(echo "$MODE_LINE" | awk '{print $2}' | tr -d '*+')
-FPS=$(echo "$FPS" | grep -o '[0-9]*')  # Extract numeric FPS
+FPS=$(echo "$MODE_LINE" | awk '{print $2}' | tr -d '*+')  # e.g., 59.95
+FPS=$(printf "%.0f" "$FPS")  # Rounds 59.95 to 60
 
 # Check existing video= parameter in cmdline.txt
 EXISTING_VIDEO=$(grep -o "video=[^ ]*" "$CMDLINE_FILE" || echo "")
@@ -33,18 +33,11 @@ fi
 # Construct new video parameter, e.g., video=HDMI-A-1:1920x1080@60,rotate=90
 VIDEO_PARAM="video=${DISPLAY}:${RESOLUTION}@${FPS}${ROTATE_OPTION}"
 
-# Ensure cmdline.txt is accessible
-if [ ! -f "$CMDLINE_FILE" ] || [ ! -w "$CMDLINE_FILE" ]; then
-  echo "Error: Cannot access $CMDLINE_FILE. Run with sudo or check permissions."
-  exit 1
-fi
-
-# Update cmdline.txt: remove old video=, append new one
-grep -v "video=" "$CMDLINE_FILE" > "$TEMP_FILE"
+# Update cmdline.txt: remove only the video= parameter and append new one
+sed -E 's/(^| )video=[^ ]+//g' "$CMDLINE_FILE" > "$TEMP_FILE"
 echo -n "$(cat $TEMP_FILE) $VIDEO_PARAM" > "$TEMP_FILE"
-sed 's/ \+/ /g; s/^ //; s/ $//' "$TEMP_FILE" > "$CMDLINE_FILE"
-rm -f "$TEMP_FILE"
+sudo sed 's/ \+/ /g; s/^ //; s/ $//' "$TEMP_FILE" | sudo tee "$CMDLINE_FILE" > /dev/null
+#rm -f "$TEMP_FILE"
 
 echo "HDMI event detected at $(date). Updated $CMDLINE_FILE with: $VIDEO_PARAM" >> /tmp/hdmi-log.txt
-
-echo "Updated $CMDLINE_FILE with: $VIDEO_PARAM"
+echo "HDMI event detected at $(date). Updated $CMDLINE_FILE with: $VIDEO_PARAM"

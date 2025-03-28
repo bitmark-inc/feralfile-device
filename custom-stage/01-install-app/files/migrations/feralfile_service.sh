@@ -85,3 +85,13 @@ Unit=feralfile-updater@%i.service
 [Install]
 WantedBy=timers.target
 EOF
+
+rm -f /etc/systemd/system/detect-monitor.service
+cat > /etc/systemd/system/detect-monitor.service << EOF
+[Unit]
+Description=Detect HDMI monitor changes and update cmdline.txt
+
+[Service]
+Type=oneshot
+ExecStart=/home/feralfile/scripts/detect-monitor.sh
+EOF
