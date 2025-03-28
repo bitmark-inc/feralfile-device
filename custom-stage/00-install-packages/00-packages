@@ -10,5 +10,4 @@ python3-opengl
 python3-sentry-sdk
 python3-websockets
 vulkan-tools mesa-vulkan-drivers
-xcompmgr
 ffmpeg

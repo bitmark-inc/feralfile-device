@@ -13,9 +13,8 @@ LOCAL_BRANCH="$(get_config_value "app_branch")"
 mkdir -p /home/feralfile/.config/lxsession/LXDE
 rm -f /home/feralfile/.config/lxsession/LXDE/autostart
 cat > /home/feralfile/.config/lxsession/LXDE/autostart <<EOF
-@env vblank_mode=1
 @unclutter -idle 1
-@/home/feralfile/scripts/lxde-startup.sh
+@sudo /home/feralfile/scripts/lxde-startup.sh
 EOF
 
 chown -R feralfile:feralfile /home/feralfile/.config
@@ -49,4 +48,11 @@ mkdir -p "/etc/apt/sources.list.d/"
 rm -f /etc/apt/sources.list.d/feralfile.list
 cat > /etc/apt/sources.list.d/feralfile.list << EOF
 deb [arch=arm64 signed-by=/etc/apt/trusted.gpg.d/feralfile.asc] https://feralfile-device-distribution.bitmark-development.workers.dev/ $LOCAL_BRANCH main 
+EOF
+
+# Set udev auto run to detect monitor
+mkdir -p "/etc/udev/rules.d/"
+rm -f /etc/udev/rules.d/99-hdmi-hotplug.rules
+cat > /etc/udev/rules.d/99-hdmi-hotplug.rules << EOF
+SUBSYSTEM=="drm", ACTION=="change", RUN+="/home/feralfile/scripts/detect-monitor.sh"
 EOF
