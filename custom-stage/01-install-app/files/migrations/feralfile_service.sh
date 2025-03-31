@@ -3,6 +3,9 @@
 # Create feralfile service 
 mkdir -p /etc/systemd/system
 
+# Add these lines to ensure proper user permissions
+usermod -a -G bluetooth,dialout feralfile
+
 rm -f /etc/systemd/system/feralfile-launcher.service
 cat > /etc/systemd/system/feralfile-launcher.service << EOF
 [Unit]
@@ -13,7 +16,7 @@ Requires=bluetooth.service
 [Service]
 User=feralfile
 Group=feralfile
-ExecStartPre=/bin/sleep 1
+ExecStartPre=/bin/sleep 1.5
 ExecStart=/opt/feralfile/feralfile
 Restart=on-failure
 RestartSec=5

@@ -21,6 +21,8 @@
 #define FERALFILE_ENG_CHAR_UUID "6e400004-b5a3-f393-e0a9-e50e24dcca9e"
 #define MAX_DEVICE_NAME_LENGTH 32
 #define MAX_ADV_PATH_LENGTH 64
+#define MAX_RETRY_ATTEMPTS 5
+#define RETRY_DELAY_SECONDS 2
 
 static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
@@ -509,262 +511,346 @@ static const GDBusInterfaceVTable objects_vtable = {
     .set_property = NULL
 };
 
-static void* bluetooth_handler(void* arg) {
-    main_loop = g_main_loop_new(NULL, FALSE);
-    g_main_loop_run(main_loop);
-    pthread_exit(NULL);
+static int is_bluetooth_service_active() {
+    FILE *fp;
+    char buffer[128];
+    int active = 0;
+
+    fp = popen("systemctl is-active bluetooth", "r");
+    if (fp == NULL) {
+        log_error("[%s] Failed to check bluetooth service status", LOG_TAG);
+        return 0;
+    }
+
+    if (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        active = (strncmp(buffer, "active", 6) == 0);
+    }
+
+    pclose(fp);
+    return active;
+}
+
+static int wait_for_bluetooth_service() {
+    int attempts = 0;
+    while (attempts < MAX_RETRY_ATTEMPTS) {
+        if (is_bluetooth_service_active()) {
+            log_info("[%s] Bluetooth service is active", LOG_TAG);
+            // Give the service a moment to fully initialize
+            sleep(1);
+            return 1;
+        }
+        
+        log_info("[%s] Waiting for Bluetooth service (attempt %d/%d)...", 
+                LOG_TAG, attempts + 1, MAX_RETRY_ATTEMPTS);
+        sleep(RETRY_DELAY_SECONDS);
+        attempts++;
+    }
+    
+    log_error("[%s] Bluetooth service did not become active after %d attempts", 
+              LOG_TAG, MAX_RETRY_ATTEMPTS);
+    return 0;
 }
 
 static void* bluetooth_thread_func(void* arg) {
     GError *error = NULL;
+    int retry_count = 0;
 
-    main_loop = g_main_loop_new(NULL, FALSE);
+    while (retry_count < MAX_RETRY_ATTEMPTS) {
+        // Check if bluetooth service is active before proceeding
+        if (!is_bluetooth_service_active()) {
+            log_warning("[%s] Bluetooth service not active, waiting...", LOG_TAG);
+            if (!wait_for_bluetooth_service()) {
+                log_error("[%s] Failed to wait for Bluetooth service", LOG_TAG);
+                pthread_exit(NULL);
+            }
+            // Reset error state
+            error = NULL;
+        }
 
-    // Step 1: Connect to the system bus
-    connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
-    if (!connection) {
-        log_error("[%s] Failed to connect to D-Bus: %s", LOG_TAG, error->message);
-        g_error_free(error);
-        pthread_exit(NULL);
-    }
+        main_loop = g_main_loop_new(NULL, FALSE);
 
-    // Step 2: Parse our service XML
-    root_node = g_dbus_node_info_new_for_xml(service_xml, &error);
-    if (!root_node || error) {
-        log_error("[%s] Failed to parse service XML: %s",
-                  LOG_TAG,
-                  error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        pthread_exit(NULL);
-    }
-
-    // Find the service0 node
-    service_node = find_node_by_name(root_node, "service0");
-    if (!service_node) {
-        log_error("[%s] service0 node not found", LOG_TAG);
-        pthread_exit(NULL);
-    }
-
-    // Find characteristic nodes
-    GDBusNodeInfo *setup_char_node = find_node_by_name(service_node, "setup_char");
-    GDBusNodeInfo *cmd_char_node   = find_node_by_name(service_node, "cmd_char");
-    GDBusNodeInfo *eng_char_node    = find_node_by_name(service_node, "eng_char");
-    if (!setup_char_node || !cmd_char_node || !eng_char_node) {
-        log_error("[%s] Characteristic nodes not found", LOG_TAG);
-        pthread_exit(NULL);
-    }
-
-    // Step 3: Register ObjectManager interface
-    objects_reg_id = g_dbus_connection_register_object(
-        connection,
-        "/com/feralfile/display",
-        g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
-        &objects_vtable,
-        NULL,
-        NULL,
-        &error
-    );
-    if (error || !objects_reg_id) {
-        log_error("[%s] Failed to register ObjectManager interface: %s",
-                  LOG_TAG,
-                  error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        pthread_exit(NULL);
-    }
-
-    // Step 4: Register the service object
-    service_reg_id = g_dbus_connection_register_object(
-        connection,
-        "/com/feralfile/display/service0",
-        service_node->interfaces[0],  // org.bluez.GattService1
-        &service_vtable,
-        NULL,
-        NULL,
-        &error
-    );
-    if (error || !service_reg_id) {
-        log_error("[%s] Failed to register service object: %s",
-                  LOG_TAG,
-                  error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        pthread_exit(NULL);
-    }
-
-    // Step 5: Register your setup characteristic
-    setup_char_reg_id = g_dbus_connection_register_object(
-        connection,
-        "/com/feralfile/display/service0/setup_char",
-        setup_char_node->interfaces[0],  // org.bluez.GattCharacteristic1
-        &setup_char_vtable,
-        NULL,
-        NULL,
-        &error
-    );
-    if (error || !setup_char_reg_id) {
-        log_error("[%s] Failed to register setup characteristic object: %s",
-                  LOG_TAG,
-                  error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        pthread_exit(NULL);
-    }
-
-    // Step 6: Register your command characteristic
-    cmd_char_reg_id = g_dbus_connection_register_object(
-        connection,
-        "/com/feralfile/display/service0/cmd_char",
-        cmd_char_node->interfaces[0],   // org.bluez.GattCharacteristic1
-        &cmd_char_vtable,
-        NULL,
-        NULL,
-        &error
-    );
-    if (error || !cmd_char_reg_id) {
-        log_error("[%s] Failed to register command characteristic object: %s",
-                  LOG_TAG,
-                  error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        pthread_exit(NULL);
-    }
-
-    // Step 7: Register the engineering characteristic
-    eng_char_reg_id = g_dbus_connection_register_object(
-        connection,
-        "/com/feralfile/display/service0/eng_char",
-        eng_char_node->interfaces[0],
-        &eng_char_vtable,
-        NULL,
-        NULL,
-        &error
-    );
-    if (error || !eng_char_reg_id) {
-        log_error("[%s] Failed to register engineering characteristic object: %s",
-                  LOG_TAG,
-                  error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        pthread_exit(NULL);
-    }
-
-    // Step 8: Get the GattManager1 interface and store it
-    gatt_manager = g_dbus_proxy_new_sync(
-        connection,
-        G_DBUS_PROXY_FLAGS_NONE,
-        NULL,
-        "org.bluez",
-        "/org/bluez/hci0",
-        "org.bluez.GattManager1",
-        NULL,
-        &error
-    );
-    if (!gatt_manager || error) {
-        log_error("[%s] Failed to get GattManager1: %s",
-                  LOG_TAG,
-                  error ? error->message : "Unknown error");
-        if (error) g_error_free(error);
-        pthread_exit(NULL);
-    }
-
-    // Step 9: Register the application
-    g_dbus_proxy_call_sync(
-        gatt_manager,
-        "RegisterApplication",
-        g_variant_new("(oa{sv})", "/com/feralfile/display", NULL),
-        G_DBUS_CALL_FLAGS_NONE,
-        -1,
-        NULL,
-        &error
-    );
-    if (error) {
-        log_error("[%s] RegisterApplication failed: %s",
-                  LOG_TAG,
-                  error->message);
-        g_error_free(error);
-        pthread_exit(NULL);
-    }
-
-    // Step 10: Parse advertisement XML
-    char *adv_introspection_xml = g_strdup_printf(
-        "<node>"
-        "  <interface name='org.bluez.LEAdvertisement1'>"
-        "    <method name='Release'/>"
-        "    <property name='Type' type='s' access='read'/>"
-        "    <property name='ServiceUUIDs' type='as' access='read'/>"
-        "    <property name='LocalName' type='s' access='read'/>"
-        "  </interface>"
-        "</node>"
-    );
-    advertisement_introspection_data =
-        g_dbus_node_info_new_for_xml(adv_introspection_xml, &error);
-    g_free(adv_introspection_xml);
-    if (!advertisement_introspection_data || error) {
-        log_error("[%s] Failed to parse advertisement XML: %s",
-                  LOG_TAG,
-                  error ? error->message : "Unknown error");
-        if (error)
+        // Step 1: Connect to the system bus
+        connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+        if (!connection) {
+            log_error("[%s] Failed to connect to D-Bus: %s", LOG_TAG, error->message);
             g_error_free(error);
-        pthread_exit(NULL);
-    }
+            error = NULL;
+            
+            retry_count++;
+            if (retry_count < MAX_RETRY_ATTEMPTS) {
+                log_info("[%s] Retrying connection (attempt %d/%d)...", 
+                        LOG_TAG, retry_count + 1, MAX_RETRY_ATTEMPTS);
+                sleep(RETRY_DELAY_SECONDS);
+                continue;
+            }
+            pthread_exit(NULL);
+        }
 
-    // Step 11: Register advertisement object
-    ad_reg_id = g_dbus_connection_register_object(
-        connection,
-        advertisement_path,
-        advertisement_introspection_data->interfaces[0],
-        &advertisement_vtable,
-        NULL,
-        NULL,
-        &error
-    );
-    if (error || !ad_reg_id) {
-        log_error("[%s] Failed to register advertisement object: %s",
-                  LOG_TAG,
-                  error ? error->message : "Unknown error");
-        if (error)
+        // Step 2: Parse our service XML
+        root_node = g_dbus_node_info_new_for_xml(service_xml, &error);
+        if (!root_node || error) {
+            log_error("[%s] Failed to parse service XML: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        // Find the service0 node
+        service_node = find_node_by_name(root_node, "service0");
+        if (!service_node) {
+            log_error("[%s] service0 node not found", LOG_TAG);
+            pthread_exit(NULL);
+        }
+
+        // Find characteristic nodes
+        GDBusNodeInfo *setup_char_node = find_node_by_name(service_node, "setup_char");
+        GDBusNodeInfo *cmd_char_node   = find_node_by_name(service_node, "cmd_char");
+        GDBusNodeInfo *eng_char_node    = find_node_by_name(service_node, "eng_char");
+        if (!setup_char_node || !cmd_char_node || !eng_char_node) {
+            log_error("[%s] Characteristic nodes not found", LOG_TAG);
+            pthread_exit(NULL);
+        }
+
+        // Step 3: Register ObjectManager interface
+        objects_reg_id = g_dbus_connection_register_object(
+            connection,
+            "/com/feralfile/display",
+            g_dbus_node_info_lookup_interface(root_node, "org.freedesktop.DBus.ObjectManager"),
+            &objects_vtable,
+            NULL,
+            NULL,
+            &error
+        );
+        if (error || !objects_reg_id) {
+            log_error("[%s] Failed to register ObjectManager interface: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        // Step 4: Register the service object
+        service_reg_id = g_dbus_connection_register_object(
+            connection,
+            "/com/feralfile/display/service0",
+            service_node->interfaces[0],  // org.bluez.GattService1
+            &service_vtable,
+            NULL,
+            NULL,
+            &error
+        );
+        if (error || !service_reg_id) {
+            log_error("[%s] Failed to register service object: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        // Step 5: Register your setup characteristic
+        setup_char_reg_id = g_dbus_connection_register_object(
+            connection,
+            "/com/feralfile/display/service0/setup_char",
+            setup_char_node->interfaces[0],  // org.bluez.GattCharacteristic1
+            &setup_char_vtable,
+            NULL,
+            NULL,
+            &error
+        );
+        if (error || !setup_char_reg_id) {
+            log_error("[%s] Failed to register setup characteristic object: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        // Step 6: Register your command characteristic
+        cmd_char_reg_id = g_dbus_connection_register_object(
+            connection,
+            "/com/feralfile/display/service0/cmd_char",
+            cmd_char_node->interfaces[0],   // org.bluez.GattCharacteristic1
+            &cmd_char_vtable,
+            NULL,
+            NULL,
+            &error
+        );
+        if (error || !cmd_char_reg_id) {
+            log_error("[%s] Failed to register command characteristic object: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        // Step 7: Register the engineering characteristic
+        eng_char_reg_id = g_dbus_connection_register_object(
+            connection,
+            "/com/feralfile/display/service0/eng_char",
+            eng_char_node->interfaces[0],
+            &eng_char_vtable,
+            NULL,
+            NULL,
+            &error
+        );
+        if (error || !eng_char_reg_id) {
+            log_error("[%s] Failed to register engineering characteristic object: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        // Step 8: Get the GattManager1 interface and store it
+        gatt_manager = g_dbus_proxy_new_sync(
+            connection,
+            G_DBUS_PROXY_FLAGS_NONE,
+            NULL,
+            "org.bluez",
+            "/org/bluez/hci0",
+            "org.bluez.GattManager1",
+            NULL,
+            &error
+        );
+        if (!gatt_manager || error) {
+            log_error("[%s] Failed to get GattManager1: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        // Step 9: Register the application
+        g_dbus_proxy_call_sync(
+            gatt_manager,
+            "RegisterApplication",
+            g_variant_new("(oa{sv})", "/com/feralfile/display", NULL),
+            G_DBUS_CALL_FLAGS_NONE,
+            -1,
+            NULL,
+            &error
+        );
+        if (error) {
+            log_error("[%s] RegisterApplication failed: %s",
+                      LOG_TAG,
+                      error->message);
             g_error_free(error);
-        pthread_exit(NULL);
-    }
+            pthread_exit(NULL);
+        }
 
-    // Step 12: Get LEAdvertisingManager1 and store it
-    advertising_manager = g_dbus_proxy_new_sync(
-        connection,
-        G_DBUS_PROXY_FLAGS_NONE,
-        NULL,
-        "org.bluez",
-        "/org/bluez/hci0",
-        "org.bluez.LEAdvertisingManager1",
-        NULL,
-        &error
-    );
-    if (!advertising_manager || error) {
-        log_error("[%s] Failed to get LEAdvertisingManager1: %s",
-                  LOG_TAG,
-                  error ? error->message : "Unknown error");
-        if (error)
+        // Step 10: Parse advertisement XML
+        char *adv_introspection_xml = g_strdup_printf(
+            "<node>"
+            "  <interface name='org.bluez.LEAdvertisement1'>"
+            "    <method name='Release'/>"
+            "    <property name='Type' type='s' access='read'/>"
+            "    <property name='ServiceUUIDs' type='as' access='read'/>"
+            "    <property name='LocalName' type='s' access='read'/>"
+            "  </interface>"
+            "</node>"
+        );
+        advertisement_introspection_data =
+            g_dbus_node_info_new_for_xml(adv_introspection_xml, &error);
+        g_free(adv_introspection_xml);
+        if (!advertisement_introspection_data || error) {
+            log_error("[%s] Failed to parse advertisement XML: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error)
+                g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        // Step 11: Register advertisement object
+        ad_reg_id = g_dbus_connection_register_object(
+            connection,
+            advertisement_path,
+            advertisement_introspection_data->interfaces[0],
+            &advertisement_vtable,
+            NULL,
+            NULL,
+            &error
+        );
+        if (error || !ad_reg_id) {
+            log_error("[%s] Failed to register advertisement object: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error)
+                g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        // Step 12: Get LEAdvertisingManager1 and store it
+        advertising_manager = g_dbus_proxy_new_sync(
+            connection,
+            G_DBUS_PROXY_FLAGS_NONE,
+            NULL,
+            "org.bluez",
+            "/org/bluez/hci0",
+            "org.bluez.LEAdvertisingManager1",
+            NULL,
+            &error
+        );
+        if (!advertising_manager || error) {
+            log_error("[%s] Failed to get LEAdvertisingManager1: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error)
+                g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        // Step 13: Register the advertisement
+        g_dbus_proxy_call_sync(
+            advertising_manager,
+            "RegisterAdvertisement",
+            g_variant_new("(oa{sv})", advertisement_path, NULL),
+            G_DBUS_CALL_FLAGS_NONE,
+            -1,
+            NULL,
+            &error
+        );
+        if (error) {
+            log_error("[%s] Advertisement registration failed: %s",
+                      LOG_TAG,
+                      error->message);
             g_error_free(error);
-        pthread_exit(NULL);
+            pthread_exit(NULL);
+        }
+
+        // If we get here, initialization was successful
+        retry_count = 0;  // Reset retry count
+        log_info("[%s] Bluetooth initialized successfully", LOG_TAG);
+
+        // Run the main loop
+        g_main_loop_run(main_loop);
+
+        // If main loop exits, check if we should retry
+        log_warning("[%s] Main loop exited, checking service status", LOG_TAG);
+        
+        // Cleanup before potential retry
+        if (main_loop) {
+            g_main_loop_unref(main_loop);
+            main_loop = NULL;
+        }
+        if (connection) {
+            g_object_unref(connection);
+            connection = NULL;
+        }
+        
+        // If service is still active, don't retry
+        if (is_bluetooth_service_active()) {
+            break;
+        }
+        
+        retry_count++;
+        if (retry_count < MAX_RETRY_ATTEMPTS) {
+            log_info("[%s] Attempting to reinitialize (attempt %d/%d)...", 
+                    LOG_TAG, retry_count + 1, MAX_RETRY_ATTEMPTS);
+            sleep(RETRY_DELAY_SECONDS);
+        }
     }
-
-    // Step 13: Register the advertisement
-    g_dbus_proxy_call_sync(
-        advertising_manager,
-        "RegisterAdvertisement",
-        g_variant_new("(oa{sv})", advertisement_path, NULL),
-        G_DBUS_CALL_FLAGS_NONE,
-        -1,
-        NULL,
-        &error
-    );
-    if (error) {
-        log_error("[%s] Advertisement registration failed: %s",
-                  LOG_TAG,
-                  error->message);
-        g_error_free(error);
-        pthread_exit(NULL);
-    }
-
-    log_info("[%s] Bluetooth initialized successfully", LOG_TAG);
-
-    // Run the main loop to process D-Bus events
-    g_main_loop_run(main_loop);
 
     pthread_exit(NULL);
     return NULL;
@@ -772,6 +858,15 @@ static void* bluetooth_thread_func(void* arg) {
 
 int bluetooth_init(const char* custom_device_name) {
     log_info("[%s] Initializing Bluetooth in background thread", LOG_TAG);
+    
+    // First check if bluetooth service is active
+    if (!is_bluetooth_service_active()) {
+        log_warning("[%s] Bluetooth service not active, waiting...", LOG_TAG);
+        if (!wait_for_bluetooth_service()) {
+            log_error("[%s] Failed to wait for Bluetooth service", LOG_TAG);
+            return -1;
+        }
+    }
     
     // Set custom device name if provided
     if (custom_device_name != NULL) {
