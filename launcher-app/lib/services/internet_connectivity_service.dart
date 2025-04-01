@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:feralfile/services/logger.dart';
+
 class InternetConnectivityService {
   // Singleton instance
   static final InternetConnectivityService _instance =
