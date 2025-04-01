@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:feralfile/models/command.dart';
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
+import 'package:feralfile/services/commands/javascript_handler.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
 
@@ -142,10 +142,11 @@ class WebSocketService {
     _heartbeatTimer = Timer.periodic(interval, (_) {
       try {
         if (_watchdogSocket != null &&
-            _watchdogSocket!.readyState == WebSocket.open && internetConnected) {
+            _watchdogSocket!.readyState == WebSocket.open &&
+            internetConnected) {
           _sendMessage(
             WebSocketRequestMessage(
-                message: RequestMessageData(command: Command.ping)),
+                message: RequestMessageData(command: pingCommand)),
             false,
             callback: (response) {
               _watchdogSocket!.add(jsonEncode(response.toJson()));
