@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:feralfile/generated/protos/command.pb.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/websocket_service.dart';
@@ -119,8 +121,8 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
     logger.info('[BLEConnectionCubit] WiFi connection result: $connected');
 
     if (connected) {
-      _bluetoothService.notify('wifi_connection', {'success': true});
-
+      _bluetoothService.notify('wifi_connection', CommandResponse()..success = true);
+          
       // Get local IP address
       final localIp = await WifiService.getLocalIpAddress();
 
@@ -143,7 +145,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
       logger.info('[BLEConnectionCubit] Launching Chromium browser');
       // await ChromiumLauncher.launchAndWait();
     } else {
-      _bluetoothService.notify('wifi_connection', {'success': false});
+      _bluetoothService.notify('wifi_connection', CommandResponse()..success = false);
       logger.info('[BLEConnectionCubit] Failed to connect to WiFi network');
       emit(state.copyWith(
         isProcessing: false,

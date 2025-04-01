@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:io';
-import '../bluetooth_service.dart';
-import '../logger.dart';
+import 'dart:convert';
+
+import 'package:feralfile/generated/protos/command.pb.dart';
+import 'package:feralfile/services/bluetooth_service.dart';
+import 'package:feralfile/services/logger.dart';
 import 'command_repository.dart';
 
 class CommandItem {
@@ -37,7 +40,12 @@ class CursorHandler implements CommandHandler {
         final item = _commandQueue.removeAt(0);
         _stdin?.writeln(item.command);
         await Future.delayed(Duration(milliseconds: MOVEMENT_DELAY));
-        item.onComplete?.call({'success': true});
+        // If a completion callback is provided, send a protobuf response
+        if (item.onComplete != null) {
+          final response = CommandResponse()
+            ..success = true;
+          item.onComplete!(response);
+        }
       }
 
       // Auto dispose after 3 seconds of inactivity
@@ -76,9 +84,12 @@ class CursorHandler implements CommandHandler {
       _autoDisposeTimer?.cancel();
 
       if (data.isEmpty) {
-        // Handle tap
-        _commandQueue.add(CommandItem('xdotool click 1',
-            (_) => bluetoothService.notify('tapGesture', {'success': true})));
+        // Handle tap: add a command that clicks and then reports success.
+        _commandQueue.add(CommandItem(
+            'xdotool click 1',
+            (_) => bluetoothService.notify(
+                'tapGesture',
+                CommandResponse()..success = true)));
       } else {
         // Handle movements
         final List<dynamic> movements = data['cursorOffsets'] as List<dynamic>;
@@ -93,17 +104,22 @@ class CursorHandler implements CommandHandler {
           _commandQueue.add(CommandItem(
               'xdotool mousemove_relative -- $moveX $moveY',
               isLastMovement
-                  ? (_) => bluetoothService.notify(replyId!, {'success': true})
+                  ? (_) => bluetoothService.notify(
+                        replyId!,
+                        CommandResponse()..success = true,
+                      )
                   : null));
         }
       }
 
       _processCommands();
     } catch (e) {
-      logger.severe('Error: $e');
+      logger.severe('Error in CursorHandler: $e');
       if (replyId != null) {
-        bluetoothService
-            .notify(replyId, {'success': false, 'error': e.toString()});
+        final response = CommandResponse()
+          ..success = false
+          ..error = e.toString();
+        bluetoothService.notify(replyId, response);
       }
     }
   }

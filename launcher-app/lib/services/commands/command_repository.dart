@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:feralfile/generated/protos/command.pb.dart';
 import 'package:feralfile/services/commands/device_info_handler.dart';
 import 'package:feralfile/services/commands/metrics_streaming_handlers.dart';
 import 'package:feralfile/services/commands/scan_wifi_handler.dart';
@@ -16,9 +17,8 @@ import 'screen_rotation_handler.dart';
 import 'set_time_handler.dart';
 
 abstract class CommandHandler {
-  Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]);
+  Future<void> execute(Map<String, dynamic> data,
+      BluetoothService bluetoothService, [String? replyId]);
 }
 
 class CommandRepository {
@@ -30,10 +30,10 @@ class CommandRepository {
 
   final Map<String, CommandHandler> _handlers = {};
   final _jsHandler = JavaScriptHandler();
-  final BluetoothService _bluetoothService;
+  final BluetoothService bluetoothService;
 
-  CommandRepository._internal(this._bluetoothService) {
-    // Register handlers for system-level commands only
+  CommandRepository._internal(this.bluetoothService) {
+    // Register handlers.
     _handlers['rotate'] = ScreenRotationHandler();
     _handlers['sendKeyboardEvent'] = KeyboardHandler();
     _handlers['dragGesture'] = CursorHandler();
@@ -48,31 +48,39 @@ class CommandRepository {
     _handlers['disableMetricsStreaming'] = DisableMetricsStreamingHandler();
   }
 
-  Future<void> executeCommand(String command, String data,
-      [String? replyId]) async {
+  Future<void> executeCommand(CommandData commandData) async {
     try {
-      final handler = _handlers[command];
+      final handler = _handlers[commandData.command];
+      // TODO: user info handling
       if (handler != null) {
-        // Handle system-level commands with registered handlers
-        final Map<String, dynamic> jsonData = json.decode(data);
-        await handler.execute(jsonData, _bluetoothService, replyId);
+        // Decode JSON from the command's data field.
+        final Map<String, dynamic> jsonData = json.decode(commandData.data);
+        await handler.execute(
+          jsonData,
+          bluetoothService,
+          commandData.replyId.isNotEmpty ? commandData.replyId : null,
+        );
       } else {
-        // Pass through unhandled commands to Chromium via JavaScript
+        
         await _jsHandler.execute(
           {
-            'command': command,
-            'request': data,
+            'command': commandData.command,
+            'userId': commandData.userInfo.id,
+            'userName': commandData.userInfo.name,
+            'request': commandData.data,
           },
-          _bluetoothService,
-          replyId,
+          bluetoothService,
+          commandData.replyId.isNotEmpty ? commandData.replyId : null,
         );
       }
     } catch (e) {
-      logger.severe('Error executing command $command: $e');
-      // If we have a replyId, send an error notification
-      if (replyId != null) {
-        _bluetoothService
-            .notify(replyId, {'success': false, 'error': e.toString()});
+      logger.severe('Error executing command ${commandData.command}: $e');
+      if (commandData.replyId.isNotEmpty) {
+        final response = CommandResponse()
+          ..success = false
+          ..error = e.toString();
+        bluetoothService.notify(
+            commandData.replyId, response);
       }
     }
   }

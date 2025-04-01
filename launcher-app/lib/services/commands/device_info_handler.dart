@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:feralfile/environment.dart';
 import 'package:feralfile/models/app_config.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
@@ -6,6 +10,7 @@ import 'package:feralfile/services/internet_connectivity_service.dart';
 import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/wifi_service.dart';
 import 'package:feralfile/utils/version_helper.dart';
+import 'package:feralfile/generated/protos/command.pb.dart';
 import 'package:process_run/stdio.dart';
 
 import '../logger.dart';
@@ -100,9 +105,12 @@ class DeviceStatusHandler implements CommandHandler {
     );
 
     if (replyId == null) {
-      logger.warning('No replyId provided for version command');
+      logger.warning('No replyId provided for device status command');
       return;
     }
-    bluetoothService.notify(replyId, deviceInfo.toJson());
+    final response = CommandResponse()
+      ..success = true
+      ..data = jsonEncode(deviceInfo.toJson());
+    bluetoothService.notify(replyId, response);
   }
 }

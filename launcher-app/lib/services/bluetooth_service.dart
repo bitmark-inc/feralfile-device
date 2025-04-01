@@ -1,13 +1,13 @@
 // lib/services/bluetooth_service.dart
 
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:isolate';
-
+import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:feralfile/models/chunk.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:ffi/ffi.dart';
+import 'package:feralfile/generated/protos/command.pb.dart';
 
 import '../ffi/bindings.dart';
 import '../models/wifi_credentials.dart';
@@ -43,7 +43,6 @@ class BluetoothService {
     logger.info('Initializing Bluetooth service...');
     logger.info('Using device name: $deviceName');
 
-    // Convert device name to C string
     final deviceNamePtr = deviceName.toNativeUtf8();
 
     try {
@@ -73,12 +72,6 @@ class BluetoothService {
 
       logger.info('Bluetooth service started. Waiting for connections...');
 
-      _commandPort.listen((message) {
-        if (message is List) {
-          CommandService().handleCommand(message[0], message[1]);
-        }
-      });
-
       return true;
     } finally {
       calloc.free(deviceNamePtr);
@@ -101,38 +94,27 @@ class BluetoothService {
 
   Stream<CommandData> get commandStream => _commandService.commandStream;
 
-  // Make callback static
+  /// Static callback for incoming command data from FFI.
   static void _staticCommandCallback(
       int success, Pointer<Uint8> data, int length) {
-    List<int>? dataCopy;
     try {
-      // Check if we have valid data
       if (data == nullptr || length <= 0) {
         logger.warning('Received empty or invalid command data');
         return;
       }
 
-      // Create an immediate copy of the data
-      dataCopy = List<int>.unmodifiable(data.asTypedList(length));
-
-      // Release the FFI data using C's free function
+      // Make an immutable copy of the data.
+      final dataCopy = List<int>.unmodifiable(data.asTypedList(length));
       _instance._bindings.bluetooth_free_data(data);
 
-      // Check if we have enough data to parse
-      if (dataCopy.isEmpty) {
-        logger.warning('Empty data after copying');
-        return;
-      }
-
+      // Process chunked data.
       final chunkInfo = ChunkInfo.fromData(dataCopy);
       _validateChunkIndices(chunkInfo);
-
       logger.info('Processing chunk ${chunkInfo.index} of ${chunkInfo.total}');
-
       _storeChunk(chunkInfo);
       _sendChunkAcknowledgement(chunkInfo);
 
-      // Check if we have all chunks
+      // If all chunks have arrived, process the complete command.
       if (_chunkData[chunkInfo.ackReplyId]!.length == chunkInfo.total) {
         _processCompleteCommand(chunkInfo);
       }
@@ -154,71 +136,57 @@ class BluetoothService {
     _chunkData[info.ackReplyId]![info.index] = info.data;
   }
 
+  /// Send a chunk acknowledgement using a protobuf CommandResponse.
   static void _sendChunkAcknowledgement(ChunkInfo info) {
     logger.info('Notifying back for chunk ${info.index}');
-    _instance
-        .notify(info.ackReplyId, {'success': true, 'chunkIndex': info.index});
+    final response = CommandResponse()
+      ..success = true
+      ..message = 'Chunk ${info.index} received'
+      ..data = jsonEncode({'chunkIndex': info.index});
+    _instance.notify(info.ackReplyId, response);
   }
 
+  /// When all chunks are received, combine them and decode using protobuf.
   static void _processCompleteCommand(ChunkInfo info) {
-    // Combine all chunks in order
     final completeCommand =
         _chunkData[info.ackReplyId]!.values.expand((chunk) => chunk).toList();
-
-    // Clean up the chunks map
     _chunkData.remove(info.ackReplyId);
 
-    final (commandStrings, _) =
-        VarintParser.parseToStringArray(completeCommand, 0);
-
-    if (commandStrings.length < 2) {
-      throw Exception(
-          'Invalid command format: expected at least command and data');
-    }
-
-    final command = commandStrings[0];
-    final commandData = commandStrings[1];
-    final replyId = commandStrings.length > 2 ? commandStrings[2] : null;
-
-    logger
-        .info('Parsed complete command: "$command" with data: "$commandData"');
-    if (replyId != null) {
-      logger.info('Reply ID: "$replyId"');
-      logger.info('command: $command');
-      if (command == 'checkStatus') {
-        chunkedResponseReplyIds.add(replyId);
+    try {
+      final commandData = CommandData.fromBuffer(completeCommand);
+      logger.info(
+          'Parsed complete command: "${commandData.command}" with data: "${commandData.data}"');
+      if (commandData.replyId.isNotEmpty) {
+        logger.info('Reply ID: "${commandData.replyId}"');
+        if (commandData.command == 'checkStatus') {
+          chunkedResponseReplyIds.add(commandData.replyId);
+        }
       }
+      MetricService().sendEvent(
+          'command_received', 
+          userId: commandData.userInfo.id, 
+          userName: commandData.userInfo.name, 
+          stringData: [commandData.command, commandData.data]);
+      CommandService().handleCommand(commandData);
+    } catch (e) {
+      logger.severe('Error processing complete command: $e');
     }
-
-    // Send metric with cached device ID
-    MetricService().sendEvent(
-      'command_received',
-      stringData: [command, commandData],
-    );
-
-    CommandService().handleCommand(command, commandData, replyId);
   }
 
-  // Static callback that can be used with FFI
+  /// Static callback for connection results.
   static void _staticConnectionResultCallback(
     int success,
     Pointer<Uint8> data,
     int length,
   ) {
-    List<int>? rawBytes;
     try {
-      // Create an immediate immutable copy of the data
-      rawBytes = List<int>.unmodifiable(data.asTypedList(length));
-
-      // Release the FFI data using C's free function
+      final rawBytes = List<int>.unmodifiable(data.asTypedList(length));
       _instance._bindings.bluetooth_free_data(data);
-
-      // Print hex-encoded rawBytes
       final hexString =
           rawBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
       logger.info('Raw bytes (hex): $hexString');
 
-      // Now safely parse varint-encoded strings out of rawBytes
+      // For WiFi credentials, we assume a varint‑encoded string array.
       final (strings, _) = VarintParser.parseToStringArray(rawBytes, 0);
       if (strings.length < 2) {
         throw Exception(
@@ -227,9 +195,7 @@ class BluetoothService {
 
       final ssid = strings[0];
       final password = strings[1];
-      logger
-          .info('Received WiFi credentials - SSID: $ssid, password: $password');
-
+      logger.info('Received WiFi credentials - SSID: $ssid, password: $password');
       final credentials = WifiCredentials(ssid: ssid, password: password);
 
       if (_onCredentialsReceived != null) {
@@ -240,11 +206,13 @@ class BluetoothService {
     }
   }
 
-  void notify(String replyID, Map<String, dynamic> payload) {
+  /// send notifications using protobuf binary data.
+  void notify(String replyID, CommandResponse response) {
+    final payload = response.writeToBuffer();
     try {
       if (chunkedResponseReplyIds.contains(replyID) ||
           replyID == statusChangedReplyId) {
-        _sendDataByChunks(payload, replyID);
+        _sendDataByChunksBinary(payload, replyID);
         chunkedResponseReplyIds.remove(replyID);
       } else {
         final encodedMessage = VarintParser.encodeStringArray([
@@ -253,49 +221,38 @@ class BluetoothService {
         ]);
         _sendData(encodedMessage);
       }
-
-      logger.info('Sent notification: $replyID with payload: $payload');
+      logger.info(
+          'Sent notification: $replyID with payload of ${payload.length} bytes');
     } catch (e) {
       logger.severe('Error sending notification: $e');
     }
   }
 
+  /// Calculate the maximum size allowed per chunk.
   int _getMaxChunkDataSize() {
     const mtu = 512;
     const messageOverhead = 7;
     const chunkMapOverhead = 22;
 
-    // Calculate available space for payload
-    // Convert binary data to base64 encoding (which increases size by ~33%)
-    // Base64 encoding works by converting every 3 bytes of binary data into 4 ASCII characters
-
     var maxRawDataSize = mtu - messageOverhead - chunkMapOverhead;
     maxRawDataSize = maxRawDataSize - (maxRawDataSize % 4);
-
     final maxChunkDataSize =
-        (maxRawDataSize * 0.75).floor(); // Base64 encoding factor
-
+        (maxRawDataSize * 0.75).floor(); // Base64 encoding factor (if needed)
     return maxChunkDataSize;
   }
 
-  void _sendDataByChunks(Map<String, dynamic> payload, String replyID) {
-    final payloadString = jsonEncode(payload);
-    List<int> payloadBytes = utf8.encode(payloadString);
-    logger.info('payloadBytes: ${payloadBytes.length}');
-
+  /// Send the binary payload in chunks.
+  void _sendDataByChunksBinary(List<int> payload, String replyID) {
     final maxChunkDataSize = _getMaxChunkDataSize();
-    final totalChunks = (payloadBytes.length / maxChunkDataSize).ceil();
-
+    final totalChunks = (payload.length / maxChunkDataSize).ceil();
     logger.info(
         'Splitting message into $totalChunks chunks of ~$maxChunkDataSize bytes each');
 
     for (var i = 0; i < totalChunks; i++) {
       final start = i * maxChunkDataSize;
-      final end = (start + maxChunkDataSize) > payloadBytes.length
-          ? payloadBytes.length
-          : start + maxChunkDataSize;
-
-      final chunkData = payloadBytes.sublist(start, end);
+      final end =
+          (start + maxChunkDataSize) > payload.length ? payload.length : start + maxChunkDataSize;
+      final chunkData = payload.sublist(start, end);
       final chunkMap = {
         'i': i,
         't': totalChunks,
@@ -320,10 +277,10 @@ class BluetoothService {
     }
   }
 
+  /// Copy the data into an FFI buffer and send it.
   void _sendData(List<int> data, {int? chunkIndex}) {
     final Pointer<Uint8> pointer = calloc<Uint8>(data.length);
     final bytes = pointer.asTypedList(data.length);
-
     final logPrefix = chunkIndex != null ? 'Chunk $chunkIndex: ' : '';
     logger.info('${logPrefix}Copying ${data.length} bytes to FFI buffer');
 
@@ -342,36 +299,24 @@ class BluetoothService {
   String? getMacAddress() {
     final macPtr = _bindings.bluetooth_get_mac_address();
     if (macPtr.address == 0) return null;
-
     final macAddress = macPtr.toDartString();
     return macAddress;
   }
 
   String getDeviceId() {
-    // Return cached device ID if available
     if (_cachedDeviceId != null) return _cachedDeviceId!;
-
     final mac = getMacAddress();
     if (mac == null) {
       _cachedDeviceId = 'FF-X1-000000';
       return _cachedDeviceId!;
     }
-
-    // Generate MD5 hash of MAC address
     final bytes = utf8.encode(mac);
     final hash = md5.convert(bytes);
-
-    // Take first 6 bytes of hash and convert to uppercase alphanumeric
-    final hashStr = hash.bytes
-        .sublist(0, 6)
-        .map((byte) {
-          return ((byte % 36) < 10)
-              ? ((byte % 36) + 48) // 0-9
-              : ((byte % 36) + 55); // A-Z
-        })
-        .map((charCode) => String.fromCharCode(charCode))
-        .join();
-
+    final hashStr = hash.bytes.sublist(0, 6).map((byte) {
+      return ((byte % 36) < 10)
+          ? ((byte % 36) + 48)
+          : ((byte % 36) + 55);
+    }).map((charCode) => String.fromCharCode(charCode)).join();
     _cachedDeviceId = 'FF-X1-$hashStr';
     return _cachedDeviceId!;
   }
@@ -380,17 +325,13 @@ class BluetoothService {
     try {
       final Pointer<Uint8> pointer = calloc<Uint8>(data.length);
       final bytes = pointer.asTypedList(data.length);
-
       logger.info('Sending ${data.length} bytes of engineering data');
-
       for (var i = 0; i < data.length; i++) {
         bytes[i] = data[i];
       }
-
       final hexString =
           bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
       logger.info('Engineering data (hex): $hexString');
-
       _bindings.bluetooth_send_engineering_data(pointer, data.length);
       calloc.free(pointer);
     } catch (e) {

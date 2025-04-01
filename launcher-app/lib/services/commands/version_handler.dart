@@ -1,6 +1,7 @@
+import 'dart:convert';
 import 'package:feralfile/environment.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
-
+import 'package:feralfile/generated/protos/command.pb.dart';
 import '../logger.dart';
 import 'command_repository.dart';
 
@@ -18,6 +19,9 @@ class VersionHandler implements CommandHandler {
       logger.warning('No replyId provided for version command');
       return;
     }
-    bluetoothService.notify(replyId, {'version': version});
+    final response = CommandResponse()
+      ..success = true
+      ..data = jsonEncode({'version': version});
+    bluetoothService.notify(replyId, response);
   }
 }

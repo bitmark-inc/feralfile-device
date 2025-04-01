@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:feralfile/generated/protos/command.pb.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:feralfile/services/logger.dart';
@@ -12,8 +14,10 @@ class EnableMetricsStreamingHandler implements CommandHandler {
     HardwareMonitorService().startMetricsStreaming();
 
     if (replyId != null) {
-      bluetoothService.notify(replyId,
-          {'ok': true, 'message': 'Hardware metrics streaming enabled'});
+      final response = CommandResponse()
+        ..success = true
+        ..message = 'Hardware metrics streaming enabled';
+      bluetoothService.notify(replyId, response);
     }
   }
 }
@@ -27,8 +31,10 @@ class DisableMetricsStreamingHandler implements CommandHandler {
     HardwareMonitorService().stopMetricsStreaming();
 
     if (replyId != null) {
-      bluetoothService.notify(replyId,
-          {'ok': true, 'message': 'Hardware metrics streaming disabled'});
+      final response = CommandResponse()
+        ..success = true
+        ..message = 'Hardware metrics streaming disabled';
+      bluetoothService.notify(replyId, response);
     }
   }
 }

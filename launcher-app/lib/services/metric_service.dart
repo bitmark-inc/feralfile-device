@@ -61,6 +61,8 @@ class MetricService {
   void sendEvent(
     String eventName, {
     String? deviceId,
+    String? userId,
+    String? userName,
     List<String>? stringData,
     List<double>? doubleData,
   }) {
