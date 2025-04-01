@@ -24,5 +24,3 @@ for timer in feralfile-updater@08:00 feralfile-updater@16:00 feralfile-updater@0
         sudo systemctl start "$timer.timer"
     fi
 done
-
-rm -rf /home/feralfile/.config/chromium/Default/Local\ Storage/leveldb
