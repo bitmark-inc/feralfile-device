@@ -23,8 +23,6 @@ This project builds a custom Raspberry Pi image optimized for displaying digital
 2. **Build the App Using CI**:
    - After building the app with the CI pipeline, follow these steps:
      1. Go to the Raspberry Pi and access the [delivery page](https://feralfile-device-distribution.bitmark-development.workers.dev/):
-        - Username: `feralfile`
-        - Password: `Feralfile@)@%`
      2. Download the app-only `.deb` package.
      3. Install the `.deb` package on the Pi:
         ```bash
@@ -57,18 +55,14 @@ This project builds a custom Raspberry Pi image optimized for displaying digital
 3. **Trigger the Build**:
    - Press the build button to start the process.
 4. **Locate the Generated Image**:
-   - Visit the delivery page at [https://feralfile-device-distribution.bitmark-development.workers.dev/](https://feralfile-device-distribution.bitmark-development.workers.dev/) and log in using:
-     - Username: `feralfile`
-     - Password: `Feralfile@)@%`
+   - Visit the delivery page at [https://feralfile-device-distribution.bitmark-development.workers.dev/](https://feralfile-device-distribution.bitmark-development.workers.dev/) and log in
 
 ---
 
 ## Installation
 
 1. **Download and Flash the Image**:
-   - Visit the delivery page at [https://feralfile-device-distribution.bitmark-development.workers.dev/](https://feralfile-device-distribution.bitmark-development.workers.dev/) and log in using:
-     - Username: `feralfile`
-     - Password: `Feralfile@)@%`
+   - Visit the delivery page at [https://feralfile-device-distribution.bitmark-development.workers.dev/](https://feralfile-device-distribution.bitmark-development.workers.dev/) and log in
    - Download the image file.
    - Use Balena Etcher or Raspberry Pi Imager to flash the image onto an SD card.
    - Insert the flashed SD card into the Raspberry Pi.
