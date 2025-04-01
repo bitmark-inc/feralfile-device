@@ -36,7 +36,7 @@ start_chromium() {
         --v=0 \
         --vmodule=console=0,*=-1 \
         --remote-debugging-port=9222 \
-        https://recover-app-data.feralfile-display-prod.pages.dev?platform=ff-device \
+        https://reset-to-daily.feralfile-display-prod.pages.dev/daily?platform=ff-device \
         2>&1 | tee -a /var/log/chromium/chrome_debug.log
 }
 
