@@ -102,7 +102,7 @@ jobs:
           keyboard-keymap: us
           keyboard-layout: English (US)
           release: bookworm
-          enable-ssh: 0
+          enable-ssh: 1
           disable-first-boot-user-rename: 1
           export-last-stage-only: true
           wpa-country: 'US'
