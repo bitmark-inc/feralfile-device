@@ -37,7 +37,7 @@ class InternetConnectivityService {
     bool online = await checkConnectivity();
     if (online != isOnline) {
       isOnline = online;
-      print('Internet connectivity changed: $isOnline');
+      logger.info('Internet connectivity changed: $isOnline');
     }
   }
 

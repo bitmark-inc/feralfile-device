@@ -1,6 +1,8 @@
+import 'package:feralfile/utils/time_utility.dart';
 import 'package:process_run/stdio.dart';
 
 import '../bluetooth_service.dart';
+import '../internet_connectivity_service.dart';
 import '../logger.dart';
 import 'command_repository.dart';
 
@@ -14,20 +16,30 @@ class SetTimezoneHandler implements CommandHandler {
       final time = data['time'] as String?;
 
       try {
-        // Set timezone first
-        var timezoneResult = await Process.run(
-            'sudo', ['timedatectl', 'set-timezone', timezone]);
-        logger.info('Set timezone result: ${timezoneResult.stdout}');
+        bool hasInternet =
+            await InternetConnectivityService().checkConnectivity();
 
-        // If time is provided, set it
+        if (hasInternet) {
+          await TimeUtility.enableNTP();
+          await TimeUtility.setTimezone(timezone);
+        } else {
+          // Set up one-time listener for next internet connection
+          InternetConnectivityService()
+              .onStatusChange
+              .firstWhere((status) => status)
+              .then((_) async {
+            logger.info(
+                'Internet connection restored. Setting timezone and enabling NTP.');
+            await TimeUtility.enableNTP();
+            await TimeUtility.setTimezone(timezone);
+          });
+          logger.info(
+              'No internet connection. Will set timezone on next connection.');
+        }
+
+        // Handle time setting if provided
         if (time != null) {
-          // turn off ntp
-          var ntpResult =
-              await Process.run('sudo', ['timedatectl', 'set-ntp', 'false']);
-          logger.info('Set ntp result: ${ntpResult.stdout}');
-          var timeResult =
-              await Process.run('sudo', ['timedatectl', 'set-time', time]);
-          logger.info('Set time result: ${timeResult.stdout}');
+          await TimeUtility.setTime(time, hasInternet);
         }
 
         if (replyId != null) {
