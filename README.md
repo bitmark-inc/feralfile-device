@@ -41,6 +41,19 @@ This project builds a custom Raspberry Pi image optimized for displaying digital
 2. **Find the Generated Image**:
    - After the build completes, the image will be in the `deploy` folder.
 
+### 4. Generate Dart Files from .proto
+   ```bash
+      cd launcher-app
+      dart pub global activate protoc_plugin 20.0.1
+      protoc --dart_out=lib/generated/ protos/*.proto
+   ```
+Notes:
+	•	Make sure your .proto files are located inside protos/.
+	•	Output files will be placed under lib/generated/, following Dart package conventions.
+	•	We use protoc_plugin version 20.0.1 to ensure compatibility with Dart 2.12, avoiding Dart 3-only syntax in generated files.
+
+If you encounter issues with newer versions of Dart or protoc_plugin (such as // @dart = 3.3 headers), ensure you are using Dart SDK 2.12 and the specified plugin version.
+
 ---
 
 ## Build

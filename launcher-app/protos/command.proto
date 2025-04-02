@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package feralfile;
+
+message CommandData {
+  string command = 1;
+  string data = 2;
+  string reply_id = 3;
+  UserInfo user_info = 4;
+}
+
+message UserInfo {
+  string id = 1;
+  string name = 2;
+}
+
+message CommandResponse {
+  bool success = 1;
+  string message = 2;
+  string data = 3;
+  string error = 4;
+}

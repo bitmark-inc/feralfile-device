@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:feralfile/generated/protos/command.pb.dart';
 import 'package:feralfile/models/command.dart';
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
@@ -122,8 +123,10 @@ class WebSocketService {
       // Call bluetoothService.notify if messageID is statusChanged
       if (data.messageID == 'statusChanged') {
         try {
-          final message = jsonDecode(data.message) as Map<String, dynamic>;
-          BluetoothService().notify(data.messageID!, message);
+          final response = CommandResponse()
+          ..success = false
+          ..data = jsonEncode(data.message);
+          BluetoothService().notify(data.messageID!, response);
         } catch (e) {
           logger.warning('Error sending notification: $e');
         }
