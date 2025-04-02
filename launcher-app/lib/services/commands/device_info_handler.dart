@@ -79,8 +79,9 @@ class DeviceStatusHandler implements CommandHandler {
 
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]) async {
+      Map<String, dynamic> data, 
+      BluetoothService bluetoothService,
+      [String? replyId, UserInfo? userInfo]) async {
     final config = await ConfigService.loadConfig();
     final version = _loadVersion();
     final ipAddress = await WifiService.getLocalIpAddress();

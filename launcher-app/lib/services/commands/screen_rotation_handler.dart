@@ -17,8 +17,9 @@ class ScreenRotationHandler implements CommandHandler {
 
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]) async {
+      Map<String, dynamic> data,
+      BluetoothService bluetoothService,
+      [String? replyId, UserInfo? userInfo]) async {
     logger.info('Current rotation: $_currentRotation');
 
     final bool clockwise = data['clockwise'] ?? false;

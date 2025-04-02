@@ -8,8 +8,9 @@ import 'command_repository.dart';
 class KeyboardHandler implements CommandHandler {
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]) async {
+      Map<String, dynamic> data,
+      BluetoothService bluetoothService,
+      [String? replyId, UserInfo? userInfo]) async {
     final int keyCode = data['code'] as int;
     final String keyName = String.fromCharCode(keyCode);
     logger.info('KeyboardHandler: keyName = $keyName');

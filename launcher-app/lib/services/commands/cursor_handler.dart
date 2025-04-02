@@ -78,8 +78,9 @@ class CursorHandler implements CommandHandler {
 
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]) async {
+      Map<String, dynamic> data, 
+      BluetoothService bluetoothService,
+      [String? replyId, UserInfo? userInfo]) async {
     try {
       _autoDisposeTimer?.cancel();
 

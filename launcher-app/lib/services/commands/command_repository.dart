@@ -18,7 +18,8 @@ import 'set_time_handler.dart';
 
 abstract class CommandHandler {
   Future<void> execute(Map<String, dynamic> data,
-      BluetoothService bluetoothService, [String? replyId]);
+      BluetoothService bluetoothService, 
+      [String? replyId, UserInfo? userInfo]);
 }
 
 class CommandRepository {
@@ -61,16 +62,14 @@ class CommandRepository {
           commandData.replyId.isNotEmpty ? commandData.replyId : null,
         );
       } else {
-        
         await _jsHandler.execute(
           {
             'command': commandData.command,
-            'userId': commandData.userInfo.id,
-            'userName': commandData.userInfo.name,
             'request': commandData.data,
           },
           bluetoothService,
           commandData.replyId.isNotEmpty ? commandData.replyId : null,
+          commandData.userInfo,
         );
       }
     } catch (e) {

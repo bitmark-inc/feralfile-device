@@ -12,8 +12,9 @@ class VersionHandler implements CommandHandler {
 
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]) async {
+      Map<String, dynamic> data, 
+      BluetoothService bluetoothService,
+      [String? replyId, UserInfo? userInfo]) async {
     final version = _loadVersion();
     if (replyId == null) {
       logger.warning('No replyId provided for version command');

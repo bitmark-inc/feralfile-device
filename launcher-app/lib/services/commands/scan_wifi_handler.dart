@@ -7,7 +7,7 @@ import 'package:feralfile/services/wifi_service.dart';
 class ScanWifiHandler implements CommandHandler {
   @override
   Future<void> execute(Map<String, dynamic> data,
-      BluetoothService bluetoothService, [String? replyId]) async {
+      BluetoothService bluetoothService, [String? replyId, UserInfo? userInfo]) async {
     final timeout = data['timeout'] as int; // timeout in seconds
 
     await WifiService.scanWifiNetwork(

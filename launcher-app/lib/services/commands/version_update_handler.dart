@@ -8,8 +8,9 @@ import 'command_repository.dart';
 class VersionUpdateHandler implements CommandHandler {
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]) async {
+      Map<String, dynamic> data,
+      BluetoothService bluetoothService,
+      [String? replyId, UserInfo? userInfo]) async {
     try {
       await VersionHelper.updateToLatestVersion();
       if (replyId == null) {

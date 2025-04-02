@@ -8,8 +8,9 @@ import 'command_repository.dart';
 class EnableMetricsStreamingHandler implements CommandHandler {
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]) async {
+      Map<String, dynamic> data, 
+      BluetoothService bluetoothService,
+      [String? replyId, UserInfo? userInfo]) async {
     logger.info('Enabling hardware metrics streaming');
     HardwareMonitorService().startMetricsStreaming();
 
@@ -25,8 +26,9 @@ class EnableMetricsStreamingHandler implements CommandHandler {
 class DisableMetricsStreamingHandler implements CommandHandler {
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]) async {
+      Map<String, dynamic> data,
+      BluetoothService bluetoothService,
+      [String? replyId, UserInfo? userInfo]) async {
     logger.info('Disabling hardware metrics streaming');
     HardwareMonitorService().stopMetricsStreaming();
 

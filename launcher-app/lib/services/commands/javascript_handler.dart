@@ -13,10 +13,11 @@ import 'command_repository.dart';
 class JavaScriptHandler implements CommandHandler {
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]) async {
+      Map<String, dynamic> data,
+      BluetoothService bluetoothService,
+      [String? replyId, UserInfo? userInfo]) async {
     try {
-      final requestMessageData = RequestMessageData.fromJson(data);
+      final requestMessageData = RequestMessageData.fromJson(data, userInfo);
       if (replyId == null) {
         WebSocketService().sendMessage(
           WebSocketRequestMessage(

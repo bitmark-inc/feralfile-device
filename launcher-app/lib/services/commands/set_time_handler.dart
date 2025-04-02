@@ -8,8 +8,9 @@ import 'command_repository.dart';
 class SetTimezoneHandler implements CommandHandler {
   @override
   Future<void> execute(
-      Map<String, dynamic> data, BluetoothService bluetoothService,
-      [String? replyId]) async {
+      Map<String, dynamic> data,
+      BluetoothService bluetoothService,
+      [String? replyId, UserInfo? userInfo]) async {
     try {
       final timezone = data['timezone'] as String;
       final time = data['time'] as String?;
