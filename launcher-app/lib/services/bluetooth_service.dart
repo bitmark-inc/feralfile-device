@@ -1,8 +1,10 @@
 // lib/services/bluetooth_service.dart
 
 import 'dart:ffi';
+import 'dart:async';
 import 'dart:isolate';
 import 'dart:convert';
+import 'package:synchronized/synchronized.dart';
 import 'package:crypto/crypto.dart';
 import 'package:feralfile/models/chunk.dart';
 import 'package:feralfile/services/logger.dart';
@@ -31,6 +33,11 @@ class BluetoothService {
   // Store both callbacks
   late final NativeCallable<ConnectionResultCallbackNative> _setupCallback;
   late final NativeCallable<CommandCallbackNative> _cmdCallback;
+
+  // Timeout period for stale chunks (30 seconds)
+  static const int _timeoutSeconds = 30;
+  static final Map<String, DateTime> _chunkTimestamps = {};
+  static Timer? _cleanupTimer;
 
   String? _cachedDeviceId;
 
@@ -70,6 +77,9 @@ class BluetoothService {
         return false;
       }
 
+      _cleanupTimer = Timer.periodic(Duration(seconds: 10), (timer) {
+        _cleanupStaleChunks();
+      });
       logger.info('Bluetooth service started. Waiting for connections...');
 
       return true;
@@ -85,6 +95,10 @@ class BluetoothService {
 
   void dispose() {
     logger.info('Disposing Bluetooth service...');
+    _cleanupTimer?.cancel();
+    _chunkData.clear();
+    _chunkTimestamps.clear();
+    chunkedResponseReplyIds.clear();
     _bindings.bluetooth_stop();
     _setupCallback.close();
     _cmdCallback.close();
@@ -131,9 +145,26 @@ class BluetoothService {
     }
   }
 
-  static void _storeChunk(ChunkInfo info) {
+  static void _storeChunk(ChunkInfo info)  {
     _chunkData[info.ackReplyId] ??= {};
+    if (!_chunkData[info.ackReplyId]!.containsKey(info.index)) {
+      _chunkTimestamps[info.ackReplyId] ??= DateTime.now();
+    }
     _chunkData[info.ackReplyId]![info.index] = info.data;
+  }
+
+  /// Removes stale chunk data that has been incomplete for too long.
+  static void _cleanupStaleChunks() {
+    final now = DateTime.now();
+    _chunkData.removeWhere((key, _) {
+      final timestamp = _chunkTimestamps[key];
+      if (timestamp != null && now.difference(timestamp).inSeconds > _timeoutSeconds) {
+        logger.info('Removing stale chunks for $key');
+        _chunkTimestamps.remove(key);
+        return true; // Remove this entry
+      }
+      return false; // Keep this entry
+    });
   }
 
   /// Send a chunk acknowledgement using a protobuf CommandResponse.
@@ -148,9 +179,14 @@ class BluetoothService {
 
   /// When all chunks are received, combine them and decode using protobuf.
   static void _processCompleteCommand(ChunkInfo info) {
-    final completeCommand =
-        _chunkData[info.ackReplyId]!.values.expand((chunk) => chunk).toList();
+    final chunks = _chunkData[info.ackReplyId]!;
+    if (!chunks.keys.toSet().containsAll(List.generate(info.total, (i) => i))) {
+      logger.severe('Missing or invalid chunks for ${info.ackReplyId}');
+      return;
+    }
+    final completeCommand = List.generate(info.total, (i) => chunks[i]!).expand((chunk) => chunk).toList();
     _chunkData.remove(info.ackReplyId);
+    _chunkTimestamps.remove(info.ackReplyId);
 
     try {
       final commandData = CommandData.fromBuffer(completeCommand);
@@ -217,7 +253,7 @@ class BluetoothService {
       } else {
         final encodedMessage = VarintParser.encodeStringArray([
           replyID,
-          jsonEncode(payload),
+          base64.encode(payload),
         ]);
         _sendData(encodedMessage);
       }
@@ -242,7 +278,7 @@ class BluetoothService {
   }
 
   /// Send the binary payload in chunks.
-  void _sendDataByChunksBinary(List<int> payload, String replyID) {
+  void _sendDataByChunksBinary(List<int> payload, String replyID) async {
     final maxChunkDataSize = _getMaxChunkDataSize();
     final totalChunks = (payload.length / maxChunkDataSize).ceil();
     logger.info(
@@ -272,7 +308,7 @@ class BluetoothService {
       if (totalChunks > 1) {
         final delayMs = (chunkData.length / 1000).ceil() * 10;
         final adjustedDelay = delayMs.clamp(20, 100);
-        Future.delayed(Duration(milliseconds: adjustedDelay));
+        await Future.delayed(Duration(milliseconds: adjustedDelay));
       }
     }
   }
