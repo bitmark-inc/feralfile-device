@@ -38,7 +38,7 @@ class CommandService {
         // Build a JSON-encoded error response.
         final response = CommandResponse()
           ..success = false
-          ..message = jsonEncode({'error': e.toString()});
+          ..error = e.toString();
         _commandRepository!.bluetoothService
             .notify(cmdData.replyId, response);
       }

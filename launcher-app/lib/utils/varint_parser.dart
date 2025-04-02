@@ -93,10 +93,6 @@ class VarintParser {
     return bytes;
   }
 
-  static List<int> encodeVarint(int value) {
-    return _encodeVarint(value);
-  }
-
   static (List<String>, List<int>) parseToStringArray(
       List<int> bytes, int offset,
       {int? maxStrings}) {

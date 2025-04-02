@@ -33,7 +33,7 @@ class KeyboardHandler implements CommandHandler {
       if (replyId != null) {
         final response = CommandResponse()
           ..success = false
-          ..error =e.toString();
+          ..error = e.toString();
         bluetoothService.notify(replyId, response);
       }
       rethrow;

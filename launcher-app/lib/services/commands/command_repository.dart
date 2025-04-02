@@ -52,7 +52,6 @@ class CommandRepository {
   Future<void> executeCommand(CommandData commandData) async {
     try {
       final handler = _handlers[commandData.command];
-      // TODO: user info handling
       if (handler != null) {
         // Decode JSON from the command's data field.
         final Map<String, dynamic> jsonData = json.decode(commandData.data);
