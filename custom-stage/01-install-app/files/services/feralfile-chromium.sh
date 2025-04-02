@@ -36,7 +36,7 @@ start_chromium() {
         --v=0 \
         --vmodule=console=0,*=-1 \
         --remote-debugging-port=9222 \
-        https://support-feralfile-device.feralfile-display-prod.pages.dev/daily?platform=ff-device \
+        https://features-artist-control-pane.feralfile-display.pages.dev/daily?platform=ff-device \
         2>&1 | tee -a /var/log/chromium/chrome_debug.log
 }
 
