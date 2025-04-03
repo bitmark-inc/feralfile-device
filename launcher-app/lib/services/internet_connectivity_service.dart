@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:feralfile/services/logger.dart';
+
 class InternetConnectivityService {
   // Singleton instance
   static final InternetConnectivityService _instance =
@@ -37,7 +39,7 @@ class InternetConnectivityService {
     bool online = await checkConnectivity();
     if (online != isOnline) {
       isOnline = online;
-      print('Internet connectivity changed: $isOnline');
+      logger.info('Internet connectivity changed: $isOnline');
     }
   }
 
