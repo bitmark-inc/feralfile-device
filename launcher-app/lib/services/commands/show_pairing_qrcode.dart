@@ -13,9 +13,9 @@ class ShowPairingQRCodeHandler implements CommandHandler {
     try {
       final show = data['show'] as bool;
 
-      // When show is false, force Chromium focus
-      // When show is true, disable force focus to allow QR code to be visible
-      await _switcherService.forceChromiumFocus(!show);
+      // When show is true, force FeralFile focus
+      // When show is false, disable force focus to allow normal switching
+      await _switcherService.forceFeralFileFocus(show);
 
       // Send success response if replyId is provided
       if (replyId != null) {
