@@ -46,6 +46,7 @@ class CommandRepository {
     _handlers['scanWifi'] = ScanWifiHandler();
     _handlers['enableMetricsStreaming'] = EnableMetricsStreamingHandler();
     _handlers['disableMetricsStreaming'] = DisableMetricsStreamingHandler();
+    _handlers['showPairingQRCode'] = DisableMetricsStreamingHandler();
   }
 
   Future<void> executeCommand(String command, String data,
