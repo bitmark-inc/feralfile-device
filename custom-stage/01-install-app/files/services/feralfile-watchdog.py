@@ -5,6 +5,8 @@ import asyncio
 import websockets
 import sentry_sdk
 import os
+import dbus
+from subprocess import run, PIPE, DEVNULL
 
 # Constants
 LOG_PATH = "/var/log/chromium/chrome_debug.log"
@@ -215,17 +217,110 @@ def reboot():
     else:
         logging.error(f"Failed to reboot")
 
+def check_bluetooth_service():
+    """
+    Check if Bluetooth service is running and functioning properly.
+    Returns: tuple (bool, str) - (is_healthy, status_message)
+    """
+    try:
+        # Check systemd service status
+        result = run(['systemctl', 'is-active', 'bluetooth'], 
+                    stdout=PIPE, stderr=PIPE, text=True)
+        
+        if result.stdout.strip() != 'active':
+            logging.error(f"Bluetooth service is not active: {result.stdout}")
+            return False, "service_inactive"
+
+        # Try to get BlueZ interface through D-Bus
+        bus = dbus.SystemBus()
+        try:
+            adapter_obj = bus.get_object('org.bluez', '/org/bluez/hci0')
+            adapter_props = dbus.Interface(adapter_obj, 'org.freedesktop.DBus.Properties')
+            powered = adapter_props.Get('org.bluez.Adapter1', 'Powered')
+            
+            if not powered:
+                logging.error("Bluetooth adapter is not powered on")
+                return False, "adapter_off"
+                
+        except dbus.exceptions.DBusException as e:
+            logging.error(f"D-Bus error checking Bluetooth: {e}")
+            return False, "dbus_error"
+
+        return True, "healthy"
+        
+    except Exception as e:
+        logging.error(f"Error checking Bluetooth status: {e}")
+        return False, "check_failed"
+
+def restart_bluetooth():
+    """
+    Restart the Bluetooth service and wait for it to be ready.
+    Returns: bool - True if restart was successful
+    """
+    try:
+        logging.info("Attempting to restart Bluetooth service...")
+        
+        # Stop the service
+        run(['sudo', 'systemctl', 'stop', 'bluetooth'], check=True)
+        
+        # Small delay to ensure clean shutdown
+        asyncio.sleep(2)
+        
+        # Start the service
+        run(['sudo', 'systemctl', 'start', 'bluetooth'], check=True)
+        
+        # Wait for service to be fully up
+        for _ in range(10):  # Try for 10 seconds
+            asyncio.sleep(1)
+            is_healthy, status = check_bluetooth_service()
+            if is_healthy:
+                logging.info("Bluetooth service successfully restarted")
+                return True
+                
+        logging.error("Bluetooth service failed to restart properly")
+        return False
+        
+    except Exception as e:
+        logging.error(f"Error restarting Bluetooth service: {e}")
+        return False
+
 async def main():
     global heartbeat_failed_count
+    bluetooth_restart_attempts = 0
+    MAX_BLUETOOTH_RESTARTS = 3
+    
     while heartbeat_failed_count < MAX_HEARTBEAT_FAILURES:
-    # Wait until the server is up or until failures reach max_failures
+        # Check Bluetooth status
+        is_healthy, status = check_bluetooth_service()
+        
+        if not is_healthy:
+            logging.warning(f"Bluetooth issue detected: {status}")
+            
+            if bluetooth_restart_attempts < MAX_BLUETOOTH_RESTARTS:
+                bluetooth_restart_attempts += 1
+                logging.info(f"Attempting Bluetooth restart ({bluetooth_restart_attempts}/{MAX_BLUETOOTH_RESTARTS})")
+                
+                if restart_bluetooth():
+                    bluetooth_restart_attempts = 0  # Reset counter on successful restart
+                    continue
+                else:
+                    logging.error("Failed to restart Bluetooth service")
+            else:
+                logging.error("Max Bluetooth restart attempts reached, triggering reboot")
+                report_to_sentry(LOG_PATH)
+                reboot()
+                return
+        
+        # Continue with existing WebSocket monitoring
         if not await wait_for_server():
             report_to_sentry(LOG_PATH)
             logging.info("Reached maximum connection failures. Rebooting...")
             reboot()
             return
+            
         await monitor_websocket()
         heartbeat_failed_count += 1
+        
     report_to_sentry(LOG_PATH)
     logging.info("Reached maximum heartbeat failures. Rebooting...")
     reboot()
