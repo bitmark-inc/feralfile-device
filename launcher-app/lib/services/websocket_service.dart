@@ -137,15 +137,13 @@ class WebSocketService {
         logger.info('Received rotate message: $message');
         final orientation = message['orientation'];
         logger.info('Received rotate orientation: $orientation');
-        if (orientation == null) {
-          final savedRotation = await RotateService.loadSavedRotation();
-          logger.info('Saved rotation: $savedRotation');
-          if (savedRotation == null) {
-            RotateService.rotateScreen(savedRotation!);
-          }
-        } else {
-          logger.info('Rotating screen to: $orientation without saving');
-          final rotation = ScreenRotation.fromString(orientation);
+
+        final rotation = orientation == null
+            ? await RotateService.loadSavedRotation()
+            : ScreenRotation.fromString(orientation);
+        logger.info('Rotation: $rotation');
+
+        if (rotation != null) {
           RotateService.rotateScreen(rotation, shouldSaveRotation: false);
         }
       }
