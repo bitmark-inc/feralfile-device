@@ -24,13 +24,15 @@ class BluetoothService {
   final BluetoothBindings _bindings = BluetoothBindings();
   final CommandService _commandService = CommandService();
   static void Function(WifiCredentials)? _onCredentialsReceived;
+  static void Function(String, bool)? _onDeviceConnectionChanged;
   static final _commandPort = ReceivePort();
   static final Map<String, Map<int, List<int>>> _chunkData = {};
   static final Set<String> chunkedResponseReplyIds = {};
 
-  // Store both callbacks
+  // Store callbacks
   late final NativeCallable<ConnectionResultCallbackNative> _setupCallback;
   late final NativeCallable<CommandCallbackNative> _cmdCallback;
+  late final NativeCallable<DeviceConnectionCallbackNative> _connectionCallback;
 
   String? _cachedDeviceId;
 
@@ -43,7 +45,6 @@ class BluetoothService {
     logger.info('Initializing Bluetooth service...');
     logger.info('Using device name: $deviceName');
 
-    // Convert device name to C string
     final deviceNamePtr = deviceName.toNativeUtf8();
 
     try {
@@ -61,13 +62,19 @@ class BluetoothService {
         _staticCommandCallback,
       );
 
-      int startResult = _bindings.bluetooth_start(
-          _setupCallback.nativeFunction, _cmdCallback.nativeFunction);
+      _connectionCallback =
+          NativeCallable<DeviceConnectionCallbackNative>.listener(
+        _staticDeviceConnectionCallback,
+      );
+
+      int startResult = _bindings.bluetooth_start(_setupCallback.nativeFunction,
+          _cmdCallback.nativeFunction, _connectionCallback.nativeFunction);
 
       if (startResult != 0) {
         logger.warning('Failed to start Bluetooth service.');
         _setupCallback.close();
         _cmdCallback.close();
+        _connectionCallback.close();
         return false;
       }
 
@@ -85,9 +92,25 @@ class BluetoothService {
     }
   }
 
-  void startListening(void Function(WifiCredentials) onCredentialsReceived) {
+  void startListening(
+    void Function(WifiCredentials) onCredentialsReceived, {
+    void Function(String, bool)? onDeviceConnectionChanged,
+  }) {
     logger.info('Starting to listen for Bluetooth connections...');
     _onCredentialsReceived = onCredentialsReceived;
+    _onDeviceConnectionChanged = onDeviceConnectionChanged;
+  }
+
+  static void _staticDeviceConnectionCallback(
+      Pointer<Utf8> deviceId, int connected) {
+    final deviceIdStr = deviceId.toDartString();
+    final isConnected = connected != 0;
+    logger.info(
+        'Device ${isConnected ? "connected" : "disconnected"}: $deviceIdStr');
+
+    if (_onDeviceConnectionChanged != null) {
+      _onDeviceConnectionChanged!(deviceIdStr, isConnected);
+    }
   }
 
   void dispose() {
@@ -95,7 +118,9 @@ class BluetoothService {
     _bindings.bluetooth_stop();
     _setupCallback.close();
     _cmdCallback.close();
+    _connectionCallback.close();
     _onCredentialsReceived = null;
+    _onDeviceConnectionChanged = null;
     _commandPort.close();
   }
 

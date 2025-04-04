@@ -10,11 +10,16 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import '../models/wifi_credentials.dart';
 import '../services/bluetooth_service.dart';
 import '../services/wifi_service.dart';
+import '../services/switcher_service.dart';
 import 'ble_connection_state.dart';
 
 class BLEConnectionCubit extends Cubit<BLEConnectionState> {
   final BluetoothService _bluetoothService = BluetoothService();
+  final SwitcherService _switcherService = SwitcherService();
   StreamSubscription<bool>? _internetSubscription;
+
+  // Map to track all devices and their connection history
+  final Map<String, bool> _deviceConnectionHistory = {};
 
   BLEConnectionCubit() : super(BLEConnectionState()) {
     // Listen to internet connectivity changes.
@@ -101,7 +106,10 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
 
   void startListening() {
     logger.info('[BLEConnectionCubit] Starting to listen for BLE connections');
-    _bluetoothService.startListening(_handleCredentialsReceived);
+    _bluetoothService.startListening(
+      _handleCredentialsReceived,
+      onDeviceConnectionChanged: _handleDeviceConnectionChanged,
+    );
   }
 
   Future<void> _handleCredentialsReceived(WifiCredentials credentials) async {
@@ -140,8 +148,15 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
         localIp: localIp,
       ));
 
-      logger.info('[BLEConnectionCubit] Launching Chromium browser');
-      // await ChromiumLauncher.launchAndWait();
+      // Wait for 3 seconds then transition to accepting new connection
+      await Future.delayed(const Duration(seconds: 3));
+      logger.info(
+          '[BLEConnectionCubit] Transitioning to accepting new connection state');
+
+      emit(state.copyWith(
+        status: BLEConnectionStatus.acceptingNewConnection,
+        isProcessing: false,
+      ));
     } else {
       _bluetoothService.notify('wifi_connection', {'success': false});
       logger.info('[BLEConnectionCubit] Failed to connect to WiFi network');
@@ -160,10 +175,64 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
     }
   }
 
+  void _handleDeviceConnectionChanged(String deviceId, bool connected) {
+    logger.info(
+        '[BLEConnectionCubit] Device $deviceId ${connected ? "connected" : "disconnected"}');
+
+    if (connected) {
+      // Check if this is a new device (never seen before)
+      bool isNewDevice = !_deviceConnectionHistory.containsKey(deviceId);
+
+      // Update device connection status in history
+      _deviceConnectionHistory[deviceId] = true;
+
+      // Log device connection history
+      logger.info(
+          '[BLEConnectionCubit] Device connection history: ${_deviceConnectionHistory.entries.map((e) => "${e.key}: ${e.value}").join(", ")}');
+
+      // Only disable forced focus if this is a new device
+      if (isNewDevice && _deviceConnectionHistory.length > 1) {
+        _switcherService.forceFeralFileFocus(false);
+        logger.info(
+            '[BLEConnectionCubit] New device detected (${_deviceConnectionHistory.length} total devices), disabled forced Feral File focus');
+      }
+
+      emit(state.copyWith(
+        deviceId: deviceId,
+        status: BLEConnectionStatus.connected,
+      ));
+
+      // Wait for 3 seconds then transition to accepting new connection
+      Future.delayed(const Duration(seconds: 3), () {
+        logger.info(
+            '[BLEConnectionCubit] Transitioning to accepting new connection state');
+        emit(state.copyWith(
+          status: BLEConnectionStatus.acceptingNewConnection,
+          isProcessing: false,
+        ));
+      });
+    } else {
+      // Update device connection status in history, but don't remove
+      _deviceConnectionHistory[deviceId] = false;
+
+      logger.info(
+          '[BLEConnectionCubit] Updated device connection history: ${_deviceConnectionHistory.entries.map((e) => "${e.key}: ${e.value}").join(", ")}');
+
+      // Handle disconnection - immediately go to accepting new connection state
+      emit(state.copyWith(
+        status: BLEConnectionStatus.acceptingNewConnection,
+        isProcessing: false,
+      ));
+      logger.info(
+          '[BLEConnectionCubit] Device disconnected, ready for new connections');
+    }
+  }
+
   @override
   Future<void> close() {
     logger.info(
         '[BLEConnectionCubit] Closing cubit and disposing Bluetooth service');
+    _deviceConnectionHistory.clear(); // Clear the device history
     _bluetoothService.dispose();
     stopLogServer();
     WebSocketService().dispose();
