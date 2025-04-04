@@ -5,8 +5,11 @@ import 'dart:io';
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/commands/javascript_handler.dart';
-import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
+import 'package:feralfile/services/logger.dart';
+import 'package:feralfile/services/rotate_service.dart';
+
+const webRequestRotateMessageId = 'rotateDevice';
 
 class WebSocketService {
   static WebSocketService? _instance;
@@ -108,7 +111,7 @@ class WebSocketService {
   }
 
   /// Handles messages received from the website
-  void _handleWebsiteMessage(dynamic message) {
+  void _handleWebsiteMessage(dynamic message) async {
     try {
       logger.info('Received message from website: $message');
       final data = WebSocketResponseMessage.fromJson(jsonDecode(message));
@@ -126,6 +129,19 @@ class WebSocketService {
           BluetoothService().notify(data.messageID!, message);
         } catch (e) {
           logger.warning('Error sending notification: $e');
+        }
+      }
+
+      if (data.messageID == webRequestRotateMessageId) {
+        final message = jsonDecode(data.message) as Map<String, dynamic>;
+        final orientation = message['orientation'];
+        if (orientation == null) {
+          final savedRotation =
+              await RotateService.loadSavedRotation() ?? ScreenRotation.normal;
+          RotateService.rotateScreen(savedRotation);
+        } else {
+          final rotation = ScreenRotation.fromString(orientation);
+          RotateService.rotateScreen(rotation, shouldSaveRotation: false);
         }
       }
 

@@ -68,8 +68,8 @@ class RotateService {
     return null;
   }
 
-  static Future<ProcessResult> rotateScreen(
-      ScreenRotation screenRotation) async {
+  static Future<ProcessResult> rotateScreen(ScreenRotation screenRotation,
+      {shouldSaveRotation = true}) async {
     try {
       // Convert enum to number value expected by the script
       final displayRotateValue = _getDisplayRotateValue(screenRotation);
@@ -82,7 +82,10 @@ class RotateService {
         logger.warning('System rotation script failed: ${result.stderr}');
       } else {
         logger.info('Screen rotated to ${screenRotation.name}');
-        _saveRotation(screenRotation);
+        if (shouldSaveRotation) {
+          // Save the rotation to the config
+          _saveRotation(screenRotation);
+        }
       }
       return result;
     } catch (e) {

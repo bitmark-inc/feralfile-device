@@ -1,7 +1,6 @@
 import 'package:feralfile/models/app_config.dart';
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/config_service.dart';
-import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/websocket_service.dart';
 
 import '../bluetooth_service.dart';
@@ -10,7 +9,6 @@ import 'command_repository.dart';
 
 const String updateArtFramingCommand = 'updateArtFraming';
 const String pingCommand = 'ping';
-const String updateDisplaySetting = 'updateDisplaySettings';
 
 class JavaScriptHandler implements CommandHandler {
   @override
@@ -19,11 +17,6 @@ class JavaScriptHandler implements CommandHandler {
       [String? replyId]) async {
     try {
       final requestMessageData = RequestMessageData.fromJson(data);
-      if (requestMessageData.command == updateDisplaySetting) {
-        final orientation = requestMessageData.request?['orientation'];
-        final rotation = ScreenRotation.fromString(orientation);
-        RotateService.rotateScreen(rotation);
-      }
       if (replyId == null) {
         WebSocketService().sendMessage(
           WebSocketRequestMessage(
