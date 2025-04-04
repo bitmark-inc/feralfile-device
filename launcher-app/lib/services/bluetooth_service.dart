@@ -6,6 +6,7 @@ import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 import 'package:feralfile/models/chunk.dart';
+import 'package:feralfile/services/commands/javascript_handler.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:ffi/ffi.dart';
 
@@ -185,7 +186,7 @@ class BluetoothService {
     if (replyId != null) {
       logger.info('Reply ID: "$replyId"');
       logger.info('command: $command');
-      if (command == 'checkStatus') {
+      if (command == checkStatusCommand || command == scanWifiCommand) {
         chunkedResponseReplyIds.add(replyId);
       }
     }
