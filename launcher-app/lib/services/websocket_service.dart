@@ -134,13 +134,17 @@ class WebSocketService {
 
       if (data.messageID == webRequestRotateMessageId) {
         final message = jsonDecode(data.message) as Map<String, dynamic>;
+        logger.info('Received rotate message: $message');
         final orientation = message['orientation'];
+        logger.info('Received rotate orientation: $orientation');
         if (orientation == null) {
           final savedRotation = await RotateService.loadSavedRotation();
+          logger.info('Saved rotation: $savedRotation');
           if (savedRotation == null) {
             RotateService.rotateScreen(savedRotation!);
           }
         } else {
+          logger.info('Rotating screen to: $orientation without saving');
           final rotation = ScreenRotation.fromString(orientation);
           RotateService.rotateScreen(rotation, shouldSaveRotation: false);
         }
