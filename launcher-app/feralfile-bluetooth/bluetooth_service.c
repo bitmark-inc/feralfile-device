@@ -58,6 +58,15 @@ static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/ad
 
 static int sentry_initialized = 0;
 
+// Add this with other function declarations at the top
+static void handle_property_change(GDBusConnection *connection,
+                                 const gchar *sender_name,
+                                 const gchar *object_path,
+                                 const gchar *interface_name,
+                                 const gchar *signal_name,
+                                 GVariant *parameters,
+                                 gpointer user_data);
+
 void bluetooth_set_logfile(const char* path) {
     if (log_file != NULL) {
         fclose(log_file);
@@ -157,6 +166,54 @@ static void log_error(const char* format, ...) {
             message
         );
         sentry_capture_event(event);
+    }
+    #endif
+    
+    va_end(args_copy);
+    va_end(args);
+}
+
+static void log_warning(const char* format, ...) {
+    va_list args, args_copy;
+    va_start(args, format);
+    va_copy(args_copy, args);
+    
+    // Get current time
+    time_t now;
+    time(&now);
+    char timestamp[26];
+    ctime_r(&now, timestamp);
+    timestamp[24] = '\0'; // Remove newline
+    
+    // Log to syslog
+    vsyslog(LOG_WARNING, format, args);
+    
+    // Log to console (stderr)
+    fprintf(stderr, "%s: WARNING: ", timestamp);
+    vfprintf(stderr, format, args_copy);
+    fprintf(stderr, "\n");
+    fflush(stderr);
+    
+    // Log to file if available
+    if (log_file != NULL) {
+        fprintf(log_file, "%s: WARNING: ", timestamp);
+        vfprintf(log_file, format, args);
+        fprintf(log_file, "\n");
+        fflush(log_file);
+    }
+    
+    // Add Sentry breadcrumb for warning messages
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        char message[1024];
+        va_list args_crumb;
+        va_copy(args_crumb, args);
+        vsnprintf(message, sizeof(message), format, args_crumb);
+        va_end(args_crumb);
+        
+        sentry_value_t crumb = sentry_value_new_breadcrumb("warning", message);
+        sentry_value_set_by_key(crumb, "category", sentry_value_new_string("bluetooth"));
+        sentry_add_breadcrumb(crumb);
     }
     #endif
     
@@ -587,6 +644,8 @@ static void* bluetooth_thread_func(void* arg) {
                 continue;
             }
             pthread_exit(NULL);
+        } else {
+            setup_dbus_signal_handlers(connection);
         }
 
         // Step 2: Parse our service XML
@@ -1153,20 +1212,6 @@ void bluetooth_send_engineering_data(const unsigned char* data, int length) {
     g_variant_builder_unref(builder);
 }
 
-// Add function to handle device connections
-static void handle_device_connection(const char* device_path) {
-    if (connection_callback) {
-        // Extract device ID from the device path
-        // This is a simplified example - you might need to adjust the extraction logic
-        // based on your actual device path format
-        const char* device_id = strrchr(device_path, '/');
-        if (device_id) {
-            device_id++; // Skip the '/'
-            connection_callback(device_id, 1);
-        }
-    }
-}
-
 // Update the D-Bus signal handling to catch device connections
 // This would go in your existing D-Bus setup code
 static void setup_dbus_signal_handlers(GDBusConnection *connection) {
@@ -1181,6 +1226,8 @@ static void setup_dbus_signal_handlers(GDBusConnection *connection) {
         handle_property_change,
         NULL,
         NULL);
+    
+    log_info("[%s] D-Bus signal handlers set up", LOG_TAG);
 }
 
 static void handle_property_change(GDBusConnection *connection,
