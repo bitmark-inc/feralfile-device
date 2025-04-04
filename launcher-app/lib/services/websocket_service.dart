@@ -136,9 +136,10 @@ class WebSocketService {
         final message = jsonDecode(data.message) as Map<String, dynamic>;
         final orientation = message['orientation'];
         if (orientation == null) {
-          final savedRotation =
-              await RotateService.loadSavedRotation() ?? ScreenRotation.normal;
-          RotateService.rotateScreen(savedRotation);
+          final savedRotation = await RotateService.loadSavedRotation();
+          if (savedRotation == null) {
+            RotateService.rotateScreen(savedRotation!);
+          }
         } else {
           final rotation = ScreenRotation.fromString(orientation);
           RotateService.rotateScreen(rotation, shouldSaveRotation: false);
