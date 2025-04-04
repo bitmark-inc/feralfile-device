@@ -78,15 +78,22 @@ class RotateService {
         displayRotateValue.toString()
       ]);
 
-      if (result.exitCode != 0) {
-        logger.warning('System rotation script failed: ${result.stderr}');
-      } else {
-        logger.info('Screen rotated to ${screenRotation.name}');
-        if (shouldSaveRotation) {
+      logger.info('result.exitCode: ${result?.exitCode}');
+
+      if (shouldSaveRotation) {
           // Save the rotation to the config
           _saveRotation(screenRotation);
         }
-      }
+
+      // if (result.exitCode != 0) {
+      //   logger.warning('System rotation script failed: ${result.stderr}');
+      // } else {
+      //   logger.info('Screen rotated to ${screenRotation.name}');
+      //   if (shouldSaveRotation) {
+      //     // Save the rotation to the config
+      //     _saveRotation(screenRotation);
+      //   }
+      // }
       return result;
     } catch (e) {
       logger.severe('Error applying rotation: $e');
