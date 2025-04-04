@@ -59,6 +59,7 @@ static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/ad
 static int sentry_initialized = 0;
 
 // Add this with other function declarations at the top
+static void setup_dbus_signal_handlers(GDBusConnection *connection);
 static void handle_property_change(GDBusConnection *connection,
                                  const gchar *sender_name,
                                  const gchar *object_path,
@@ -611,6 +612,71 @@ static int wait_for_bluetooth_service() {
     return 0;
 }
 
+static void setup_dbus_signal_handlers(GDBusConnection *connection) {
+    g_dbus_connection_signal_subscribe(
+        connection,
+        "org.bluez",
+        "org.freedesktop.DBus.Properties",
+        "PropertiesChanged",
+        NULL,
+        "org.bluez.Device1",
+        G_DBUS_SIGNAL_FLAGS_NONE,
+        handle_property_change,
+        NULL,
+        NULL);
+    
+    log_info("[%s] D-Bus signal handlers set up", LOG_TAG);
+}
+
+static void handle_property_change(GDBusConnection *connection,
+                                 const gchar *sender_name,
+                                 const gchar *object_path,
+                                 const gchar *interface_name,
+                                 const gchar *signal_name,
+                                 GVariant *parameters,
+                                 gpointer user_data) {
+    GVariant *changed_properties;
+    GVariant *invalidated_properties;
+    const gchar *interface;
+    
+    g_variant_get(parameters, "(&sa{sv}as)",
+                  &interface,
+                  &changed_properties,
+                  &invalidated_properties);
+
+    if (g_str_equal(interface, "org.bluez.Device1")) {
+        GVariantIter iter;
+        const gchar *key;
+        GVariant *value;
+        
+        g_variant_iter_init(&iter, changed_properties);
+        while (g_variant_iter_next(&iter, "{&sv}", &key, &value)) {
+            if (g_str_equal(key, "Connected")) {
+                gboolean connected;
+                g_variant_get(value, "b", &connected);
+                
+                // Extract device ID from the device path
+                const char* device_id = strrchr(object_path, '/');
+                if (device_id) {
+                    device_id++; // Skip the '/'
+                    if (connection_callback) {
+                        connection_callback(device_id, connected ? 1 : 0);
+                    }
+                    
+                    // Log the connection state change
+                    log_info("[%s] Device %s %s", LOG_TAG, device_id, 
+                            connected ? "connected" : "disconnected");
+                }
+            }
+            g_variant_unref(value);
+        }
+    }
+    
+    g_variant_unref(changed_properties);
+    g_variant_unref(invalidated_properties);
+}
+
+// Then bluetooth_thread_func follows
 static void* bluetooth_thread_func(void* arg) {
     GError *error = NULL;
     int retry_count = 0;
@@ -1210,70 +1276,4 @@ void bluetooth_send_engineering_data(const unsigned char* data, int length) {
         NULL);
 
     g_variant_builder_unref(builder);
-}
-
-// Update the D-Bus signal handling to catch device connections
-// This would go in your existing D-Bus setup code
-static void setup_dbus_signal_handlers(GDBusConnection *connection) {
-    g_dbus_connection_signal_subscribe(
-        connection,
-        "org.bluez",
-        "org.freedesktop.DBus.Properties",
-        "PropertiesChanged",
-        NULL,
-        "org.bluez.Device1",
-        G_DBUS_SIGNAL_FLAGS_NONE,
-        handle_property_change,
-        NULL,
-        NULL);
-    
-    log_info("[%s] D-Bus signal handlers set up", LOG_TAG);
-}
-
-static void handle_property_change(GDBusConnection *connection,
-                                 const gchar *sender_name,
-                                 const gchar *object_path,
-                                 const gchar *interface_name,
-                                 const gchar *signal_name,
-                                 GVariant *parameters,
-                                 gpointer user_data) {
-    GVariant *changed_properties;
-    GVariant *invalidated_properties;
-    const gchar *interface;
-    
-    g_variant_get(parameters, "(&sa{sv}as)",
-                  &interface,
-                  &changed_properties,
-                  &invalidated_properties);
-
-    if (g_str_equal(interface, "org.bluez.Device1")) {
-        GVariantIter iter;
-        const gchar *key;
-        GVariant *value;
-        
-        g_variant_iter_init(&iter, changed_properties);
-        while (g_variant_iter_next(&iter, "{&sv}", &key, &value)) {
-            if (g_str_equal(key, "Connected")) {
-                gboolean connected;
-                g_variant_get(value, "b", &connected);
-                
-                // Extract device ID from the device path
-                const char* device_id = strrchr(object_path, '/');
-                if (device_id) {
-                    device_id++; // Skip the '/'
-                    if (connection_callback) {
-                        connection_callback(device_id, connected ? 1 : 0);
-                    }
-                    
-                    // Log the connection state change
-                    log_info("[%s] Device %s %s", LOG_TAG, device_id, 
-                            connected ? "connected" : "disconnected");
-                }
-            }
-            g_variant_unref(value);
-        }
-    }
-    
-    g_variant_unref(changed_properties);
-    g_variant_unref(invalidated_properties);
 }
