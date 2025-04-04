@@ -1,10 +1,8 @@
 import 'dart:convert';
-
-import 'package:feralfile/models/command.dart';
 import 'package:uuid/uuid.dart';
 
 class RequestMessageData {
-  final Command command;
+  final String command;
   final Map<String, dynamic>? request;
 
   RequestMessageData({required this.command, this.request});
@@ -22,13 +20,13 @@ class RequestMessageData {
       requestMap = requestData;
     }
     return RequestMessageData(
-      command: Command.fromString(json['command']),
+      command: json['command'] ?? '',
       request: requestMap,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'command': command.name,
+        'command': command,
         'request': request ?? {},
       };
 }
