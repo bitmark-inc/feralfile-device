@@ -9,6 +9,8 @@ import 'command_repository.dart';
 
 const String updateArtFramingCommand = 'updateArtFraming';
 const String pingCommand = 'ping';
+const String scanWifiCommand = 'scanWifi';
+const String checkStatusCommand = 'checkStatus';
 
 class JavaScriptHandler implements CommandHandler {
   @override
