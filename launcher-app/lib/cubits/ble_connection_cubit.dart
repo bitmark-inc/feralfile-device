@@ -30,7 +30,8 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
         if (state.status == BLEConnectionStatus.initial) {
           logger.info(
               '[BLEConnectionCubit] Internet connected, setting status to connected');
-          emit(state.copyWith(status: BLEConnectionStatus.connected));
+          emit(state.copyWith(
+              status: BLEConnectionStatus.acceptingNewConnection));
         }
       } else {
         // When internet is not connected, update state to initial.
