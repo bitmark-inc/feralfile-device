@@ -34,12 +34,16 @@ enum ScreenRotation {
   static ScreenRotation fromString(String value) {
     switch (value) {
       case 'normal':
+      case 'landscape':
         return ScreenRotation.normal;
       case 'right':
+      case 'portraitReverse':
         return ScreenRotation.right;
       case 'inverted':
+      case 'landscapeReverse':
         return ScreenRotation.inverted;
       case 'left':
+      case 'portrait':
         return ScreenRotation.left;
       default:
         throw ArgumentError('Invalid screen rotation: $value');
@@ -69,8 +73,10 @@ class RotateService {
     try {
       // Convert enum to number value expected by the script
       final displayRotateValue = _getDisplayRotateValue(screenRotation);
-      final result = await Process.run('sudo',
-          ['/home/feralfile/scripts/rotate-display.sh', displayRotateValue.toString()]);
+      final result = await Process.run('sudo', [
+        '/home/feralfile/scripts/rotate-display.sh',
+        displayRotateValue.toString()
+      ]);
 
       if (result.exitCode != 0) {
         logger.warning('System rotation script failed: ${result.stderr}');
