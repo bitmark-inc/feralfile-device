@@ -176,7 +176,7 @@ class WifiService {
 
       // Continue scanning until timeout or explicit stop condition
       while (DateTime.now().isBefore(endTime)) {
-        var networkMap = await getAvailableSSIDs(topN: 4);
+        var networkMap = await getAvailableSSIDs(topN: 10);
         await onResultScan(networkMap);
 
         // Check if we should stop scanning
