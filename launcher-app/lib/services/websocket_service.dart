@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:feralfile/models/command.dart';
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
-import 'package:feralfile/services/logger.dart';
+import 'package:feralfile/services/commands/javascript_handler.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
+import 'package:feralfile/services/logger.dart';
+import 'package:feralfile/services/rotate_service.dart';
+
+const webRequestRotateMessageId = 'rotateDevice';
 
 class WebSocketService {
   static WebSocketService? _instance;
@@ -108,7 +111,7 @@ class WebSocketService {
   }
 
   /// Handles messages received from the website
-  void _handleWebsiteMessage(dynamic message) {
+  void _handleWebsiteMessage(dynamic message) async {
     try {
       logger.info('Received message from website: $message');
       final data = WebSocketResponseMessage.fromJson(jsonDecode(message));
@@ -129,6 +132,22 @@ class WebSocketService {
         }
       }
 
+      if (data.messageID == webRequestRotateMessageId) {
+        final message = jsonDecode(data.message) as Map<String, dynamic>;
+        logger.info('Received rotate message: $message');
+        final orientation = message['orientation'];
+        logger.info('Received rotate orientation: $orientation');
+
+        final rotation = orientation == null
+            ? await RotateService.loadSavedRotation()
+            : ScreenRotation.fromString(orientation);
+        logger.info('Rotation: $rotation');
+
+        if (rotation != null) {
+          RotateService.rotateScreen(rotation, shouldSaveRotation: false);
+        }
+      }
+
       for (var listener in _messageListeners) {
         listener(data);
       }
@@ -142,10 +161,11 @@ class WebSocketService {
     _heartbeatTimer = Timer.periodic(interval, (_) {
       try {
         if (_watchdogSocket != null &&
-            _watchdogSocket!.readyState == WebSocket.open && internetConnected) {
+            _watchdogSocket!.readyState == WebSocket.open &&
+            internetConnected) {
           _sendMessage(
             WebSocketRequestMessage(
-                message: RequestMessageData(command: Command.ping)),
+                message: RequestMessageData(command: pingCommand)),
             false,
             callback: (response) {
               _watchdogSocket!.add(jsonEncode(response.toJson()));

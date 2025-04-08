@@ -1,5 +1,4 @@
 import 'package:feralfile/models/app_config.dart';
-import 'package:feralfile/models/command.dart';
 import 'package:feralfile/models/websocket_message.dart';
 import 'package:feralfile/services/config_service.dart';
 import 'package:feralfile/services/websocket_service.dart';
@@ -7,6 +6,11 @@ import 'package:feralfile/services/websocket_service.dart';
 import '../bluetooth_service.dart';
 import '../logger.dart';
 import 'command_repository.dart';
+
+const String updateArtFramingCommand = 'updateArtFraming';
+const String pingCommand = 'ping';
+const String scanWifiCommand = 'scanWifi';
+const String checkStatusCommand = 'checkStatus';
 
 class JavaScriptHandler implements CommandHandler {
   @override
@@ -31,7 +35,7 @@ class JavaScriptHandler implements CommandHandler {
             logger.info('Received response: $response');
             logger.info('Sending response to Bluetooth: ${response.message}');
             bluetoothService.notify(replyId, response.message);
-            if (requestMessageData.command == Command.updateArtFraming) {
+            if (requestMessageData.command == updateArtFramingCommand) {
               logger.info(
                   'Received art framing update: ${requestMessageData.request?.keys}, ${requestMessageData.request?.values}');
               final artFramingRaw = requestMessageData.request?['frameConfig'];
