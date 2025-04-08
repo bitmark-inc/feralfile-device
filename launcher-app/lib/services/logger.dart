@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
@@ -19,6 +20,7 @@ const int _maxBufferSize = 100; // Keep last 100 log entries
 const int _maxFileLines = 100; // Keep only last 100 lines in log file
 late SendPort _logIsolateSendPort;
 late Isolate _logIsolate;
+ReceivePort? _logReceivePort;
 
 String get logFilePath => _logFile.path;
 
@@ -35,11 +37,14 @@ Future<void> _logFileHandler(SendPort mainSendPort) async {
   final port = ReceivePort();
   mainSendPort.send(port.sendPort);
 
-  // Initialize log file
+  // Initialize log file using the same path as in main thread
   final Directory appDir = await getApplicationDocumentsDirectory();
   final File logFile = File('${appDir.path}/app.log');
 
-  await port.listen((message) async {
+  // Send the log file path back to main thread
+  mainSendPort.send('FILE_PATH:${logFile.path}');
+
+  port.listen((message) async {
     if (message is _LogMessage) {
       try {
         // Read existing log file if it exists
@@ -66,6 +71,18 @@ Future<void> _logFileHandler(SendPort mainSendPort) async {
       } catch (e) {
         mainSendPort.send('Error in log isolate: $e');
       }
+    } else if (message == 'GET_LATEST_LOGS') {
+      // Request for latest logs from main thread
+      try {
+        if (await logFile.exists()) {
+          final bytes = await logFile.readAsBytes();
+          mainSendPort.send({'LOG_DATA': bytes});
+        } else {
+          mainSendPort.send({'LOG_DATA': Uint8List(0)});
+        }
+      } catch (e) {
+        mainSendPort.send('Error reading log file: $e');
+      }
     }
   });
 }
@@ -76,23 +93,33 @@ Future<void> setupLogging() async {
   _logFile = File('${appDir.path}/app.log');
 
   // Create the log isolate
-  final receivePort = ReceivePort();
+  _logReceivePort = ReceivePort();
   try {
-    _logIsolate = await Isolate.spawn(_logFileHandler, receivePort.sendPort);
+    _logIsolate =
+        await Isolate.spawn(_logFileHandler, _logReceivePort!.sendPort);
 
     // Get the send port from the isolate
-    _logIsolateSendPort = await receivePort.first;
+    _logIsolateSendPort = await _logReceivePort!.first;
 
     // Create another receive port for error messages from the isolate
     final errorPort = ReceivePort();
     _logIsolate.setErrorsFatal(false);
     _logIsolate.addErrorListener(errorPort.sendPort);
 
-    // Listen for error tracking messages from the isolate
-    receivePort.listen((message) {
+    // Listen for messages from the isolate
+    _logReceivePort!.listen((message) {
       if (message is String) {
-        // Handle error tracking here in the main isolate
-        MetricService().trackError(message);
+        if (message.startsWith('FILE_PATH:')) {
+          // Update the file path if needed
+          final path = message.substring('FILE_PATH:'.length);
+          _logFile = File(path);
+        } else {
+          // Handle error tracking here in the main isolate
+          MetricService().trackError(message);
+        }
+      } else if (message is Map && message.containsKey('LOG_DATA')) {
+        // Store the latest log data
+        _latestLogData = message['LOG_DATA'];
       }
     });
   } catch (e) {
@@ -189,9 +216,17 @@ Future<void> startLogServer() async {
       if (request.method == 'GET') {
         switch (request.uri.path) {
           case '/logs/download':
-            // Serve the log file as a download
-            final file = File(_logFile.path);
-            final bytes = await file.readAsBytes();
+            // Serve the log file as a download with the latest content
+            Uint8List bytes;
+            try {
+              bytes = await getLatestLogs();
+            } catch (e) {
+              logger.severe('Error getting logs for download: $e');
+              // Fallback to reading the file directly as last resort
+              final file = File(_logFile.path);
+              bytes = await file.readAsBytes();
+            }
+
             request.response
               ..headers.set('Content-Type', 'text/plain')
               ..headers.set(
@@ -372,5 +407,51 @@ Future<void> sendLog(String? userID, String? title) async {
     }
   } catch (e) {
     logger.severe('Error sending log: ${e.toString()}');
+  }
+}
+
+// Add a property to store the latest log data
+Uint8List? _latestLogData;
+
+// Add a method to request latest logs from isolate
+Future<Uint8List> getLatestLogs() async {
+  // In case isolate is not available
+  if (_logIsolateSendPort == null) {
+    try {
+      return await _logFile.readAsBytes();
+    } catch (e) {
+      logger.severe('Error reading log file: $e');
+      return Uint8List(0);
+    }
+  }
+
+  // Create a completer to wait for response
+  final completer = Completer<Uint8List>();
+
+  // Set up a new listener for this request
+  final responsePort = ReceivePort();
+  responsePort.listen((message) {
+    if (message is Map && message.containsKey('LOG_DATA')) {
+      completer.complete(message['LOG_DATA']);
+      responsePort.close();
+    }
+  });
+
+  // Request logs from isolate
+  _logIsolateSendPort.send('GET_LATEST_LOGS');
+
+  // Wait for response with timeout
+  try {
+    return await completer.future.timeout(Duration(seconds: 2), onTimeout: () {
+      responsePort.close();
+      return _logFile.readAsBytes();
+    });
+  } catch (e) {
+    logger.severe('Error getting latest logs: $e');
+    try {
+      return await _logFile.readAsBytes();
+    } catch (_) {
+      return Uint8List(0);
+    }
   }
 }
