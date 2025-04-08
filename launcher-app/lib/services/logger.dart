@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
@@ -14,36 +15,160 @@ final Logger logger = Logger('FeralFileApp');
 late File _logFile;
 HttpServer? _logServer;
 final _logBuffer = <String>[];
-const int _maxBufferSize = 1000; // Keep last 1000 log entries
+const int _maxBufferSize = 100; // Keep last 100 log entries
+const int _maxFileLines = 100; // Keep only last 100 lines in log file
+late SendPort _logIsolateSendPort;
+late Isolate _logIsolate;
 
 String get logFilePath => _logFile.path;
 
 List<String> get logBuffer => List.unmodifiable(_logBuffer);
 
-Future<void> setupLogging() async {
+class _LogMessage {
+  final String message;
+  final bool isError;
+
+  _LogMessage(this.message, this.isError);
+}
+
+Future<void> _logFileHandler(SendPort mainSendPort) async {
+  final port = ReceivePort();
+  mainSendPort.send(port.sendPort);
+
   // Initialize log file
   final Directory appDir = await getApplicationDocumentsDirectory();
+  final File logFile = File('${appDir.path}/app.log');
+
+  await port.listen((message) async {
+    if (message is _LogMessage) {
+      try {
+        // Read existing log file if it exists
+        List<String> lines = [];
+        if (await logFile.exists()) {
+          lines = await logFile.readAsLines();
+        }
+
+        // Add new log line
+        lines.add(message.message.trim());
+
+        // Keep only the last _maxFileLines
+        if (lines.length > _maxFileLines) {
+          lines = lines.sublist(lines.length - _maxFileLines);
+        }
+
+        // Write back to file
+        await logFile.writeAsString(lines.join('\n') + '\n');
+
+        // Track errors in main isolate if needed
+        if (message.isError) {
+          mainSendPort.send(message.message);
+        }
+      } catch (e) {
+        mainSendPort.send('Error in log isolate: $e');
+      }
+    }
+  });
+}
+
+Future<void> setupLogging() async {
+  // Initialize log file path (actual file operations will happen in isolate)
+  final Directory appDir = await getApplicationDocumentsDirectory();
   _logFile = File('${appDir.path}/app.log');
+
+  // Create the log isolate
+  final receivePort = ReceivePort();
+  try {
+    _logIsolate = await Isolate.spawn(_logFileHandler, receivePort.sendPort);
+
+    // Get the send port from the isolate
+    _logIsolateSendPort = await receivePort.first;
+
+    // Create another receive port for error messages from the isolate
+    final errorPort = ReceivePort();
+    _logIsolate.setErrorsFatal(false);
+    _logIsolate.addErrorListener(errorPort.sendPort);
+
+    // Listen for error tracking messages from the isolate
+    receivePort.listen((message) {
+      if (message is String) {
+        // Handle error tracking here in the main isolate
+        MetricService().trackError(message);
+      }
+    });
+  } catch (e) {
+    print('Failed to spawn log isolate: $e');
+    // Fall back to synchronous logging
+    _setupSyncLogging();
+    return;
+  }
 
   Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
     final logMessage =
-        '${record.level.name}: ${record.time}: ${record.message}\n';
+        '${record.level.name}: ${record.time}: ${record.message}';
 
     // Print to console
-    print(logMessage);
+    print('$logMessage');
 
-    // Write to file
-    _logFile.writeAsStringSync(logMessage, mode: FileMode.append);
+    // Send to isolate for file writing
+    final isError =
+        record.level == Level.WARNING || record.level == Level.SEVERE;
+    _logIsolateSendPort.send(_LogMessage('$logMessage', isError));
 
-    // Add to buffer
-    _logBuffer.add(logMessage);
+    // Add to in-memory buffer
+    _logBuffer.add('$logMessage\n');
+    if (_logBuffer.length > _maxBufferSize) {
+      _logBuffer.removeAt(0);
+    }
+
+    // Track warnings and errors as metrics in main isolate
+    if (isError) {
+      MetricService().trackError('${record.level.name}: ${record.message}');
+    }
+  });
+}
+
+void _setupSyncLogging() {
+  // Fallback synchronous logging function if isolate fails
+  Logger.root.level = Level.ALL;
+  Logger.root.onRecord.listen((record) {
+    final logMessage =
+        '${record.level.name}: ${record.time}: ${record.message}';
+
+    // Print to console
+    print('$logMessage');
+
+    try {
+      // Read existing log file if it exists
+      List<String> lines = [];
+      if (_logFile.existsSync()) {
+        lines = _logFile.readAsLinesSync();
+      }
+
+      // Add new log line
+      lines.add(logMessage.trim());
+
+      // Keep only the last _maxFileLines
+      if (lines.length > _maxFileLines) {
+        lines = lines.sublist(lines.length - _maxFileLines);
+      }
+
+      // Write back to file
+      _logFile.writeAsStringSync(lines.join('\n') + '\n');
+    } catch (e) {
+      print('Error writing to log file: $e');
+    }
+
+    // Add to in-memory buffer
+    _logBuffer.add('$logMessage\n');
     if (_logBuffer.length > _maxBufferSize) {
       _logBuffer.removeAt(0);
     }
 
     // Track warnings and errors as metrics
-    if (record.level == Level.WARNING || record.level == Level.SEVERE) {
+    final isError =
+        record.level == Level.WARNING || record.level == Level.SEVERE;
+    if (isError) {
       MetricService().trackError('${record.level.name}: ${record.message}');
     }
   });
@@ -160,6 +285,18 @@ void stopLogServer() {
   }
 }
 
+void disposeLogger() {
+  stopLogServer();
+  if (_logIsolate != null) {
+    try {
+      _logIsolate.kill(priority: Isolate.immediate);
+    } catch (e) {
+      print('Error disposing logger isolate: $e');
+    }
+  }
+  logger.info('Logger disposed');
+}
+
 String _deviceId = 'unknown';
 
 // Add this function to update the device ID
@@ -180,7 +317,8 @@ Future<void> sendLog(String? userID, String? title) async {
 
     var submitMessage = '';
     submitMessage += '**Version:** ${Environment.appVersion}\n';
-    submitMessage += '**Device ID:** $_deviceId\n**Device name:** $deviceName\n';
+    submitMessage +=
+        '**Device ID:** $_deviceId\n**Device name:** $deviceName\n';
 
     // Create list of attachments
     final attachments = <Map<String, dynamic>>[];
