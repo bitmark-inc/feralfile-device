@@ -30,17 +30,12 @@ void main() async {
   await SentryFlutter.init(
     (options) {
       options.dsn = Environment.sentryDSN;
-      // Set tracesSampleRate to 1.0 to capture 100% of transactions for tracing.
-      // We recommend adjusting this value in production.
-      options.tracesSampleRate = 1.0;
-      // The sampling rate for profiling is relative to tracesSampleRate
-      // Setting to 1.0 will profile 100% of sampled transactions:
-      options.profilesSampleRate = 1.0;
+      options.sampleRate = 0.1;
       options.addIntegration(LoggingIntegration(minEventLevel: Level.WARNING));
       options.release = Environment.appVersion;
     },
     appRunner: () async {
-      // Start monitoring the internet 
+      // Start monitoring the internet
       InternetConnectivityService().startMonitoring();
       WifiService();
 
