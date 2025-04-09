@@ -32,6 +32,9 @@ class HomeScreen extends StatelessWidget {
                       instructionText = 'Connected successfully!\n'
                           'Launching display interface...';
                       showLogInfo = true;
+                    case BLEConnectionStatus.acceptingNewConnection:
+                      instructionText = 'Ready to accept new connection.\n'
+                          'Please scan the QR code to connect.';
                     case BLEConnectionStatus.failed:
                       instructionText =
                           'Failed to connect to network "${state.ssid}".\n\n'
@@ -63,8 +66,10 @@ class HomeScreen extends StatelessWidget {
                                   height: 1.4,
                                 ),
                               ),
-                              if (state.status ==
-                                  BLEConnectionStatus.initial) ...[
+                              if (state.status == BLEConnectionStatus.initial ||
+                                  state.status ==
+                                      BLEConnectionStatus
+                                          .acceptingNewConnection) ...[
                                 const SizedBox(height: 60),
                                 Container(
                                   padding: const EdgeInsets.all(40),
