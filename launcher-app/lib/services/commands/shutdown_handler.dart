@@ -9,8 +9,8 @@ class ShutdownHandler implements CommandHandler {
       Map<String, dynamic> data, BluetoothService bluetoothService,
       [String? replyId]) async {
     ProcessResult shutdownResult = await Process.run(
-      'shutdown',
-      ['-h', 'now'],
+      'sudo',
+      ['shutdown', '-h', 'now'],
       runInShell: true,
     );
 
