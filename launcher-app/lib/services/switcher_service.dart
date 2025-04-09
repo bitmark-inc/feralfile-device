@@ -11,6 +11,7 @@ class SwitcherService {
 
   bool internetConnected = InternetConnectivityService().isOnline;
   bool _isChromiumRetrying = false;
+  bool _forceFeralFileFocus = false;
 
   SwitcherService._internal() {
     // First focus
@@ -21,6 +22,12 @@ class SwitcherService {
     }
     // Subscribe to connectivity changes.
     InternetConnectivityService().onStatusChange.listen((status) async {
+      if (_forceFeralFileFocus) {
+        // Changed condition
+        await _focusFeralfile(); // Keep FeralFile focused when forced
+        return;
+      }
+
       if (status && !internetConnected) {
         logger.info('Connectivity online. Focusing Chromium.');
         await _focusChromium();
@@ -39,12 +46,30 @@ class SwitcherService {
     'XDG_RUNTIME_DIR': '/run/user/1000',
   };
 
+  /// Forces FeralFile to be focused regardless of internet connectivity
+  Future<void> forceFeralFileFocus(bool force) async {
+    _forceFeralFileFocus = force;
+    if (force) {
+      logger.info(
+          'Force mode enabled. Focusing FeralFile regardless of connectivity.');
+      await _focusFeralfile();
+    } else {
+      logger.info(
+          'Force mode disabled. Returning to normal connectivity-based switching.');
+      // Return to normal behavior based on current connectivity
+      if (internetConnected) {
+        await _focusChromium();
+      }
+    }
+  }
+
   /// Focuses Chromium using xdotool.
   /// If focusing fails, retries every 5 seconds until successful.
   Future<void> _focusChromium() async {
-    if (_isChromiumRetrying) return;
+    if (_isChromiumRetrying || _forceFeralFileFocus)
+      return; // Don't focus Chromium if FeralFile is forced
     _isChromiumRetrying = true;
-    while (InternetConnectivityService().isOnline) {
+    while (InternetConnectivityService().isOnline && !_forceFeralFileFocus) {
       try {
         // Get the currently active window.
         ProcessResult activeRes = await Process.run(

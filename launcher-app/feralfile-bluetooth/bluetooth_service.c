@@ -48,12 +48,25 @@ static connection_result_callback result_callback = NULL;
 typedef void (*command_callback)(int success, const unsigned char* data, int length);
 static command_callback cmd_callback = NULL;
 
+typedef void (*device_connection_callback)(const char* device_id, int connected);
+static device_connection_callback connection_callback = NULL;
+
 static FILE* log_file = NULL;
 
 static char device_name[MAX_DEVICE_NAME_LENGTH] = FERALFILE_SERVICE_NAME;
 static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/advertisement0";
 
 static int sentry_initialized = 0;
+
+// Add this with other function declarations at the top
+static void setup_dbus_signal_handlers(GDBusConnection *connection);
+static void handle_property_change(GDBusConnection *connection,
+                                 const gchar *sender_name,
+                                 const gchar *object_path,
+                                 const gchar *interface_name,
+                                 const gchar *signal_name,
+                                 GVariant *parameters,
+                                 gpointer user_data);
 
 void bluetooth_set_logfile(const char* path) {
     if (log_file != NULL) {
@@ -154,6 +167,54 @@ static void log_error(const char* format, ...) {
             message
         );
         sentry_capture_event(event);
+    }
+    #endif
+    
+    va_end(args_copy);
+    va_end(args);
+}
+
+static void log_warning(const char* format, ...) {
+    va_list args, args_copy;
+    va_start(args, format);
+    va_copy(args_copy, args);
+    
+    // Get current time
+    time_t now;
+    time(&now);
+    char timestamp[26];
+    ctime_r(&now, timestamp);
+    timestamp[24] = '\0'; // Remove newline
+    
+    // Log to syslog
+    vsyslog(LOG_WARNING, format, args);
+    
+    // Log to console (stderr)
+    fprintf(stderr, "%s: WARNING: ", timestamp);
+    vfprintf(stderr, format, args_copy);
+    fprintf(stderr, "\n");
+    fflush(stderr);
+    
+    // Log to file if available
+    if (log_file != NULL) {
+        fprintf(log_file, "%s: WARNING: ", timestamp);
+        vfprintf(log_file, format, args);
+        fprintf(log_file, "\n");
+        fflush(log_file);
+    }
+    
+    // Add Sentry breadcrumb for warning messages
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        char message[1024];
+        va_list args_crumb;
+        va_copy(args_crumb, args);
+        vsnprintf(message, sizeof(message), format, args_crumb);
+        va_end(args_crumb);
+        
+        sentry_value_t crumb = sentry_value_new_breadcrumb("warning", message);
+        sentry_value_set_by_key(crumb, "category", sentry_value_new_string("bluetooth"));
+        sentry_add_breadcrumb(crumb);
     }
     #endif
     
@@ -551,6 +612,71 @@ static int wait_for_bluetooth_service() {
     return 0;
 }
 
+static void setup_dbus_signal_handlers(GDBusConnection *connection) {
+    g_dbus_connection_signal_subscribe(
+        connection,
+        "org.bluez",
+        "org.freedesktop.DBus.Properties",
+        "PropertiesChanged",
+        NULL,
+        "org.bluez.Device1",
+        G_DBUS_SIGNAL_FLAGS_NONE,
+        handle_property_change,
+        NULL,
+        NULL);
+    
+    log_info("[%s] D-Bus signal handlers set up", LOG_TAG);
+}
+
+static void handle_property_change(GDBusConnection *connection,
+                                 const gchar *sender_name,
+                                 const gchar *object_path,
+                                 const gchar *interface_name,
+                                 const gchar *signal_name,
+                                 GVariant *parameters,
+                                 gpointer user_data) {
+    GVariant *changed_properties;
+    GVariant *invalidated_properties;
+    const gchar *interface;
+    
+    g_variant_get(parameters, "(&sa{sv}as)",
+                  &interface,
+                  &changed_properties,
+                  &invalidated_properties);
+
+    if (g_str_equal(interface, "org.bluez.Device1")) {
+        GVariantIter iter;
+        const gchar *key;
+        GVariant *value;
+        
+        g_variant_iter_init(&iter, changed_properties);
+        while (g_variant_iter_next(&iter, "{&sv}", &key, &value)) {
+            if (g_str_equal(key, "Connected")) {
+                gboolean connected;
+                g_variant_get(value, "b", &connected);
+                
+                // Extract device ID from the device path
+                const char* device_id = strrchr(object_path, '/');
+                if (device_id) {
+                    device_id++; // Skip the '/'
+                    if (connection_callback) {
+                        connection_callback(device_id, connected ? 1 : 0);
+                    }
+                    
+                    // Log the connection state change
+                    log_info("[%s] Device %s %s", LOG_TAG, device_id, 
+                            connected ? "connected" : "disconnected");
+                }
+            }
+            g_variant_unref(value);
+        }
+    }
+    
+    g_variant_unref(changed_properties);
+    g_variant_unref(invalidated_properties);
+}
+
+// Then bluetooth_thread_func follows
 static void* bluetooth_thread_func(void* arg) {
     GError *error = NULL;
     int retry_count = 0;
@@ -584,6 +710,8 @@ static void* bluetooth_thread_func(void* arg) {
                 continue;
             }
             pthread_exit(NULL);
+        } else {
+            setup_dbus_signal_handlers(connection);
         }
 
         // Step 2: Parse our service XML
@@ -932,9 +1060,10 @@ int bluetooth_init(const char* custom_device_name) {
     return 0;
 }
 
-int bluetooth_start(connection_result_callback scb, command_callback ccb) {
+int bluetooth_start(connection_result_callback scb, command_callback ccb, device_connection_callback dcb) {
     result_callback = scb;
     cmd_callback = ccb;
+    connection_callback = dcb;
     log_info("[%s] Bluetooth service started", LOG_TAG);
     return 0;
 }
