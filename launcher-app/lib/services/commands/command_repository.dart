@@ -5,6 +5,7 @@ import 'package:feralfile/services/commands/metrics_streaming_handlers.dart';
 import 'package:feralfile/services/commands/scan_wifi_handler.dart';
 import 'package:feralfile/services/commands/send_log_handler.dart';
 import 'package:feralfile/services/commands/show_pairing_qrcode.dart';
+import 'package:feralfile/services/commands/shutdown_handler.dart';
 import 'package:feralfile/services/commands/version_handler.dart';
 import 'package:feralfile/services/commands/version_update_handler.dart';
 
@@ -48,6 +49,7 @@ class CommandRepository {
     _handlers['enableMetricsStreaming'] = EnableMetricsStreamingHandler();
     _handlers['disableMetricsStreaming'] = DisableMetricsStreamingHandler();
     _handlers['showPairingQRCode'] = ShowPairingQRCodeHandler();
+    _handlers['shutdown'] = ShutdownHandler();
   }
 
   Future<void> executeCommand(String command, String data,
