@@ -75,39 +75,94 @@ class WifiService {
     return null;
   }
 
-  static Future<Map<String, bool>> getAvailableSSIDs() async {
+  static Future<Map<String, bool>> getAvailableSSIDs({int? topN}) async {
     try {
-      ProcessResult scanResult = await Process.run(
+      final result = await Process.run(
         'nmcli',
-        ['-t', '-f', 'SSID,ACTIVE', 'dev', 'wifi'],
+        ['-t', '-f', 'SSID,ACTIVE,SIGNAL', 'dev', 'wifi'],
         runInShell: true,
       );
 
-      if (scanResult.exitCode != 0) {
-        throw Exception('nmcli command failed: ${scanResult.stderr}');
+      if (result.exitCode != 0) {
+        throw Exception('nmcli command failed: ${result.stderr}');
       }
 
-      Map<String, bool> wifiNetworks = {};
+      final Map<String, Map<String, dynamic>> deduplicatedNetworks =
+          _parseAndDeduplicate(result.stdout.toString());
+      final List<MapEntry<String, Map<String, dynamic>>> topNetworks =
+          _selectTopNetworks(deduplicatedNetworks, topN: topN);
 
-      logger.info('Wi-Fi networks: ${scanResult.stdout}');
-
-      for (String line in scanResult.stdout.toString().split('\n')) {
-        if (line.trim().isEmpty) continue;
-
-        List<String> parts = line.split(':');
-        if (parts.length < 2) continue;
-
-        String ssid = parts[0].trim();
-        bool isActive = parts[1].trim() == "yes";
-
-        wifiNetworks[ssid] = isActive || wifiNetworks[ssid] == true;
-      }
-
-      return wifiNetworks;
+      return {
+        for (final entry in topNetworks)
+          entry.key: entry.value['active'] as bool,
+      };
     } catch (e) {
       print('Error fetching Wi-Fi networks: $e');
       return {};
     }
+  }
+
+  static Map<String, Map<String, dynamic>> _parseAndDeduplicate(String stdout) {
+    final lines = stdout.split('\n');
+    final Map<String, Map<String, dynamic>> ssidMap = {};
+
+    for (final line in lines) {
+      if (line.trim().isEmpty) continue;
+
+      final parts = line.split(':');
+      if (parts.length < 3) continue;
+
+      final ssid = parts[0].trim();
+      final isActive = parts[1].trim() == 'yes';
+      final signal = int.tryParse(parts[2].trim());
+
+      if (ssid.isEmpty || signal == null) continue;
+
+      final existing = ssidMap[ssid];
+
+      if (existing == null) {
+        ssidMap[ssid] = {'active': isActive, 'signal': signal};
+      } else if (isActive &&
+          (!existing['active'] || signal > existing['signal'])) {
+        ssidMap[ssid] = {'active': true, 'signal': signal};
+      } else if (!existing['active'] && signal > existing['signal']) {
+        ssidMap[ssid] = {'active': false, 'signal': signal};
+      }
+    }
+
+    return ssidMap;
+  }
+
+  static List<MapEntry<String, Map<String, dynamic>>> _selectTopNetworks(
+      Map<String, Map<String, dynamic>> ssidMap,
+      {int? topN}) {
+    if (topN == null || topN <= 0) {
+      return ssidMap.entries.toList();
+    }
+    // Find the strongest connected SSID (if any)
+    final connectedEntries =
+        ssidMap.entries.where((e) => e.value['active'] == true);
+    final strongestConnected = connectedEntries.isEmpty
+        ? null
+        : connectedEntries.reduce((a, b) =>
+            (a.value['signal'] as int) >= (b.value['signal'] as int) ? a : b);
+
+    // Sort unconnected by signal, exclude the connected one
+    final unconnectedEntries = ssidMap.entries
+        .where((e) =>
+            e.value['active'] == false &&
+            (strongestConnected == null || e.key != strongestConnected.key))
+        .toList()
+      ..sort((a, b) =>
+          (b.value['signal'] as int).compareTo(a.value['signal'] as int));
+
+    // Compose the final result: connected first (if any), then top N others
+    final topList = <MapEntry<String, Map<String, dynamic>>>[
+      if (strongestConnected != null) strongestConnected,
+      ...unconnectedEntries.take(strongestConnected != null ? topN - 1 : topN),
+    ];
+
+    return topList;
   }
 
   static Future<void> scanWifiNetwork({
@@ -121,7 +176,7 @@ class WifiService {
 
       // Continue scanning until timeout or explicit stop condition
       while (DateTime.now().isBefore(endTime)) {
-        var networkMap = await getAvailableSSIDs();
+        var networkMap = await getAvailableSSIDs(topN: 10);
         await onResultScan(networkMap);
 
         // Check if we should stop scanning
