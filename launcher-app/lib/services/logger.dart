@@ -39,6 +39,16 @@ Future<void> _logFileHandler(SendPort mainSendPort) async {
 
   // Initialize log file using the same path as in main thread
   final Directory appDir = await getApplicationDocumentsDirectory();
+
+  // Ensure the directory exists
+  if (!await appDir.exists()) {
+    try {
+      await appDir.create(recursive: true);
+    } catch (e) {
+      mainSendPort.send('Error creating log directory: $e');
+    }
+  }
+
   final File logFile = File('${appDir.path}/app.log');
 
   // Send the log file path back to main thread
@@ -47,10 +57,21 @@ Future<void> _logFileHandler(SendPort mainSendPort) async {
   port.listen((message) async {
     if (message is _LogMessage) {
       try {
+        // Create parent directory if it doesn't exist
+        final parent = logFile.parent;
+        if (!await parent.exists()) {
+          await parent.create(recursive: true);
+        }
+
         // Read existing log file if it exists
         List<String> lines = [];
         if (await logFile.exists()) {
-          lines = await logFile.readAsLines();
+          try {
+            lines = await logFile.readAsLines();
+          } catch (e) {
+            mainSendPort.send('Error reading log file: $e');
+            // If reading fails, start with an empty log rather than failing completely
+          }
         }
 
         // Add new log line
@@ -62,7 +83,15 @@ Future<void> _logFileHandler(SendPort mainSendPort) async {
         }
 
         // Write back to file
-        await logFile.writeAsString(lines.join('\n') + '\n');
+        try {
+          await logFile.writeAsString(lines.join('\n') + '\n');
+        } catch (e) {
+          // Try to write the file from scratch if appending fails
+          mainSendPort
+              .send('Error writing to log file, trying to recreate: $e');
+          await logFile.writeAsString(message.message.trim() + '\n',
+              mode: FileMode.write);
+        }
 
         // Track errors in main isolate if needed
         if (message.isError) {
