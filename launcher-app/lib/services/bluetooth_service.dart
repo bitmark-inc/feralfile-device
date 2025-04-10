@@ -39,7 +39,7 @@ class BluetoothService {
 
   BluetoothService._internal() {
     _commandService.initialize(this);
-    _bindings.bluetooth_set_logfile(logFilePath.toNativeUtf8());
+    _bindings.bluetooth_set_logfile(systemLogFilePath.toNativeUtf8());
   }
 
   Future<bool> initialize(String deviceName) async {
