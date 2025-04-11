@@ -88,3 +88,26 @@ Unit=feralfile-updater@%i.service
 [Install]
 WantedBy=timers.target
 EOF
+
+rm -f /etc/systemd/system/feralfile-log-rotation.service
+cat > /etc/systemd/system/feralfile-log-rotation.service << EOF
+[Unit]
+Description=Rotate Feral File & Chromium Logs
+
+[Service]
+Type=oneshot
+ExecStart=/home/feralfile/services/feralfile-log-rotation.sh
+EOF
+
+rm -f /etc/systemd/system/feralfile-log-rotation.timer
+cat > /etc/systemd/system/feralfile-log-rotation.timer << EOF
+[Unit]
+Description=Daily Log Rotation for Feral File
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
