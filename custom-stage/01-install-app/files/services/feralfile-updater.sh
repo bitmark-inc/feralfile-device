@@ -76,14 +76,15 @@ mkdir -p "/etc/apt/trusted.gpg.d/"
 cp "apt-public-key.asc" "/etc/apt/trusted.gpg.d/feralfile.asc"
 chmod 644 "/etc/apt/trusted.gpg.d/feralfile.asc"
 
-set_config_value "commit_hash" "$LATEST_COMMIT"
-
 echo "✅ Files Update complete at $(date)"
 echo "🔄 Executing /home/feralfile/migrate.sh..."
 
 /home/feralfile/migrate.sh
 
 echo "✅ Migrate complete at $(date)"
+
+set_config_value "commit_hash" "$LATEST_COMMIT"
+
 echo "🔄 Rebooting..."
 
 reboot

@@ -28,6 +28,7 @@ start_chromium() {
         --use-angle=gles \
         --enable-gpu-rasterization \
         --force-renderer-accessibility \
+        --disk-cache-size=19327352832 \
         --media-router=0 \
         --enable-logging \
         --log-level=0 \
