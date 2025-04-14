@@ -35,16 +35,16 @@ class ResponsiveLayout {
 }
 
 extension TextThemeExtension on TextTheme {
-  TextStyle get ppMori400WhiteResponsive {
-    return ppMori400White16.copyWith(fontSize: ResponsiveLayout.textSize);
+  TextStyle get ppMori400White24Responsive {
+    return ppMori400White16.copyWith(fontSize: 24.responsiveSize);
   }
 
-  TextStyle get ppMori700WhiteResponsive {
-    return ppMori700White16.copyWith(fontSize: ResponsiveLayout.textSize);
+  TextStyle get ppMori700White24Responsive {
+    return ppMori700White16.copyWith(fontSize: 24.responsiveSize);
   }
 
-  TextStyle get ppMori400GreyResponsive {
-    return ppMori400Grey16.copyWith(fontSize: ResponsiveLayout.textSize);
+  TextStyle get ppMori400Grey24Responsive {
+    return ppMori400Grey16.copyWith(fontSize: 24.responsiveSize);
   }
 }
 

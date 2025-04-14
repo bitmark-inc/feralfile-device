@@ -81,7 +81,7 @@ class HomeScreen extends StatelessWidget {
                         children: [
                           Text(
                             'System Logs',
-                            style: theme.textTheme.ppMori400GreyResponsive,
+                            style: theme.textTheme.ppMori400Grey24Responsive,
                           ),
                           BlocBuilder<BLEConnectionCubit, BLEConnectionState>(
                             builder: (context, state) {
@@ -89,7 +89,7 @@ class HomeScreen extends StatelessWidget {
                                 return Text(
                                   'http://${state.localIp}:8080/logs.html',
                                   style:
-                                      theme.textTheme.ppMori400GreyResponsive,
+                                      theme.textTheme.ppMori400Grey24Responsive,
                                 );
                               }
                               return const SizedBox.shrink();
@@ -118,7 +118,7 @@ class HomeScreen extends StatelessWidget {
       children: [
         Text(
           'Connecting to $ssid',
-          style: theme.textTheme.ppMori400WhiteResponsive.copyWith(
+          style: theme.textTheme.ppMori400White24Responsive.copyWith(
             fontSize: 36.responsiveSize,
           ),
         ),
@@ -133,7 +133,7 @@ class HomeScreen extends StatelessWidget {
       children: [
         Text(
           'Connected to $ssid',
-          style: theme.textTheme.ppMori400WhiteResponsive.copyWith(
+          style: theme.textTheme.ppMori400White24Responsive.copyWith(
             fontSize: 36.responsiveSize,
           ),
         ),
@@ -163,7 +163,7 @@ class HomeScreen extends StatelessWidget {
         SizedBox(height: 20.responsiveSize),
         Text(
           deviceId,
-          style: theme.textTheme.ppMori400GreyResponsive,
+          style: theme.textTheme.ppMori400Grey24Responsive,
           textAlign: TextAlign.center,
         ),
       ],
@@ -201,7 +201,7 @@ class LogView extends StatelessWidget {
             final log = snapshot.data![index];
             return Text(
               log,
-              style: theme.textTheme.ppMori400WhiteResponsive.copyWith(
+              style: theme.textTheme.ppMori400White24Responsive.copyWith(
                 fontSize: 14.responsiveSize,
                 color: _getLogColor(log),
               ),

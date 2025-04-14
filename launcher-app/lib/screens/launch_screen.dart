@@ -198,7 +198,7 @@ Widget versionTag(BuildContext context) {
             ),
             child: Text(
               'v.$version',
-              style: theme.textTheme.ppMori400GreyResponsive,
+              style: theme.textTheme.ppMori400Grey24Responsive,
             ),
           );
         }
