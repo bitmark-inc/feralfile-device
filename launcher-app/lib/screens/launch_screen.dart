@@ -36,7 +36,7 @@ class _LaunchScreenState extends State<LaunchScreen>
   @override
   void afterFirstLayout(BuildContext context) {
     // Allow the frame to complete rendering
-    Future.delayed(const Duration(milliseconds: 5000), () {
+    Future.delayed(const Duration(milliseconds: 300), () {
       _initializeApp();
     });
   }
@@ -187,14 +187,14 @@ Widget versionTag(BuildContext context) {
           final version = snapshot.data;
           return Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(20.responsiveSize),
               border: Border.all(
-                color: AppColor.auLightGrey,
+                color: AppColor.disabledColor,
               ),
             ),
             padding: EdgeInsets.symmetric(
-              horizontal: 24.responsiveSize,
-              vertical: 16.responsiveSize,
+              horizontal: 12.responsiveSize,
+              vertical: 8.responsiveSize,
             ),
             child: Text(
               'v.$version',

@@ -1,5 +1,6 @@
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/utils/response_layout.dart';
+import 'package:feralfile_app_theme/feral_file_app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -26,8 +27,6 @@ class HomeScreen extends StatelessWidget {
                   child: Center(
                     child: BlocBuilder<BLEConnectionCubit, BLEConnectionState>(
                       builder: (context, state) {
-                        bool showLogInfo = false;
-
                         if (state.status == BLEConnectionStatus.connecting) {
                           return _connectingToWifiView(context, state.ssid);
                         }
@@ -61,20 +60,20 @@ class HomeScreen extends StatelessWidget {
                 width: 600.responsiveSize,
                 height: 400.responsiveSize,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.8),
-                  border: Border(
-                    top: BorderSide(color: Colors.grey[800]!),
-                    right: BorderSide(color: Colors.grey[800]!),
+                  color: Colors.black.withAlpha(200),
+                  border: const Border(
+                    top: BorderSide(color: AppColor.greyMedium),
+                    right: BorderSide(color: AppColor.greyMedium),
                   ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
+                      padding: EdgeInsets.all(8.responsiveSize),
+                      decoration: const BoxDecoration(
                         border: Border(
-                          bottom: BorderSide(color: Colors.grey[800]!),
+                          bottom: BorderSide(color: AppColor.greyMedium),
                         ),
                       ),
                       child: Row(
@@ -82,21 +81,15 @@ class HomeScreen extends StatelessWidget {
                         children: [
                           Text(
                             'System Logs',
-                            style: theme.textTheme.ppMori400WhiteResponsive
-                                .copyWith(
-                              fontSize: 14.responsiveSize,
-                            ),
+                            style: theme.textTheme.ppMori400GreyResponsive,
                           ),
                           BlocBuilder<BLEConnectionCubit, BLEConnectionState>(
                             builder: (context, state) {
                               if (state.localIp.isNotEmpty) {
                                 return Text(
                                   'http://${state.localIp}:8080/logs.html',
-                                  style: theme
-                                      .textTheme.ppMori400WhiteResponsive
-                                      .copyWith(
-                                    fontSize: 14.responsiveSize,
-                                  ),
+                                  style:
+                                      theme.textTheme.ppMori400GreyResponsive,
                                 );
                               }
                               return const SizedBox.shrink();
@@ -158,18 +151,18 @@ class HomeScreen extends StatelessWidget {
           data: 'https://link.feralfile.com/device_connect/$deviceId',
           version: QrVersions.auto,
           size: ResponsiveLayout.qrCodeSize,
-          eyeStyle: QrEyeStyle(
+          eyeStyle: const QrEyeStyle(
             eyeShape: QrEyeShape.square,
             color: Colors.white,
           ),
-          dataModuleStyle: QrDataModuleStyle(
+          dataModuleStyle: const QrDataModuleStyle(
             dataModuleShape: QrDataModuleShape.square,
             color: Colors.white,
           ),
         ),
         SizedBox(height: 20.responsiveSize),
         Text(
-          'Device ID: $deviceId',
+          deviceId,
           style: theme.textTheme.ppMori400GreyResponsive,
           textAlign: TextAlign.center,
         ),
