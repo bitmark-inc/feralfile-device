@@ -105,39 +105,27 @@ export default {
       const archComponent = pathParts[2];
       const filename = pathParts[pathParts.length - 1];
 
-      if (filename === 'Release' || filename === 'InRelease') {
-        const key = `${branch}/${filename}`;
-        const object = await env.BUCKET.get(key);
-        if (!object) {
-          return new Response(`${key} not found`, { status: 404 });
-        }
-        
-        return new Response(object.body, {
-          headers: {
-            'Content-Type': 'text/plain',
-            'Content-Length': object.size.toString(),
-            'Cache-Control': 'public, max-age=3600, must-revalidate',
-          },
-        });
+      const allowedFiles = ['Release', 'InRelease', 'Packages', 'Packages.gz'];
+      if (!allowedFiles.includes(filename)) {
+        console.error(`Invalid file name: ${filename}`);
+        return new Response('Invalid APT repository path or file requested', { status: 400 });
       }
 
       const archMatch = archComponent.match(/^binary-(amd64|arm64)$/);
-      if (!archMatch || (filename !== 'Packages' && filename !== 'Packages.gz')) {
-        console.error(`Invalid APT path or filename: ${url.pathname}`);
+      if (!archMatch) {
+        console.error(`Invalid APT path: ${url.pathname}`);
         return new Response('Invalid APT repository path or file requested', { status: 400 });
       }
-      
-      const arch = archMatch[1];
 
-      const r2Filename = filename === 'Packages' ? `Packages-${arch}` : `Packages.gz-${arch}`;
-      const key = `${branch}/${r2Filename}`;
+      const arch = archMatch[1];
+      const key = `${branch}/${arch}/${filename}`;
 
       console.log(`Attempting to fetch APT file from R2 key: ${key}`);
 
       const object = await env.BUCKET.get(key);
       if (!object) {
         console.error(`APT file not found in R2 at key: ${key}`);
-        return new Response(`APT file ${key} not found`, { status: 404 });
+        return new Response(`${key} not found`, { status: 404 });
       }
 
       let contentType = 'text/plain';
@@ -150,7 +138,7 @@ export default {
       const headers: HeadersInit = {
         'Content-Type': contentType,
         'Content-Length': object.size.toString(),
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'public, max-age=3600, must-revalidate',
       };
       if (contentEncoding) {
         headers['Content-Encoding'] = contentEncoding;
