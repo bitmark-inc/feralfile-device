@@ -15,7 +15,7 @@ on:
       environment:
         description: "Environment to build"
         required: false
-        default: "Development"
+        default: "Production"
         type: choice
         options:
           - Development
