@@ -293,6 +293,15 @@ jobs:
             --verbose \
             --stats=1s
 
+      - name: Check for existing GPG key
+        run: |
+          if gpg --list-secret-keys "${{ secrets.APT_GPG_SIGN_KEY_ID }}" > /dev/null 2>&1; then
+            echo "GPG key already exists. Using existing key."
+          else
+            echo "${{ secrets.APT_GPG_SIGN_KEY }}" | gpg --batch --import
+            echo "GPG key imported from secret."
+          fi
+
       - name: Form the APT release files
         run: |
           cd dist
