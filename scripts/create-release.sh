@@ -3,6 +3,7 @@ set -e
 
 BRANCH="${1:-stable}"
 VERSION="${2:-0.0.1}"
+ARCH="${3:-arm64}"
 
 do_hash() {
     HASH_NAME=$1
@@ -14,10 +15,10 @@ do_hash() {
             continue
         fi
         if [ "$f" = "Packages" ]; then
-            echo " $(${HASH_CMD} ${f} | cut -d' ' -f1) $(wc -c $f | awk '{print $1}') main/binary-arm64/Packages"
+            echo " $(${HASH_CMD} ${f} | cut -d' ' -f1) $(wc -c $f | awk '{print $1}') main/binary-${ARCH}/Packages"
         fi
         if [ "$f" = "Packages.gz" ]; then
-            echo " $(${HASH_CMD} ${f} | cut -d' ' -f1) $(wc -c $f | awk '{print $1}') main/binary-arm64/Packages.gz"
+            echo " $(${HASH_CMD} ${f} | cut -d' ' -f1) $(wc -c $f | awk '{print $1}') main/binary-${ARCH}/Packages.gz"
         fi
     done
 }
@@ -28,7 +29,7 @@ Label: Feral File Repository
 Suite: stable
 Codename: ${BRANCH}
 Version: ${VERSION}
-Architectures: arm64
+Architectures: ${ARCH}
 Components: main
 Description: Feral File Connection Assistant
 Date: $(date -Ru)
