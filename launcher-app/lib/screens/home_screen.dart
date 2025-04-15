@@ -132,7 +132,9 @@ class HomeScreen extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          'Connected to $ssid',
+          'Connected successfully!\n'
+          'Launching display interface...',
+          textAlign: TextAlign.center,
           style: theme.textTheme.ppMori400White24Responsive.copyWith(
             fontSize: 36.responsiveSize,
           ),

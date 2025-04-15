@@ -140,9 +140,9 @@ class _LaunchScreenState extends State<LaunchScreen>
             children: [
               Expanded(
                 child: Center(
-                  child: (!_isInitializing)
-                      ? _logoView(context)
-                      : _initializingView(context),
+                  child: (_isInitializing)
+                      ? _initializingView(context)
+                      : _logoView(context),
                 ),
               ),
               SizedBox(height: 20.responsiveSize),
