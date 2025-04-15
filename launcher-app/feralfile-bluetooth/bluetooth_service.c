@@ -58,7 +58,7 @@ static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/ad
 
 static int sentry_initialized = 0;
 
-// Add this with other function declarations at the top
+// Forward declarations
 static void setup_dbus_signal_handlers(GDBusConnection *connection);
 static void handle_property_change(GDBusConnection *connection,
                                  const gchar *sender_name,
@@ -76,91 +76,88 @@ void bluetooth_set_logfile(const char* path) {
 }
 
 static void log_info(const char* format, ...) {
-    va_list args, args_copy;
-    va_start(args, format);
-    va_copy(args_copy, args);
-    
-    // Get current time
+    va_list ap, ap_syslog, ap_stdout, ap_file, ap_sentry;
+    va_start(ap, format);
+
+    va_copy(ap_syslog, ap);
+    va_copy(ap_stdout, ap);
+    va_copy(ap_file, ap);
+    va_copy(ap_sentry, ap);
+
     time_t now;
     time(&now);
     char timestamp[26];
     ctime_r(&now, timestamp);
-    timestamp[24] = '\0'; // Remove newline
-    
-    // Log to syslog
-    vsyslog(LOG_INFO, format, args);
-    
-    // Log to console (stdout)
+    timestamp[24] = '\0';
+
+    vsyslog(LOG_INFO, format, ap_syslog);
+
     fprintf(stdout, "%s: INFO: ", timestamp);
-    vfprintf(stdout, format, args_copy);
+    vfprintf(stdout, format, ap_stdout);
     fprintf(stdout, "\n");
-    fflush(stdout);  // Ensure immediate output
-    
-    // Log to file if available
+    fflush(stdout);
+
     if (log_file != NULL) {
         fprintf(log_file, "%s: INFO: ", timestamp);
-        vfprintf(log_file, format, args);
+        vfprintf(log_file, format, ap_file);
         fprintf(log_file, "\n");
         fflush(log_file);
     }
-    
-    // Add Sentry breadcrumb for info messages
+
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
         char message[1024];
-        va_list args_crumb;
-        va_copy(args_crumb, args);
-        vsnprintf(message, sizeof(message), format, args_crumb);
-        va_end(args_crumb);
-        
+        vsnprintf(message, sizeof(message), format, ap_sentry);
         sentry_value_t crumb = sentry_value_new_breadcrumb("info", message);
         sentry_value_set_by_key(crumb, "category", sentry_value_new_string("bluetooth"));
         sentry_add_breadcrumb(crumb);
     }
     #endif
-    
-    va_end(args_copy);
-    va_end(args);
+
+    va_end(ap_sentry);
+    va_end(ap_file);
+    va_end(ap_stdout);
+    va_end(ap_syslog);
+    va_end(ap);
 }
 
 static void log_error(const char* format, ...) {
-    va_list args, args_copy;
-    va_start(args, format);
-    va_copy(args_copy, args);
-    
-    // Get current time
+    va_list ap, ap_syslog, ap_stderr, ap_file, ap_sentry;
+    va_start(ap, format);
+
+    va_copy(ap_syslog, ap);
+    va_copy(ap_stderr, ap);
+    va_copy(ap_file, ap);
+    va_copy(ap_sentry, ap);
+
     time_t now;
     time(&now);
     char timestamp[26];
     ctime_r(&now, timestamp);
-    timestamp[24] = '\0'; // Remove newline
-    
-    // Log to syslog
-    vsyslog(LOG_ERR, format, args);
-    
-    // Log to console (stderr)
+    timestamp[24] = '\0';
+
+    // syslog
+    vsyslog(LOG_ERR, format, ap_syslog);
+
+    // stderr
     fprintf(stderr, "%s: ERROR: ", timestamp);
-    vfprintf(stderr, format, args_copy);
+    vfprintf(stderr, format, ap_stderr);
     fprintf(stderr, "\n");
-    fflush(stderr);  // Ensure immediate output
-    
-    // Log to file if available
+    fflush(stderr);
+
+    // file
     if (log_file != NULL) {
         fprintf(log_file, "%s: ERROR: ", timestamp);
-        vfprintf(log_file, format, args);
+        vfprintf(log_file, format, ap_file);
         fprintf(log_file, "\n");
         fflush(log_file);
     }
-    
-    // Capture Sentry event for error messages
+
+    // Sentry
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
         char message[1024];
-        va_list args_event;
-        va_copy(args_event, args);
-        vsnprintf(message, sizeof(message), format, args_event);
-        va_end(args_event);
-        
+        vsnprintf(message, sizeof(message), format, ap_sentry);
         sentry_value_t event = sentry_value_new_message_event(
             SENTRY_LEVEL_ERROR,
             "bluetooth",
@@ -169,57 +166,62 @@ static void log_error(const char* format, ...) {
         sentry_capture_event(event);
     }
     #endif
-    
-    va_end(args_copy);
-    va_end(args);
+
+    va_end(ap_sentry);
+    va_end(ap_file);
+    va_end(ap_stderr);
+    va_end(ap_syslog);
+    va_end(ap);
 }
 
 static void log_warning(const char* format, ...) {
-    va_list args, args_copy;
-    va_start(args, format);
-    va_copy(args_copy, args);
-    
-    // Get current time
+    va_list ap, ap_syslog, ap_stderr, ap_file, ap_sentry;
+    va_start(ap, format);
+
+    va_copy(ap_syslog, ap);
+    va_copy(ap_stderr, ap);
+    va_copy(ap_file, ap);
+    va_copy(ap_sentry, ap);
+
     time_t now;
     time(&now);
     char timestamp[26];
     ctime_r(&now, timestamp);
-    timestamp[24] = '\0'; // Remove newline
-    
-    // Log to syslog
-    vsyslog(LOG_WARNING, format, args);
-    
-    // Log to console (stderr)
+    timestamp[24] = '\0';
+
+    // syslog
+    vsyslog(LOG_WARNING, format, ap_syslog);
+
+    // stderr
     fprintf(stderr, "%s: WARNING: ", timestamp);
-    vfprintf(stderr, format, args_copy);
+    vfprintf(stderr, format, ap_stderr);
     fprintf(stderr, "\n");
     fflush(stderr);
-    
-    // Log to file if available
+
+    // file
     if (log_file != NULL) {
         fprintf(log_file, "%s: WARNING: ", timestamp);
-        vfprintf(log_file, format, args);
+        vfprintf(log_file, format, ap_file);
         fprintf(log_file, "\n");
         fflush(log_file);
     }
-    
-    // Add Sentry breadcrumb for warning messages
+
+    // Sentry
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
         char message[1024];
-        va_list args_crumb;
-        va_copy(args_crumb, args);
-        vsnprintf(message, sizeof(message), format, args_crumb);
-        va_end(args_crumb);
-        
+        vsnprintf(message, sizeof(message), format, ap_sentry);
         sentry_value_t crumb = sentry_value_new_breadcrumb("warning", message);
         sentry_value_set_by_key(crumb, "category", sentry_value_new_string("bluetooth"));
         sentry_add_breadcrumb(crumb);
     }
     #endif
-    
-    va_end(args_copy);
-    va_end(args);
+
+    va_end(ap_sentry);
+    va_end(ap_file);
+    va_end(ap_stderr);
+    va_end(ap_syslog);
+    va_end(ap);
 }
 
 static const gchar service_xml[] =
