@@ -27,22 +27,19 @@ class HomeScreen extends StatelessWidget {
                   child: Center(
                     child: BlocBuilder<BLEConnectionCubit, BLEConnectionState>(
                       builder: (context, state) {
-                        if (state.status == BLEConnectionStatus.connecting) {
-                          return _connectingToWifiView(context, state.ssid);
+                        switch (state.status) {
+                          case BLEConnectionStatus.connecting:
+                            return _connectingToWifiView(context, state.ssid);
+                          case BLEConnectionStatus.connected:
+                            return _connectedToWifiView(context, state.ssid);
+                          case BLEConnectionStatus.failed:
+                            return _connectFailView(context, state.ssid);
+                          default:
+                            return _qrCodeView(
+                              context,
+                              state.deviceId,
+                            );
                         }
-
-                        if (state.status == BLEConnectionStatus.connected) {
-                          return _connectedToWifiView(context, state.ssid);
-                        }
-
-                        if (state.status == BLEConnectionStatus.failed) {
-                          return _connectFailView(context, state.ssid);
-                        }
-
-                        return _qrCodeView(
-                          context,
-                          state.deviceId,
-                        );
                       },
                     ),
                   ),
