@@ -164,7 +164,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version-file: pubspec.yaml
+          flutter-version-file: launcher-app/pubspec.yaml
 
       - name: Get Flutter dependencies
         run: |
