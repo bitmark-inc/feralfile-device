@@ -2,10 +2,11 @@ import 'package:after_layout/after_layout.dart';
 import 'package:feralfile/cubits/ble_connection_cubit.dart';
 import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
-import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/switcher_service.dart';
 import 'package:feralfile/services/websocket_service.dart';
+import 'package:feralfile/utils/response_layout.dart';
 import 'package:feralfile/utils/version_helper.dart';
+import 'package:feralfile_app_theme/feral_file_app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -24,10 +25,18 @@ class LaunchScreen extends StatefulWidget {
 
 class _LaunchScreenState extends State<LaunchScreen>
     with AfterLayoutMixin<LaunchScreen> {
+  late bool _isInitializing;
+
+  @override
+  void initState() {
+    super.initState();
+    _isInitializing = false;
+  }
+
   @override
   void afterFirstLayout(BuildContext context) {
     // Allow the frame to complete rendering
-    Future.delayed(const Duration(milliseconds: 100), () {
+    Future.delayed(const Duration(milliseconds: 300), () {
       _initializeApp();
     });
   }
@@ -35,7 +44,9 @@ class _LaunchScreenState extends State<LaunchScreen>
   Future<void> _initializeApp() async {
     try {
       // await CursorHandler.initializeScreenDimensions();
-
+      setState(() {
+        _isInitializing = true;
+      });
       // Initialize Bluetooth service
       final bleConnectionCubit = context.read<BLEConnectionCubit>();
       await bleConnectionCubit.initialize();
@@ -120,27 +131,76 @@ class _LaunchScreenState extends State<LaunchScreen>
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final logoSize = size.width / 4; // 1/4 of screen width
-
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SvgPicture.asset(
-              'assets/images/ff-logo.svg',
-              width: logoSize,
-              height: logoSize,
-            ),
-            const SizedBox(height: 40),
-            const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
-          ],
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Center(
+                  child: (_isInitializing)
+                      ? _initializingView(context)
+                      : _logoView(context),
+                ),
+              ),
+              SizedBox(height: 20.responsiveSize),
+              versionTag(context),
+              SizedBox(height: 40.responsiveSize),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _logoView(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final logoSize = size.width / 4; // 1/4 of screen width
+    return SvgPicture.asset(
+      'assets/images/portal.svg',
+      width: logoSize,
+    );
+  }
+
+  Widget _initializingView(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      'Initializing...',
+      style: theme.textTheme.ppMori700White24
+          .copyWith(fontSize: 36.responsiveSize),
+    );
+  }
+}
+
+Widget versionTag(BuildContext context) {
+  final theme = Theme.of(context);
+  return FutureBuilder(
+      future: VersionHelper.getInstalledVersion(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox();
+        } else if (snapshot.hasError) {
+          return const SizedBox();
+        } else {
+          final version = snapshot.data;
+          return Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20.responsiveSize),
+              border: Border.all(
+                color: AppColor.disabledColor,
+              ),
+            ),
+            padding: EdgeInsets.symmetric(
+              horizontal: 12.responsiveSize,
+              vertical: 8.responsiveSize,
+            ),
+            child: Text(
+              'v.$version',
+              style: theme.textTheme.ppMori400Grey24Responsive,
+            ),
+          );
+        }
+      });
 }

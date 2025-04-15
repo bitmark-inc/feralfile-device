@@ -48,6 +48,10 @@ dependencies:
   sentry_flutter: ^8.13.2
   sentry_logging: ^8.13.2
   protobuf: ^3.1.0
+  feralfile_app_theme:
+    git:
+      url: https://github.com/bitmark-inc/feralfile-app-client-shared-theme
+      ref: 8d791a051a9b38791e82ac1582176d1b4e8e74fa
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -76,7 +80,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/images/ff-logo.svg
+    - assets/images/
     - .env
 
   fonts:

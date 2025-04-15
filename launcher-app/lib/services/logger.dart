@@ -16,8 +16,8 @@ final Logger logger = Logger('FeralFileApp');
 late File _logFile;
 HttpServer? _logServer;
 final _logBuffer = <String>[];
-const int _maxBufferSize = 100; // Keep last 100 log entries
-const int _maxFileLines = 100; // Keep only last 100 lines in log file
+const int _maxBufferSize = 1000; // Keep last 100 log entries
+const int _maxFileLines = 1000; // Keep only last 100 lines in log file
 late SendPort _logIsolateSendPort;
 late Isolate _logIsolate;
 ReceivePort? _logReceivePort;
