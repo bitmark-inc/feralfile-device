@@ -51,11 +51,12 @@ export default {
     }
 
     if (url.pathname.startsWith('/pool/')) {
-      const key = url.pathname.replace('/pool/', '');
+      const key = url.pathname.substring(1);
       const object = await env.BUCKET.get(key);
       
       if (!object) {
-        return new Response('File not found', { status: 404 });
+        console.error(`File not found for key: ${key}`);
+        return new Response(`File not found: ${url.pathname}`, { status: 404 });
       }
 
       return new Response(object.body, {
@@ -93,9 +94,19 @@ export default {
 
     // Handle apt request
     if (url.pathname.startsWith('/dists/')) {
-      const key = url.pathname.replace('/dists/', '');
-      if (key.endsWith('/Release') || key.endsWith('/InRelease')) {
-        // Serve the Release file
+      const pathParts = url.pathname.substring('/dists/'.length).split('/');
+      
+      if (pathParts.length < 4) {
+        return new Response('Invalid APT repository path structure', { status: 400 });
+      }
+
+      const branch = pathParts[0];
+      const component = pathParts[1];
+      const archComponent = pathParts[2];
+      const filename = pathParts[pathParts.length - 1];
+
+      if (filename === 'Release' || filename === 'InRelease') {
+        const key = `${branch}/${filename}`;
         const object = await env.BUCKET.get(key);
         if (!object) {
           return new Response(`${key} not found`, { status: 404 });
@@ -105,47 +116,47 @@ export default {
           headers: {
             'Content-Type': 'text/plain',
             'Content-Length': object.size.toString(),
-            'Cache-Control': 'max-age=3600, public',
+            'Cache-Control': 'public, max-age=3600, must-revalidate',
           },
         });
       }
 
-      if (key.endsWith('main/binary-arm64/Packages')) {
-        const branch = key.replace('main/binary-arm64/Packages', '');
-        // Serve the Packages file
-        const object = await env.BUCKET.get(branch+'Packages');
-        if (!object) {
-          return new Response(`${branch+'Packages'} not found`, { status: 404 });
-        }
-    
-        return new Response(object.body, {
-          headers: {
-            'Content-Type': 'text/plain',
-            'Content-Length': object.size.toString(),
-            'Cache-Control': 'max-age=3600, public',
-          },
-        });
+      const archMatch = archComponent.match(/^binary-(amd64|arm64)$/);
+      if (!archMatch || (filename !== 'Packages' && filename !== 'Packages.gz')) {
+        console.error(`Invalid APT path or filename: ${url.pathname}`);
+        return new Response('Invalid APT repository path or file requested', { status: 400 });
       }
-    
-      if (key.endsWith('main/binary-arm64/Packages.gz')) {
-        const branch = key.replace('main/binary-arm64/Packages.gz', '');
-        // Serve the Packages file
-        const object = await env.BUCKET.get(branch+'Packages.gz');
-        if (!object) {
-          return new Response(`${branch+'Packages.gz'} not found`, { status: 404 });
-        }
-    
-        return new Response(object.body, {
-          headers: {
-            'Content-Type': 'application/gzip',
-            'Content-Encoding': 'gzip',
-            'Content-Length': object.size.toString(),
-            'Cache-Control': 'max-age=3600, public',
-          },
-        });
+      
+      const arch = archMatch[1];
+
+      const r2Filename = filename === 'Packages' ? `Packages-${arch}` : `Packages.gz-${arch}`;
+      const key = `${branch}/${r2Filename}`;
+
+      console.log(`Attempting to fetch APT file from R2 key: ${key}`);
+
+      const object = await env.BUCKET.get(key);
+      if (!object) {
+        console.error(`APT file not found in R2 at key: ${key}`);
+        return new Response(`APT file ${key} not found`, { status: 404 });
       }
-    
-      return new Response('Path not found', { status: 404 });
+
+      let contentType = 'text/plain';
+      let contentEncoding: string | null = null;
+      if (filename === 'Packages.gz') {
+        contentType = 'application/gzip';
+        contentEncoding = 'gzip';
+      }
+
+      const headers: HeadersInit = {
+        'Content-Type': contentType,
+        'Content-Length': object.size.toString(),
+        'Cache-Control': 'public, max-age=3600',
+      };
+      if (contentEncoding) {
+        headers['Content-Encoding'] = contentEncoding;
+      }
+
+      return new Response(object.body, { headers });
     }
 
     // List files and generate HTML

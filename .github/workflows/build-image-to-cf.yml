@@ -26,7 +26,7 @@ jobs:
   build-app:
     name: Build Feral File Launcher App
     if: ${{ github.event.inputs.existing_app_version == '' }}
-    uses: ./.github/workflows/build-app-to-cf.yml
+    uses: ./.github/workflows/build-app-arm64.yml
     with:
       version: ${{ github.event.inputs.version }}
       environment: ${{ github.event.inputs.environment }}

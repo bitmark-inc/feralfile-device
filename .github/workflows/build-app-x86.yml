@@ -1,4 +1,4 @@
-name: Build FeralFile App
+name: Build FeralFile App for AMD64
 
 on:
   workflow_dispatch:
@@ -54,8 +54,8 @@ on:
 
 jobs:
   build:
-    name: Build and Package App
-    runs-on: ['self-hosted', 'ARM64']
+    name: Build and Package App for AMD64
+    runs-on: ['ubuntu-latest']
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
     defaults:
       run:
@@ -89,7 +89,7 @@ jobs:
 
       - name: Check if .deb file already exists in R2
         run: |
-          DEB_FILE="feralfile-launcher_${{ inputs.version }}_arm64.deb"
+          DEB_FILE="feralfile-launcher_${{ inputs.version }}_amd64.deb"
           R2_DIR="r2:${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}/${{ github.ref_name }}"
           R2_PATH="$R2_DIR/$DEB_FILE"
           
@@ -184,8 +184,8 @@ jobs:
           cd feralfile-bluetooth
           make clean
           make SENTRY_DSN='${{ secrets.SENTRY_DSN_BLUETOOTH_LIB }}' APP_VERSION='${{ inputs.version }}'
-          mkdir -p ../build/linux/arm64/release/bundle/lib/
-          cp libbluetooth_service.so ../build/linux/arm64/release/bundle/lib/
+          mkdir -p ../build/linux/x64/release/bundle/lib/
+          cp libbluetooth_service.so ../build/linux/x64/release/bundle/lib/
           cd ..
 
       - name: Configure ATK
@@ -202,7 +202,7 @@ jobs:
         run: |
           export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
           flutter config --enable-linux-desktop
-          flutter build linux --release --target-platform=linux-arm64
+          flutter build linux --release --target-platform=linux-x64
 
       - name: Upload debug symbols to Sentry
         env:
@@ -235,7 +235,7 @@ jobs:
           sentry-cli debug-files upload \
             --include-sources \
             --wait \
-            build/linux/arm64/release/bundle/
+            build/linux/x64/release/bundle/
           
           # Finalize release if on main branch
           if [[ "${{ github.ref }}" == "refs/heads/main" ]] && [[ -n "$SENTRY_RELEASE" ]]; then
@@ -250,15 +250,15 @@ jobs:
         env:
           APP_NAME: feralfile-launcher
           VERSION: ${{ inputs.version }}
-          ARCH: arm64
+          ARCH: amd64
           DESCRIPTION: "Feral File Connection Assistant"
           MAINTAINER: "Bitmark Inc <support@feralfile.com>"
           INSTALL_DIR: "/opt/feralfile"
-          DEPENDS: "git, alsa-utils, policykit-1, chromium, rpi-chromium-mods, libwidevinecdm0, gldriver-test, fonts-droid-fallback, fonts-liberation2, obconf, python3-sentry-sdk, python3-websockets, vulkan-tools, mesa-vulkan-drivers, xcompmgr, ffmpeg, xserver-xorg, xinit, unclutter, mousepad, eom, lxde, zenity, xdg-utils, lightdm"
+          DEPENDS: "git, alsa-utils, policykit-1, chromium | chromium-browser, libwidevinecdm0, fonts-droid-fallback, fonts-liberation2, obconf, python3-sentry-sdk, python3-websockets, vulkan-tools, mesa-vulkan-drivers, xcompmgr, ffmpeg, xserver-xorg, xinit, unclutter, mousepad, eom, lxde, zenity, xdg-utils, lightdm"
         run: |
           mkdir -p package/DEBIAN
           mkdir -p package$INSTALL_DIR/lib
-          cp -r build/linux/arm64/release/bundle/* package$INSTALL_DIR/
+          cp -r build/linux/x64/release/bundle/* package$INSTALL_DIR/
           cp feralfile-bluetooth/libbluetooth_service.so package$INSTALL_DIR/lib/
 
           cat <<EOF > package/DEBIAN/control
@@ -266,19 +266,19 @@ jobs:
           Version: $VERSION
           Section: base
           Priority: optional
-          Architecture: arm64
+          Architecture: amd64
           Maintainer: $MAINTAINER
           Depends: $DEPENDS
           Description: $DESCRIPTION
           EOF
 
           chmod -R 755 package$INSTALL_DIR
-          dpkg-deb --build package ${APP_NAME}_${VERSION}_arm64.deb
+          dpkg-deb --build package ${APP_NAME}_${VERSION}_amd64.deb
 
       - name: Download all deb files from the same branch
         run: |
           mkdir -p dist/pool/${{ github.ref_name }}
-          cp feralfile-launcher_${{ inputs.version }}_arm64.deb dist/pool/${{ github.ref_name }}/feralfile-launcher_${{ inputs.version }}_arm64.deb
+          cp feralfile-launcher_${{ inputs.version }}_amd64.deb dist/pool/${{ github.ref_name }}/feralfile-launcher_${{ inputs.version }}_amd64.deb
           rclone copy "r2:${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}/${{ github.ref_name }}" "dist/pool/${{ github.ref_name }}" \
             --include "*.deb" \
             --s3-upload-cutoff=100M \
@@ -290,7 +290,7 @@ jobs:
       - name: Form the APT release files
         run: |
           cd dist
-          dpkg-scanpackages --arch arm64 --multiversion pool > Packages
+          dpkg-scanpackages --arch amd64 --multiversion pool > Packages
           cat Packages | gzip -9 > Packages.gz
           chmod +x ../../scripts/create-release.sh
           ../../scripts/create-release.sh ${{ github.ref_name }} ${{ inputs.version }} > Release
@@ -301,7 +301,7 @@ jobs:
 
       - name: Upload to Cloudflare R2
         run: |
-          rclone copy feralfile-launcher_${{ inputs.version }}_arm64.deb r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}
+          rclone copy feralfile-launcher_${{ inputs.version }}_amd64.deb r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}
           rclone copy dist/Release r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}
           rclone copy dist/Packages r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}
           rclone copy dist/Packages.gz r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}
