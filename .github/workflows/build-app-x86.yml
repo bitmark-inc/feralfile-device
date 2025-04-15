@@ -165,7 +165,6 @@ jobs:
         with:
           flutter-version: 3.29.3
           channel: stable
-          flutter-version-file: launcher-app/pubspec.yaml
 
       - name: Get Flutter dependencies
         run: |
