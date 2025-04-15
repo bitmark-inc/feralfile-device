@@ -160,6 +160,12 @@ jobs:
             echo "$key=${value:0:4}..."
           done < .env
 
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: pubspec.yaml
+
       - name: Get Flutter dependencies
         run: |
           export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
