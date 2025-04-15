@@ -35,6 +35,10 @@ class HomeScreen extends StatelessWidget {
                           return _connectedToWifiView(context, state.ssid);
                         }
 
+                        if (state.status == BLEConnectionStatus.failed) {
+                          return _connectFailView(context, state.ssid);
+                        }
+
                         return _qrCodeView(
                           context,
                           state.deviceId,
@@ -134,6 +138,24 @@ class HomeScreen extends StatelessWidget {
         Text(
           'Connected successfully!\n'
           'Launching display interface...',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.ppMori400White24Responsive.copyWith(
+            fontSize: 36.responsiveSize,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _connectFailView(BuildContext context, String ssid) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          'Failed to connect to network "$ssid".\n\n'
+          'Please check your Wi-Fi credentials and try again.\n'
+          'Make sure the network is available and within range.',
           textAlign: TextAlign.center,
           style: theme.textTheme.ppMori400White24Responsive.copyWith(
             fontSize: 36.responsiveSize,
