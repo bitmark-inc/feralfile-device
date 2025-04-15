@@ -1038,7 +1038,9 @@ int bluetooth_init(const char* custom_device_name) {
             // Set tags
             log_info("[%s] Setting Sentry tags", LOG_TAG);
             sentry_set_tag("service", "bluetooth");
+            log_info("[%s] Setting Sentry service bluetooth", LOG_TAG);
             sentry_set_tag("device_name", device_name);
+            log_info("[%s] Setting Sentry device_name %s", LOG_TAG, device_name);
             
             // Add initial breadcrumb
             sentry_value_t crumb = sentry_value_new_breadcrumb("default", "Bluetooth service initialized");
