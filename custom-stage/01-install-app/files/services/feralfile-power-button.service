@@ -1,0 +1,15 @@
+[Unit]
+Description=Feral File Power Button Monitor
+After=network.target
+Requires=feralfile-launcher.service
+
+[Service]
+Type=simple
+User=feralfile
+Group=feralfile
+ExecStart=/usr/local/bin/power-button-monitor.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target 

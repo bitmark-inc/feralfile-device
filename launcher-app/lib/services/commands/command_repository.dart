@@ -8,6 +8,7 @@ import 'package:feralfile/services/commands/show_pairing_qrcode.dart';
 import 'package:feralfile/services/commands/shutdown_handler.dart';
 import 'package:feralfile/services/commands/version_handler.dart';
 import 'package:feralfile/services/commands/version_update_handler.dart';
+import 'package:feralfile/services/commands/reset_handler.dart';
 
 import '../bluetooth_service.dart';
 import '../logger.dart';
@@ -50,6 +51,7 @@ class CommandRepository {
     _handlers['disableMetricsStreaming'] = DisableMetricsStreamingHandler();
     _handlers['showPairingQRCode'] = ShowPairingQRCodeHandler();
     _handlers['shutdown'] = ShutdownHandler();
+    _handlers['reset'] = ResetHandler();
   }
 
   Future<void> executeCommand(String command, String data,
