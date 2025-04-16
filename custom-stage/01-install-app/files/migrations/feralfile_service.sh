@@ -6,12 +6,29 @@ mkdir -p /etc/systemd/system
 # Add these lines to ensure proper user permissions
 usermod -a -G bluetooth,dialout feralfile
 
+rm -f /etc/systemd/system/feralfile-bt-agent.service
+cat > /etc/systemd/system/feralfile-bt-agent.service << EOF
+[Unit]
+Description=Bluetooth Just Work Agent Service
+After=bluetooth.target
+Wants=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+ExecStart=python3 /home/feralfile/services/feralfile-bt-agent.py
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=default.target
+EOF
+
 rm -f /etc/systemd/system/feralfile-launcher.service
 cat > /etc/systemd/system/feralfile-launcher.service << EOF
 [Unit]
 Description=FeralFile Launcher Application
-After=bluetooth.target
-Requires=bluetooth.service
+After=feralfile-bt-agent.service
+Requires=feralfile-bt-agent.service
 
 [Service]
 User=feralfile
