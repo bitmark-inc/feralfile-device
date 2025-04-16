@@ -40,6 +40,10 @@ static guint eng_char_reg_id = 0;
 static GDBusProxy *gatt_manager = NULL;
 static GDBusProxy *advertising_manager = NULL;
 
+static GDBusNodeInfo *agent_node_info = NULL;
+static guint agent_registration_id = 0;
+static GDBusProxy *agent_manager = NULL;
+
 static pthread_t bluetooth_thread;
 
 typedef void (*connection_result_callback)(int success, const unsigned char* data, int length);
@@ -272,6 +276,42 @@ static const gchar service_xml[] =
     "  </node>"
     "</node>";
 
+static const gchar agent_introspection_xml[] =
+    "<node>"
+    "  <interface name='org.bluez.Agent1'>"
+    "    <method name='Release'/>"
+    "    <method name='RequestPinCode'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='pincode' type='s' direction='out'/>"
+    "    </method>"
+    "    <method name='DisplayPinCode'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='pincode' type='s' direction='in'/>"
+    "    </method>"
+    "    <method name='RequestPasskey'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='passkey' type='u' direction='out'/>"
+    "    </method>"
+    "    <method name='DisplayPasskey'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='passkey' type='u' direction='in'/>"
+    "      <arg name='entered' type='q' direction='in'/>"
+    "    </method>"
+    "    <method name='RequestConfirmation'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='passkey' type='u' direction='in'/>"
+    "    </method>"
+    "    <method name='RequestAuthorization'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "    </method>"
+    "    <method name='AuthorizeService'>"
+    "      <arg name='device' type='o' direction='in'/>"
+    "      <arg name='uuid' type='s' direction='in'/>"
+    "    </method>"
+    "    <method name='Cancel'/>"
+    "  </interface>"
+    "</node>";
+
 static GDBusNodeInfo* find_node_by_name(GDBusNodeInfo *parent, const gchar *name) {
     GDBusNodeInfo **nodes = parent->nodes;
     while (*nodes != NULL) {
@@ -282,6 +322,71 @@ static GDBusNodeInfo* find_node_by_name(GDBusNodeInfo *parent, const gchar *name
     }
     return NULL;
 }
+
+static void agent_method_call(GDBusConnection *conn,
+    const gchar *sender,
+    const gchar *object_path,
+    const gchar *interface_name,
+    const gchar *method_name,
+    GVariant *parameters,
+    GDBusMethodInvocation *invocation,
+    gpointer user_data)
+{
+    if (g_strcmp0(method_name, "Release") == 0) {
+        log_info("[%s] Received BT Release for device %s", 
+            LOG_TAG, g_variant_get_string(g_variant_get_child_value(parameters, 0), NULL));
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    } else if (g_strcmp0(method_name, "RequestPinCode") == 0) {
+        log_info("[%s] Received BT RequestPinCode for device %s", 
+            LOG_TAG, g_variant_get_string(g_variant_get_child_value(parameters, 0), NULL));
+        g_dbus_method_invocation_return_dbus_error(
+            invocation,
+            "org.bluez.Error.Rejected",
+            "NoInputNoOutput agent cannot provide PIN code"
+        );
+    } else if (g_strcmp0(method_name, "RequestPasskey") == 0) {
+        log_info("[%s] Received BT RequestPasskey for device %s", 
+            LOG_TAG, g_variant_get_string(g_variant_get_child_value(parameters, 0), NULL));
+        g_dbus_method_invocation_return_dbus_error(
+            invocation,
+            "org.bluez.Error.Rejected",
+            "NoInputNoOutput agent cannot provide passkey"
+        );
+    } else if (g_strcmp0(method_name, "RequestConfirmation") == 0) {
+        log_info("[%s] Received BT RequestConfirmation for device %s", 
+            LOG_TAG, g_variant_get_string(g_variant_get_child_value(parameters, 0), NULL));
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    } else if (g_strcmp0(method_name, "AuthorizeService") == 0) {
+        log_info("[%s] Received BT AuthorizeService for device %s", 
+            LOG_TAG, g_variant_get_string(g_variant_get_child_value(parameters, 0), NULL));
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    } else if (g_strcmp0(method_name, "RequestAuthorization") == 0) {
+        log_info("[%s] Received BT RequestAuthorization for device %s", 
+            LOG_TAG, g_variant_get_string(g_variant_get_child_value(parameters, 0), NULL));
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    } else if (g_strcmp0(method_name, "Cancel") == 0) {
+        log_info("[%s] Received BT Cancel for device %s", 
+            LOG_TAG, g_variant_get_string(g_variant_get_child_value(parameters, 0), NULL));
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    } else if (g_strcmp0(method_name, "DisplayPinCode") == 0 || g_strcmp0(method_name, "DisplayPasskey") == 0) {
+        log_info("[%s] Received BT DisplayPinCode/DisplayPasskey for device %s", 
+            LOG_TAG, g_variant_get_string(g_variant_get_child_value(parameters, 0), NULL));
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    } else {
+        log_info("[%s] Received BT Not Supported for device %s", 
+            LOG_TAG, g_variant_get_string(g_variant_get_child_value(parameters, 0), NULL));
+        g_dbus_method_invocation_return_dbus_error(
+            invocation,
+            "org.bluez.Error.NotSupported",
+            "Not supported");
+    }
+}
+
+static const GDBusInterfaceVTable agent_vtable = {
+    .method_call = agent_method_call,
+    .get_property = NULL,
+    .set_property = NULL
+};
 
 // ----------------------------------------------------------------------------
 // Service property getter
@@ -778,6 +883,85 @@ static void* bluetooth_thread_func(void* arg) {
             pthread_exit(NULL);
         }
 
+        agent_node_info = g_dbus_node_info_new_for_xml(agent_introspection_xml, &error);
+        if (!agent_node_info || error) {
+            log_error("[%s] Failed to parse agent XML: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        agent_registration_id = g_dbus_connection_register_object(
+            connection,
+            "/com/feralfile/display/agent",     
+            agent_node_info->interfaces[0],     
+            &agent_vtable,
+            NULL,
+            NULL,
+            &error
+        );
+        if (error || agent_registration_id == 0) {
+            log_error("[%s] Failed to register agent object: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        agent_manager = g_dbus_proxy_new_sync(
+            connection,
+            G_DBUS_PROXY_FLAGS_NONE,
+            NULL,
+            "org.bluez",         // bus name
+            "/org/bluez",        // object path
+            "org.bluez.AgentManager1", // interface
+            NULL,
+            &error
+        );
+        if (!agent_manager || error) {
+            log_error("[%s] Failed to get AgentManager1: %s",
+                      LOG_TAG,
+                      error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            pthread_exit(NULL);
+        }
+
+        GVariant *r = g_dbus_proxy_call_sync(
+            agent_manager,
+            "RegisterAgent",
+            // (object path, capability)
+            g_variant_new("(os)", "/com/feralfile/display/agent", "NoInputNoOutput"),
+            G_DBUS_CALL_FLAGS_NONE,
+            -1,
+            NULL,
+            &error
+        );
+        if (error) {
+            log_error("[%s] RegisterAgent failed: %s", LOG_TAG, error->message);
+            g_error_free(error);
+            pthread_exit(NULL);
+        }
+        if (r) g_variant_unref(r);
+
+        r = g_dbus_proxy_call_sync(
+            agent_manager,
+            "RequestDefaultAgent",
+            g_variant_new("(o)", "/com/feralfile/display/agent"),
+            G_DBUS_CALL_FLAGS_NONE,
+            -1,
+            NULL,
+            &error
+        );
+        if (error) {
+            log_error("[%s] RequestDefaultAgent failed: %s", LOG_TAG, error->message);
+            g_error_free(error);
+            pthread_exit(NULL);
+        }
+        if (r) g_variant_unref(r);
+
+        log_info("[%s] JustWorks agent registered successfully", LOG_TAG);
+
         // Step 5: Register your setup characteristic
         setup_char_reg_id = g_dbus_connection_register_object(
             connection,
@@ -1076,6 +1260,35 @@ void bluetooth_stop() {
     log_info("[%s] Stopping Bluetooth...", LOG_TAG);
     
     GError *error = NULL;
+
+    if (agent_manager) {
+        g_dbus_proxy_call_sync(
+            agent_manager,
+            "UnregisterAgent",
+            g_variant_new("(o)", "/com/feralfile/display/agent"),
+            G_DBUS_CALL_FLAGS_NONE,
+            -1,
+            NULL,
+            &error
+        );
+        if (error) {
+            log_error("[%s] UnregisterAgent failed: %s", LOG_TAG, error->message);
+            g_error_free(error);
+            error = NULL;
+        }
+
+        g_object_unref(agent_manager);
+        agent_manager = NULL;
+    }
+
+    if (agent_registration_id) {
+        g_dbus_connection_unregister_object(connection, agent_registration_id);
+        agent_registration_id = 0;
+    }
+    if (agent_node_info) {
+        g_dbus_node_info_unref(agent_node_info);
+        agent_node_info = NULL;
+    }
 
     // 1) Unregister the advertisement
     if (advertising_manager) {
