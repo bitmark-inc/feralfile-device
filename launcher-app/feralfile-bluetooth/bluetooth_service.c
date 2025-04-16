@@ -12,6 +12,7 @@
 #include <bluetooth/hci.h>
 #include <bluetooth/hci_lib.h>
 #include <sentry.h>
+#include <unistd.h>
 
 #define LOG_TAG "BluetoothService"
 #define FERALFILE_SERVICE_NAME   "FeralFile Device"
@@ -23,6 +24,30 @@
 #define MAX_ADV_PATH_LENGTH 64
 #define MAX_RETRY_ATTEMPTS 5
 #define RETRY_DELAY_SECONDS 2
+#define MAX_LOG_LINES 100
+#define LOG_QUEUE_SIZE 1000
+
+// Log message structure
+typedef struct {
+    char* message;
+    int is_flush_request;  // Special flag to request log flushing
+    int is_shutdown;       // Special flag to request thread shutdown
+} LogMessage;
+
+// Log buffer to store recent log entries
+static char* log_buffer[MAX_LOG_LINES];
+static int log_buffer_index = 0;
+static int log_buffer_full = 0;
+static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Log queue for asynchronous logging
+static LogMessage log_queue[LOG_QUEUE_SIZE];
+static int log_queue_head = 0;
+static int log_queue_tail = 0;
+static pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t queue_cond = PTHREAD_COND_INITIALIZER;
+static pthread_t log_thread;
+static int log_thread_running = 0;
 
 static GMainLoop *main_loop = NULL;
 static GDBusConnection *connection = NULL;
@@ -52,13 +77,14 @@ typedef void (*device_connection_callback)(const char* device_id, int connected)
 static device_connection_callback connection_callback = NULL;
 
 static FILE* log_file = NULL;
+static char log_file_path[512] = {0};  // Store the log file path
 
 static char device_name[MAX_DEVICE_NAME_LENGTH] = FERALFILE_SERVICE_NAME;
 static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/advertisement0";
 
 static int sentry_initialized = 0;
 
-// Add this with other function declarations at the top
+// Function declarations
 static void setup_dbus_signal_handlers(GDBusConnection *connection);
 static void handle_property_change(GDBusConnection *connection,
                                  const gchar *sender_name,
@@ -67,18 +93,269 @@ static void handle_property_change(GDBusConnection *connection,
                                  const gchar *signal_name,
                                  GVariant *parameters,
                                  gpointer user_data);
+static void write_log_buffer_to_file(void);
+static void* log_thread_func(void* arg);
+static void enqueue_log_message(const char* message);
+static void request_log_flush(void);
+static void shutdown_log_thread(void);
+
+// Initialize the log buffer
+static void init_log_buffer(void) {
+    pthread_mutex_lock(&log_mutex);
+    for (int i = 0; i < MAX_LOG_LINES; i++) {
+        log_buffer[i] = NULL;
+    }
+    log_buffer_index = 0;
+    log_buffer_full = 0;
+    pthread_mutex_unlock(&log_mutex);
+}
+
+// Free the log buffer
+static void free_log_buffer(void) {
+    pthread_mutex_lock(&log_mutex);
+    for (int i = 0; i < MAX_LOG_LINES; i++) {
+        if (log_buffer[i] != NULL) {
+            free(log_buffer[i]);
+            log_buffer[i] = NULL;
+        }
+    }
+    pthread_mutex_unlock(&log_mutex);
+}
+
+// Add a message to the log buffer
+static void add_to_log_buffer(const char* level, const char* timestamp, const char* message) {
+    pthread_mutex_lock(&log_mutex);
+    
+    // Free the entry we're about to overwrite
+    if (log_buffer[log_buffer_index] != NULL) {
+        free(log_buffer[log_buffer_index]);
+    }
+    
+    // Allocate and store the new log entry
+    int len = strlen(timestamp) + strlen(level) + strlen(message) + 10; // Extra space for formatting
+    log_buffer[log_buffer_index] = (char*)malloc(len);
+    if (log_buffer[log_buffer_index] != NULL) {
+        snprintf(log_buffer[log_buffer_index], len, "%s: %s: %s", timestamp, level, message);
+        
+        // Update buffer state
+        log_buffer_index = (log_buffer_index + 1) % MAX_LOG_LINES;
+        if (!log_buffer_full && log_buffer_index == 0) {
+            log_buffer_full = 1;
+        }
+    }
+    
+    pthread_mutex_unlock(&log_mutex);
+}
+
+// Enqueue a log message for the logging thread
+static void enqueue_log_message(const char* message) {
+    pthread_mutex_lock(&queue_mutex);
+    
+    // Check if queue is full
+    if ((log_queue_head + 1) % LOG_QUEUE_SIZE == log_queue_tail) {
+        // Queue is full, discard the oldest message
+        if (log_queue[log_queue_tail].message != NULL) {
+            free(log_queue[log_queue_tail].message);
+        }
+        log_queue_tail = (log_queue_tail + 1) % LOG_QUEUE_SIZE;
+    }
+    
+    // Add the new message to the queue
+    log_queue[log_queue_head].message = strdup(message);
+    log_queue[log_queue_head].is_flush_request = 0;
+    log_queue[log_queue_head].is_shutdown = 0;
+    log_queue_head = (log_queue_head + 1) % LOG_QUEUE_SIZE;
+    
+    // Signal the logging thread that there's work to do
+    pthread_cond_signal(&queue_cond);
+    pthread_mutex_unlock(&queue_mutex);
+}
+
+// Request flushing the log buffer to disk
+static void request_log_flush(void) {
+    pthread_mutex_lock(&queue_mutex);
+    
+    // Check if queue is full
+    if ((log_queue_head + 1) % LOG_QUEUE_SIZE == log_queue_tail) {
+        // Queue is full, discard the oldest message
+        if (log_queue[log_queue_tail].message != NULL) {
+            free(log_queue[log_queue_tail].message);
+        }
+        log_queue_tail = (log_queue_tail + 1) % LOG_QUEUE_SIZE;
+    }
+    
+    // Add a flush request
+    log_queue[log_queue_head].message = NULL;
+    log_queue[log_queue_head].is_flush_request = 1;
+    log_queue[log_queue_head].is_shutdown = 0;
+    log_queue_head = (log_queue_head + 1) % LOG_QUEUE_SIZE;
+    
+    // Signal the logging thread
+    pthread_cond_signal(&queue_cond);
+    pthread_mutex_unlock(&queue_mutex);
+}
+
+// Shutdown the logging thread
+static void shutdown_log_thread(void) {
+    if (!log_thread_running) {
+        return;
+    }
+    
+    pthread_mutex_lock(&queue_mutex);
+    
+    // Check if queue is full
+    if ((log_queue_head + 1) % LOG_QUEUE_SIZE == log_queue_tail) {
+        // Queue is full, discard the oldest message
+        if (log_queue[log_queue_tail].message != NULL) {
+            free(log_queue[log_queue_tail].message);
+        }
+        log_queue_tail = (log_queue_tail + 1) % LOG_QUEUE_SIZE;
+    }
+    
+    // Add a shutdown request
+    log_queue[log_queue_head].message = NULL;
+    log_queue[log_queue_head].is_flush_request = 0;
+    log_queue[log_queue_head].is_shutdown = 1;
+    log_queue_head = (log_queue_head + 1) % LOG_QUEUE_SIZE;
+    
+    // Signal the logging thread
+    pthread_cond_signal(&queue_cond);
+    pthread_mutex_unlock(&queue_mutex);
+    
+    // Wait for the logging thread to finish
+    pthread_join(log_thread, NULL);
+    log_thread_running = 0;
+}
+
+// The main function for the logging thread
+static void* log_thread_func(void* arg) {
+    LogMessage current_message;
+    
+    while (1) {
+        // Wait for a message in the queue
+        pthread_mutex_lock(&queue_mutex);
+        while (log_queue_head == log_queue_tail) {
+            pthread_cond_wait(&queue_cond, &queue_mutex);
+        }
+        
+        // Get the next message
+        current_message = log_queue[log_queue_tail];
+        log_queue[log_queue_tail].message = NULL; // Avoid double-free
+        log_queue_tail = (log_queue_tail + 1) % LOG_QUEUE_SIZE;
+        pthread_mutex_unlock(&queue_mutex);
+        
+        // Check if it's a shutdown request
+        if (current_message.is_shutdown) {
+            // Write any remaining logs before exiting
+            write_log_buffer_to_file();
+            break;
+        }
+        
+        // Check if it's a flush request
+        if (current_message.is_flush_request) {
+            write_log_buffer_to_file();
+        } else if (current_message.message != NULL) {
+            // It's a regular log message, append to file
+            if (log_file != NULL) {
+                fprintf(log_file, "%s\n", current_message.message);
+                fflush(log_file);
+            }
+            free(current_message.message);
+        }
+    }
+    
+    return NULL;
+}
+
+// Write the log buffer to file
+static void write_log_buffer_to_file(void) {
+    if (log_file == NULL) {
+        return;
+    }
+    
+    pthread_mutex_lock(&log_mutex);
+    
+    // First, truncate the file
+    fseek(log_file, 0, SEEK_SET);
+    if (ftruncate(fileno(log_file), 0) != 0) {
+        // Handle error silently - don't want to create an infinite loop with logging
+        pthread_mutex_unlock(&log_mutex);
+        return;
+    }
+    
+    // Write entries to file in chronological order
+    int count = log_buffer_full ? MAX_LOG_LINES : log_buffer_index;
+    int start = log_buffer_full ? log_buffer_index : 0;
+    
+    for (int i = 0; i < count; i++) {
+        int idx = (start + i) % MAX_LOG_LINES;
+        if (log_buffer[idx] != NULL) {
+            fprintf(log_file, "%s\n", log_buffer[idx]);
+        }
+    }
+    
+    fflush(log_file);
+    pthread_mutex_unlock(&log_mutex);
+}
+
+// Start the logging thread
+static void start_log_thread(void) {
+    if (log_thread_running) {
+        return;
+    }
+    
+    // Clear the log queue
+    pthread_mutex_lock(&queue_mutex);
+    while (log_queue_head != log_queue_tail) {
+        if (log_queue[log_queue_tail].message != NULL) {
+            free(log_queue[log_queue_tail].message);
+            log_queue[log_queue_tail].message = NULL;
+        }
+        log_queue_tail = (log_queue_tail + 1) % LOG_QUEUE_SIZE;
+    }
+    pthread_mutex_unlock(&queue_mutex);
+    
+    // Start the log thread
+    log_thread_running = 1;
+    pthread_create(&log_thread, NULL, log_thread_func, NULL);
+}
 
 void bluetooth_set_logfile(const char* path) {
+    // Save the path
+    strncpy(log_file_path, path, sizeof(log_file_path) - 1);
+    log_file_path[sizeof(log_file_path) - 1] = '\0';
+    
+    // Request a flush if log thread is running
+    if (log_thread_running) {
+        request_log_flush();
+    }
+    
+    // Close existing file
     if (log_file != NULL) {
         fclose(log_file);
     }
-    log_file = fopen(path, "a");
+    
+    // Open in write mode initially to clear it
+    log_file = fopen(path, "w");
+    if (log_file != NULL) {
+        // Write existing buffer if we have one
+        write_log_buffer_to_file();
+        // Close and reopen in append mode for future writes
+        fclose(log_file);
+        log_file = fopen(path, "a");
+    }
+    
+    // Start the log thread if needed
+    if (!log_thread_running && log_file != NULL) {
+        start_log_thread();
+    }
 }
 
 static void log_info(const char* format, ...) {
-    va_list args, args_copy;
+    va_list args, args_copy1, args_copy2;
     va_start(args, format);
-    va_copy(args_copy, args);
+    va_copy(args_copy1, args);
+    va_copy(args_copy2, args);
     
     // Get current time
     time_t now;
@@ -86,47 +363,56 @@ static void log_info(const char* format, ...) {
     char timestamp[26];
     ctime_r(&now, timestamp);
     timestamp[24] = '\0'; // Remove newline
+    
+    // Format the message
+    char message[1024];
+    vsnprintf(message, sizeof(message), format, args_copy1);
     
     // Log to syslog
     vsyslog(LOG_INFO, format, args);
     
     // Log to console (stdout)
     fprintf(stdout, "%s: INFO: ", timestamp);
-    vfprintf(stdout, format, args_copy);
+    vfprintf(stdout, format, args_copy2);
     fprintf(stdout, "\n");
     fflush(stdout);  // Ensure immediate output
     
-    // Log to file if available
-    if (log_file != NULL) {
-        fprintf(log_file, "%s: INFO: ", timestamp);
-        vfprintf(log_file, format, args);
-        fprintf(log_file, "\n");
-        fflush(log_file);
+    // Add to log buffer
+    add_to_log_buffer("INFO", timestamp, message);
+    
+    // Format the complete message for the log file
+    char full_message[1200];
+    snprintf(full_message, sizeof(full_message), "%s: INFO: %s", timestamp, message);
+    
+    // Enqueue the message for the logging thread instead of writing directly
+    enqueue_log_message(full_message);
+    
+    // Every 50 log messages, request a flush
+    static int log_counter = 0;
+    log_counter = (log_counter + 1) % 50;
+    if (log_counter == 0) {
+        request_log_flush();
     }
     
     // Add Sentry breadcrumb for info messages
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
-        char message[1024];
-        va_list args_crumb;
-        va_copy(args_crumb, args);
-        vsnprintf(message, sizeof(message), format, args_crumb);
-        va_end(args_crumb);
-        
         sentry_value_t crumb = sentry_value_new_breadcrumb("info", message);
         sentry_value_set_by_key(crumb, "category", sentry_value_new_string("bluetooth"));
         sentry_add_breadcrumb(crumb);
     }
     #endif
     
-    va_end(args_copy);
+    va_end(args_copy2);
+    va_end(args_copy1);
     va_end(args);
 }
 
 static void log_error(const char* format, ...) {
-    va_list args, args_copy;
+    va_list args, args_copy1, args_copy2;
     va_start(args, format);
-    va_copy(args_copy, args);
+    va_copy(args_copy1, args);
+    va_copy(args_copy2, args);
     
     // Get current time
     time_t now;
@@ -135,32 +421,35 @@ static void log_error(const char* format, ...) {
     ctime_r(&now, timestamp);
     timestamp[24] = '\0'; // Remove newline
     
+    // Format the message
+    char message[1024];
+    vsnprintf(message, sizeof(message), format, args_copy1);
+    
     // Log to syslog
     vsyslog(LOG_ERR, format, args);
     
     // Log to console (stderr)
     fprintf(stderr, "%s: ERROR: ", timestamp);
-    vfprintf(stderr, format, args_copy);
+    vfprintf(stderr, format, args_copy2);
     fprintf(stderr, "\n");
     fflush(stderr);  // Ensure immediate output
     
-    // Log to file if available
-    if (log_file != NULL) {
-        fprintf(log_file, "%s: ERROR: ", timestamp);
-        vfprintf(log_file, format, args);
-        fprintf(log_file, "\n");
-        fflush(log_file);
-    }
+    // Add to log buffer
+    add_to_log_buffer("ERROR", timestamp, message);
+    
+    // Format the complete message for the log file
+    char full_message[1200];
+    snprintf(full_message, sizeof(full_message), "%s: ERROR: %s", timestamp, message);
+    
+    // Enqueue the message for the logging thread
+    enqueue_log_message(full_message);
+    
+    // Always request a flush for errors
+    request_log_flush();
     
     // Capture Sentry event for error messages
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
-        char message[1024];
-        va_list args_event;
-        va_copy(args_event, args);
-        vsnprintf(message, sizeof(message), format, args_event);
-        va_end(args_event);
-        
         sentry_value_t event = sentry_value_new_message_event(
             SENTRY_LEVEL_ERROR,
             "bluetooth",
@@ -170,14 +459,16 @@ static void log_error(const char* format, ...) {
     }
     #endif
     
-    va_end(args_copy);
+    va_end(args_copy2);
+    va_end(args_copy1);
     va_end(args);
 }
 
 static void log_warning(const char* format, ...) {
-    va_list args, args_copy;
+    va_list args, args_copy1, args_copy2;
     va_start(args, format);
-    va_copy(args_copy, args);
+    va_copy(args_copy1, args);
+    va_copy(args_copy2, args);
     
     // Get current time
     time_t now;
@@ -186,39 +477,40 @@ static void log_warning(const char* format, ...) {
     ctime_r(&now, timestamp);
     timestamp[24] = '\0'; // Remove newline
     
+    // Format the message
+    char message[1024];
+    vsnprintf(message, sizeof(message), format, args_copy1);
+    
     // Log to syslog
     vsyslog(LOG_WARNING, format, args);
     
     // Log to console (stderr)
     fprintf(stderr, "%s: WARNING: ", timestamp);
-    vfprintf(stderr, format, args_copy);
+    vfprintf(stderr, format, args_copy2);
     fprintf(stderr, "\n");
     fflush(stderr);
     
-    // Log to file if available
-    if (log_file != NULL) {
-        fprintf(log_file, "%s: WARNING: ", timestamp);
-        vfprintf(log_file, format, args);
-        fprintf(log_file, "\n");
-        fflush(log_file);
-    }
+    // Add to log buffer
+    add_to_log_buffer("WARNING", timestamp, message);
+    
+    // Format the complete message for the log file
+    char full_message[1200];
+    snprintf(full_message, sizeof(full_message), "%s: WARNING: %s", timestamp, message);
+    
+    // Enqueue the message for the logging thread
+    enqueue_log_message(full_message);
     
     // Add Sentry breadcrumb for warning messages
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
-        char message[1024];
-        va_list args_crumb;
-        va_copy(args_crumb, args);
-        vsnprintf(message, sizeof(message), format, args_crumb);
-        va_end(args_crumb);
-        
         sentry_value_t crumb = sentry_value_new_breadcrumb("warning", message);
         sentry_value_set_by_key(crumb, "category", sentry_value_new_string("bluetooth"));
         sentry_add_breadcrumb(crumb);
     }
     #endif
     
-    va_end(args_copy);
+    va_end(args_copy2);
+    va_end(args_copy1);
     va_end(args);
 }
 
@@ -985,6 +1277,14 @@ static void* bluetooth_thread_func(void* arg) {
 }
 
 int bluetooth_init(const char* custom_device_name) {
+    // Initialize log buffer
+    init_log_buffer();
+    
+    // Start the logging thread if we have a log file
+    if (log_file != NULL) {
+        start_log_thread();
+    }
+    
     log_info("[%s] Initializing Bluetooth in background thread", LOG_TAG);
     
     // First check if bluetooth service is active
@@ -1070,6 +1370,12 @@ int bluetooth_start(connection_result_callback scb, command_callback ccb, device
 
 void bluetooth_stop() {
     log_info("[%s] Stopping Bluetooth...", LOG_TAG);
+    
+    // Shutdown the logging thread
+    shutdown_log_thread();
+    
+    // Free log buffer memory
+    free_log_buffer();
     
     GError *error = NULL;
 

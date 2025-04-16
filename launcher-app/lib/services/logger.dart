@@ -13,7 +13,8 @@ import '../environment.dart';
 import '../services/metric_service.dart';
 
 final Logger logger = Logger('FeralFileApp');
-late File _logFile;
+late File _appLogFile;
+late File _systemLogFile;
 HttpServer? _logServer;
 final _logBuffer = <String>[];
 const int _maxBufferSize = 100; // Keep last 100 log entries
@@ -22,7 +23,8 @@ late SendPort _logIsolateSendPort;
 late Isolate _logIsolate;
 ReceivePort? _logReceivePort;
 
-String get logFilePath => _logFile.path;
+String get appLogFilePath => _appLogFile.path;
+String get systemLogFilePath => _systemLogFile.path;
 
 List<String> get logBuffer => List.unmodifiable(_logBuffer);
 
@@ -39,18 +41,41 @@ Future<void> _logFileHandler(SendPort mainSendPort) async {
 
   // Initialize log file using the same path as in main thread
   final Directory appDir = await getApplicationDocumentsDirectory();
-  final File logFile = File('${appDir.path}/app.log');
 
-  // Send the log file path back to main thread
-  mainSendPort.send('FILE_PATH:${logFile.path}');
+  // Ensure the directory exists
+  if (!await appDir.exists()) {
+    try {
+      await appDir.create(recursive: true);
+    } catch (e) {
+      mainSendPort.send('Error creating log directory: $e');
+    }
+  }
+
+  final File appLogFile = File('${appDir.path}/app.log');
+  final File systemLogFile = File('${appDir.path}/system.log');
+
+  // Send the log file paths back to main thread
+  mainSendPort.send('APP_FILE_PATH:${appLogFile.path}');
+  mainSendPort.send('SYSTEM_FILE_PATH:${systemLogFile.path}');
 
   port.listen((message) async {
     if (message is _LogMessage) {
       try {
+        // Create parent directory if it doesn't exist
+        final parent = appLogFile.parent;
+        if (!await parent.exists()) {
+          await parent.create(recursive: true);
+        }
+
         // Read existing log file if it exists
         List<String> lines = [];
-        if (await logFile.exists()) {
-          lines = await logFile.readAsLines();
+        if (await appLogFile.exists()) {
+          try {
+            lines = await appLogFile.readAsLines();
+          } catch (e) {
+            mainSendPort.send('Error reading app log file: $e');
+            // If reading fails, start with an empty log rather than failing completely
+          }
         }
 
         // Add new log line
@@ -62,7 +87,15 @@ Future<void> _logFileHandler(SendPort mainSendPort) async {
         }
 
         // Write back to file
-        await logFile.writeAsString(lines.join('\n') + '\n');
+        try {
+          await appLogFile.writeAsString(lines.join('\n') + '\n');
+        } catch (e) {
+          // Try to write the file from scratch if appending fails
+          mainSendPort
+              .send('Error writing to app log file, trying to recreate: $e');
+          await appLogFile.writeAsString(message.message.trim() + '\n',
+              mode: FileMode.write);
+        }
 
         // Track errors in main isolate if needed
         if (message.isError) {
@@ -71,26 +104,15 @@ Future<void> _logFileHandler(SendPort mainSendPort) async {
       } catch (e) {
         mainSendPort.send('Error in log isolate: $e');
       }
-    } else if (message == 'GET_LATEST_LOGS') {
-      // Request for latest logs from main thread
-      try {
-        if (await logFile.exists()) {
-          final bytes = await logFile.readAsBytes();
-          mainSendPort.send({'LOG_DATA': bytes});
-        } else {
-          mainSendPort.send({'LOG_DATA': Uint8List(0)});
-        }
-      } catch (e) {
-        mainSendPort.send('Error reading log file: $e');
-      }
     }
   });
 }
 
 Future<void> setupLogging() async {
-  // Initialize log file path (actual file operations will happen in isolate)
+  // Initialize log file paths
   final Directory appDir = await getApplicationDocumentsDirectory();
-  _logFile = File('${appDir.path}/app.log');
+  _appLogFile = File('${appDir.path}/app.log');
+  _systemLogFile = File('${appDir.path}/system.log');
 
   // Create the log isolate
   _logReceivePort = ReceivePort();
@@ -109,17 +131,18 @@ Future<void> setupLogging() async {
     // Listen for messages from the isolate
     _logReceivePort!.listen((message) {
       if (message is String) {
-        if (message.startsWith('FILE_PATH:')) {
-          // Update the file path if needed
-          final path = message.substring('FILE_PATH:'.length);
-          _logFile = File(path);
+        if (message.startsWith('APP_FILE_PATH:')) {
+          // Update the app log file path if needed
+          final path = message.substring('APP_FILE_PATH:'.length);
+          _appLogFile = File(path);
+        } else if (message.startsWith('SYSTEM_FILE_PATH:')) {
+          // Update the system log file path if needed
+          final path = message.substring('SYSTEM_FILE_PATH:'.length);
+          _systemLogFile = File(path);
         } else {
           // Handle error tracking here in the main isolate
           MetricService().trackError(message);
         }
-      } else if (message is Map && message.containsKey('LOG_DATA')) {
-        // Store the latest log data
-        _latestLogData = message['LOG_DATA'];
       }
     });
   } catch (e) {
@@ -168,8 +191,8 @@ void _setupSyncLogging() {
     try {
       // Read existing log file if it exists
       List<String> lines = [];
-      if (_logFile.existsSync()) {
-        lines = _logFile.readAsLinesSync();
+      if (_appLogFile.existsSync()) {
+        lines = _appLogFile.readAsLinesSync();
       }
 
       // Add new log line
@@ -181,9 +204,9 @@ void _setupSyncLogging() {
       }
 
       // Write back to file
-      _logFile.writeAsStringSync(lines.join('\n') + '\n');
+      _appLogFile.writeAsStringSync(lines.join('\n') + '\n');
     } catch (e) {
-      print('Error writing to log file: $e');
+      print('Error writing to app log file: $e');
     }
 
     // Add to in-memory buffer
@@ -215,29 +238,62 @@ Future<void> startLogServer() async {
     _logServer?.listen((HttpRequest request) async {
       if (request.method == 'GET') {
         switch (request.uri.path) {
-          case '/logs/download':
-            // Serve the log file as a download with the latest content
-            Uint8List bytes;
+          case '/logs/download/app':
+            // Serve the app log file directly
             try {
-              bytes = await getLatestLogs();
+              if (await _appLogFile.exists()) {
+                final bytes = await _appLogFile.readAsBytes();
+                request.response
+                  ..headers.set('Content-Type', 'text/plain')
+                  ..headers.set(
+                    'Content-Disposition',
+                    'attachment; filename="feralfile_app.log"',
+                  )
+                  ..add(bytes)
+                  ..close();
+              } else {
+                request.response
+                  ..statusCode = HttpStatus.notFound
+                  ..close();
+              }
             } catch (e) {
-              logger.severe('Error getting logs for download: $e');
-              // Fallback to reading the file directly as last resort
-              final file = File(_logFile.path);
-              bytes = await file.readAsBytes();
+              logger.severe('Error serving app log file: $e');
+              request.response
+                ..statusCode = HttpStatus.internalServerError
+                ..close();
             }
+            break;
 
-            request.response
-              ..headers.set('Content-Type', 'text/plain')
-              ..headers.set(
-                'Content-Disposition',
-                'attachment; filename="feralfile_device.log"',
-              )
-              ..add(bytes)
-              ..close();
+          case '/logs/download/system':
+            // Serve the system log file directly
+            try {
+              if (await _systemLogFile.exists()) {
+                final bytes = await _systemLogFile.readAsBytes();
+                request.response
+                  ..headers.set('Content-Type', 'text/plain')
+                  ..headers.set(
+                    'Content-Disposition',
+                    'attachment; filename="feralfile_system.log"',
+                  )
+                  ..add(bytes)
+                  ..close();
+              } else {
+                request.response
+                  ..statusCode = HttpStatus.notFound
+                  ..close();
+              }
+            } catch (e) {
+              logger.severe('Error serving system log file: $e');
+              request.response
+                ..statusCode = HttpStatus.internalServerError
+                ..close();
+            }
             break;
 
           case '/logs.html':
+            final appLogExists = await _appLogFile.exists();
+            final systemLogExists = await _systemLogFile.exists();
+
             final html = '''
 <!DOCTYPE html>
 <html>
@@ -251,9 +307,8 @@ Future<void> startLogServer() async {
         .warning { color: #cca700; }
         .info { color: #3794ff; }
         .download-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
+            display: inline-block;
+            margin: 10px;
             background: #3794ff;
             color: white;
             padding: 10px 20px;
@@ -264,10 +319,19 @@ Future<void> startLogServer() async {
         .download-btn:hover {
             background: #2d7acc;
         }
+        .btn-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+        }
     </style>
 </head>
 <body>
-    <a href="/logs/download" class="download-btn">Download Log File</a>
+    <div class="btn-container">
+        ${appLogExists ? '<a href="/logs/download/app" class="download-btn">Download App Log</a>' : ''}
+        ${systemLogExists ? '<a href="/logs/download/system" class="download-btn">Download System Log</a>' : ''}
+    </div>
+    <h1>FeralFile Device Logs</h1>
     <pre>${_formatLogsHtml(_logBuffer.join())}</pre>
 </body>
 </html>
@@ -359,12 +423,24 @@ Future<void> sendLog(String? userID, String? title) async {
     final attachments = <Map<String, dynamic>>[];
 
     // Add app log
-    final appLogData = await _logFile.readAsBytes();
-    attachments.add({
-      'data': base64Encode(appLogData),
-      'title': 'app_log',
-      'content_type': 'logs',
-    });
+    if (await _appLogFile.exists()) {
+      final appLogData = await _appLogFile.readAsBytes();
+      attachments.add({
+        'data': base64Encode(appLogData),
+        'title': 'app_log',
+        'content_type': 'logs',
+      });
+    }
+
+    // Add system log
+    if (await _systemLogFile.exists()) {
+      final systemLogData = await _systemLogFile.readAsBytes();
+      attachments.add({
+        'data': base64Encode(systemLogData),
+        'title': 'system_log',
+        'content_type': 'logs',
+      });
+    }
 
     // Add Chromium debug log if it exists
     final chromiumLogFile = File('/var/log/chromium/chrome_debug.log');
@@ -407,51 +483,5 @@ Future<void> sendLog(String? userID, String? title) async {
     }
   } catch (e) {
     logger.severe('Error sending log: ${e.toString()}');
-  }
-}
-
-// Add a property to store the latest log data
-Uint8List? _latestLogData;
-
-// Add a method to request latest logs from isolate
-Future<Uint8List> getLatestLogs() async {
-  // In case isolate is not available
-  if (_logIsolateSendPort == null) {
-    try {
-      return await _logFile.readAsBytes();
-    } catch (e) {
-      logger.severe('Error reading log file: $e');
-      return Uint8List(0);
-    }
-  }
-
-  // Create a completer to wait for response
-  final completer = Completer<Uint8List>();
-
-  // Set up a new listener for this request
-  final responsePort = ReceivePort();
-  responsePort.listen((message) {
-    if (message is Map && message.containsKey('LOG_DATA')) {
-      completer.complete(message['LOG_DATA']);
-      responsePort.close();
-    }
-  });
-
-  // Request logs from isolate
-  _logIsolateSendPort.send('GET_LATEST_LOGS');
-
-  // Wait for response with timeout
-  try {
-    return await completer.future.timeout(Duration(seconds: 2), onTimeout: () {
-      responsePort.close();
-      return _logFile.readAsBytes();
-    });
-  } catch (e) {
-    logger.severe('Error getting latest logs: $e');
-    try {
-      return await _logFile.readAsBytes();
-    } catch (_) {
-      return Uint8List(0);
-    }
   }
 }
