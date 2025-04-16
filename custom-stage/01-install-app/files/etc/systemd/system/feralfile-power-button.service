@@ -1,0 +1,12 @@
+[Unit]
+Description=Feralfile Power Button Monitor
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/feralfile/scripts/power-button-monitor.sh
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target 

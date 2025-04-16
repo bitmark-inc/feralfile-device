@@ -111,3 +111,21 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 EOF
+
+rm -f /etc/systemd/system/feralfile-power-button.service
+cat > /etc/systemd/system/feralfile-power-button.service << EOF
+[Unit]
+Description=FeralFile Power Button Service
+After=feralfile-launcher.service
+Wants=feralfile-launcher.service
+
+[Service]
+User=feralfile
+Group=feralfile
+ExecStart=/home/feralfile/scripts/power-button-monitor.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF

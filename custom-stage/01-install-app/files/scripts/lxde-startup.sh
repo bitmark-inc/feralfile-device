@@ -10,17 +10,24 @@ xset s off
 xset s noblank
 xset -dpms
 
-# Setup GPIO for power button and LED
-echo 17 > /sys/class/gpio/export
-echo "in" > /sys/class/gpio/gpio17/direction
-echo 18 > /sys/class/gpio/gpio18/export
+# Try different GPIO numbers for power button
+for gpio in 3 512 529 535 567 572; do
+    echo $gpio > /sys/class/gpio/export 2>/dev/null || true
+    echo "in" > /sys/class/gpio/gpio$gpio/direction 2>/dev/null || true
+    echo "both" > /sys/class/gpio/gpio$gpio/edge 2>/dev/null || true
+done
+
+# Setup LED GPIO
+echo 18 > /sys/class/gpio/export
 echo "out" > /sys/class/gpio/gpio18/direction
 
-# Install reset scripts
+# Install reset and power scripts
 sudo cp /opt/feralfile/scripts/soft-reset.sh /usr/local/bin/
 sudo cp /opt/feralfile/scripts/factory-reset.sh /usr/local/bin/
+sudo cp /opt/feralfile/scripts/power-off.sh /usr/local/bin/
 sudo chmod +x /usr/local/bin/soft-reset.sh
 sudo chmod +x /usr/local/bin/factory-reset.sh
+sudo chmod +x /usr/local/bin/power-off.sh
 
 # Install power button monitor script
 sudo cp /opt/feralfile/scripts/power-button-monitor.sh /usr/local/bin/
