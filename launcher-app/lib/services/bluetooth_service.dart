@@ -18,6 +18,26 @@ import '../utils/varint_parser.dart';
 
 const statusChangedReplyId = 'statusChanged';
 
+class _DeviceConnectionArgs {
+  final String deviceId;
+  final bool isConnected;
+  _DeviceConnectionArgs(this.deviceId, this.isConnected);
+}
+
+// *** No longer need _CommandArgs, we will send ChunkInfo directly ***
+
+class _CredentialsArgs {
+  final WifiCredentials credentials;
+  _CredentialsArgs(this.credentials);
+}
+
+class _FfiErrorArgs {
+  final String context;
+  final Object error;
+  final StackTrace? stackTrace;
+  _FfiErrorArgs(this.context, this.error, [this.stackTrace]);
+}
+
 class BluetoothService {
   static final BluetoothService _instance = BluetoothService._internal();
   factory BluetoothService() => _instance;
@@ -26,7 +46,11 @@ class BluetoothService {
   final CommandService _commandService = CommandService();
   static void Function(WifiCredentials)? _onCredentialsReceived;
   static void Function(String, bool)? _onDeviceConnectionChanged;
+
   static final _commandPort = ReceivePort();
+  final ReceivePort _ffiCallbackPort = ReceivePort();
+  late final SendPort _ffiCallbackSendPort;
+
   static final Map<String, Map<int, List<int>>> _chunkData = {};
   static final Set<String> chunkedResponseReplyIds = {};
 
@@ -39,7 +63,59 @@ class BluetoothService {
 
   BluetoothService._internal() {
     _commandService.initialize(this);
+    _ffiCallbackSendPort = _ffiCallbackPort.sendPort;
+    _ffiCallbackPort.listen(_handleFFICallback);
     _bindings.bluetooth_set_logfile(logFilePath.toNativeUtf8());
+  }
+
+  void _handleFFICallback(dynamic message) {
+    try {
+      if (message is _DeviceConnectionArgs) {
+        logger.info(
+            '[MainIsolate] Device ${message.isConnected ? "connected" : "disconnected"}: ${message.deviceId}');
+        _onDeviceConnectionChanged?.call(message.deviceId, message.isConnected);
+      }
+      // **** Receive ChunkInfo object ****
+      else if (message is ChunkInfo) {
+        // Process command chunk logic safely on the main isolate
+        _processCommandChunk(message); // Pass the whole ChunkInfo
+      }
+      // ****
+      else if (message is _CredentialsArgs) {
+        logger.info(
+            '[MainIsolate] Received WiFi credentials - SSID: ${message.credentials.ssid}');
+        _onCredentialsReceived?.call(message.credentials);
+      } else if (message is _FfiErrorArgs) {
+        logger.severe('[MainIsolate] Error from FFI callback (${message.context}): ${message.error}');
+        if (message.stackTrace != null) {
+           logger.severe('Stack trace: ${message.stackTrace}');
+        }
+      }
+    } catch (e, stackTrace) {
+       logger.severe('[MainIsolate] Error handling FFI callback message: $e');
+       logger.severe('Stack trace: $stackTrace');
+    }
+  }
+  
+  void _processCommandChunk(ChunkInfo chunkInfo) {
+     try {
+       // ChunkInfo.isValid() could be called here or assumed valid if parsed ok
+       // No longer need _validateChunkIndices if ChunkInfo.fromData handles errors
+       logger.info('[MainIsolate] Processing chunk ${chunkInfo.index} of ${chunkInfo.total} for ${chunkInfo.ackReplyId}');
+
+       // Use the data directly from chunkInfo
+       _storeChunk(chunkInfo);
+       _sendChunkAcknowledgement(chunkInfo); // Calls instance method notify
+
+       // Check if complete using chunkInfo.total
+       if (_chunkData[chunkInfo.ackReplyId]?.length == chunkInfo.total) {
+         _processCompleteCommand(chunkInfo.ackReplyId); // Pass only the ID needed to retrieve data
+       }
+     } catch (e, stackTrace) {
+        logger.severe('[MainIsolate] Error processing command chunk: $e');
+        logger.severe('Stack trace: $stackTrace');
+        notify(chunkInfo.ackReplyId, {'success': false, 'error': e.toString(), 'chunkIndex': chunkInfo.index});
+     }
   }
 
   Future<bool> initialize(String deviceName) async {
@@ -104,13 +180,14 @@ class BluetoothService {
 
   static void _staticDeviceConnectionCallback(
       Pointer<Utf8> deviceId, int connected) {
-    final deviceIdStr = deviceId.toDartString();
-    final isConnected = connected != 0;
-    logger.info(
+    try {
+      final deviceIdStr = deviceId.toDartString();
+      final isConnected = connected != 0;
+      logger.info(
         'Device ${isConnected ? "connected" : "disconnected"}: $deviceIdStr');
-
-    if (_onDeviceConnectionChanged != null) {
-      _onDeviceConnectionChanged!(deviceIdStr, isConnected);
+      _instance._ffiCallbackSendPort.send(_DeviceConnectionArgs(deviceIdStr, isConnected));
+    } catch (e, stackTrace) {
+       _instance._ffiCallbackSendPort.send(_FfiErrorArgs('DeviceConnectionCallback', e, stackTrace));
     }
   }
 
@@ -120,6 +197,7 @@ class BluetoothService {
     _setupCallback.close();
     _cmdCallback.close();
     _connectionCallback.close();
+    _ffiCallbackPort.close();
     _onCredentialsReceived = null;
     _onDeviceConnectionChanged = null;
     _commandPort.close();
@@ -155,16 +233,10 @@ class BluetoothService {
 
       logger.info('Processing chunk ${chunkInfo.index} of ${chunkInfo.total}');
 
-      _storeChunk(chunkInfo);
-      _sendChunkAcknowledgement(chunkInfo);
-
-      // Check if we have all chunks
-      if (_chunkData[chunkInfo.ackReplyId]!.length == chunkInfo.total) {
-        _processCompleteCommand(chunkInfo);
-      }
+      // *** Send the parsed ChunkInfo object to main isolate ***
+      _instance._ffiCallbackSendPort.send(chunkInfo);
     } catch (e, stackTrace) {
-      logger.severe('Error parsing command data: $e');
-      logger.severe('Stack trace: $stackTrace');
+      _instance._ffiCallbackSendPort.send(_FfiErrorArgs('CommandCallback', e, stackTrace));
     }
   }
 
@@ -181,48 +253,63 @@ class BluetoothService {
   }
 
   static void _sendChunkAcknowledgement(ChunkInfo info) {
-    logger.info('Notifying back for chunk ${info.index}');
+    logger.info('[MainIsolate] Notifying back for chunk ${info.index}');
     _instance
         .notify(info.ackReplyId, {'success': true, 'chunkIndex': info.index});
   }
 
-  static void _processCompleteCommand(ChunkInfo info) {
+  void _processCompleteCommand(String ackReplyId) {
     // Combine all chunks in order
-    final completeCommand =
-        _chunkData[info.ackReplyId]!.values.expand((chunk) => chunk).toList();
+    final commandMap = _chunkData[ackReplyId];
+
+    if (commandMap == null) {
+      logger.warning('[MainIsolate] No chunk data found for ackReplyId: $ackReplyId during completion.');
+      notify(ackReplyId, {'success': false, 'error': 'Internal error: Missing chunk data'});
+      return;
+    }
+    logger.info('[MainIsolate] Assembling complete command for $ackReplyId');
+
+    // Combine all chunks in order
+    final orderedChunks = commandMap.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    final completeCommandBytes = orderedChunks.expand((entry) => entry.value).toList();
 
     // Clean up the chunks map
-    _chunkData.remove(info.ackReplyId);
+    _chunkData.remove(ackReplyId);
 
-    final (commandStrings, _) =
-        VarintParser.parseToStringArray(completeCommand, 0);
+    try {
+      final (commandStrings, _) =
+          VarintParser.parseToStringArray(completeCommandBytes, 0);
 
-    if (commandStrings.length < 2) {
-      throw Exception(
-          'Invalid command format: expected at least command and data');
-    }
-
-    final command = commandStrings[0];
-    final commandData = commandStrings[1];
-    final replyId = commandStrings.length > 2 ? commandStrings[2] : null;
-
-    logger
-        .info('Parsed complete command: "$command" with data: "$commandData"');
-    if (replyId != null) {
-      logger.info('Reply ID: "$replyId"');
-      logger.info('command: $command');
-      if (command == checkStatusCommand || command == scanWifiCommand) {
-        chunkedResponseReplyIds.add(replyId);
+      if (commandStrings.length < 2) {
+        throw Exception(
+            'Invalid command format: expected at least command and data');
       }
+
+      final command = commandStrings[0];
+      final commandData = commandStrings[1];
+
+      logger.info('[MainIsolate] Parsed complete command: "$command" with data: "$commandData" for ackReplyId: $ackReplyId');
+
+      final replyId = commandStrings.length > 2 ? commandStrings[2] : null;
+      if (replyId != null) {
+        logger.info('Reply ID: "$replyId"');
+        if (command == checkStatusCommand || command == scanWifiCommand) {
+          chunkedResponseReplyIds.add(replyId);
+        }
+      }
+
+      // Send metric with cached device ID
+      MetricService().sendEvent(
+        'command_received',
+        stringData: [command, commandData],
+      );
+
+      CommandService().handleCommand(command, commandData, replyId);
+    } catch (e, stackTrace) {
+           logger.severe('[MainIsolate] Error parsing assembled command for $ackReplyId: $e');
+           logger.severe('Stack trace: $stackTrace');
+           notify(ackReplyId, {'success': false, 'error': 'Failed to parse assembled command'});
     }
-
-    // Send metric with cached device ID
-    MetricService().sendEvent(
-      'command_received',
-      stringData: [command, commandData],
-    );
-
-    CommandService().handleCommand(command, commandData, replyId);
   }
 
   // Static callback that can be used with FFI
@@ -233,6 +320,7 @@ class BluetoothService {
   ) {
     List<int>? rawBytes;
     try {
+      if (data == nullptr || length <= 0) return;
       // Create an immediate immutable copy of the data
       rawBytes = List<int>.unmodifiable(data.asTypedList(length));
 
@@ -258,11 +346,9 @@ class BluetoothService {
 
       final credentials = WifiCredentials(ssid: ssid, password: password);
 
-      if (_onCredentialsReceived != null) {
-        _onCredentialsReceived!(credentials);
-      }
-    } catch (e) {
-      logger.warning('Error processing WiFi credentials: $e');
+      _instance._ffiCallbackSendPort.send(_CredentialsArgs(credentials));
+    } catch (e, stackTrace) {
+      _instance._ffiCallbackSendPort.send(_FfiErrorArgs('ConnectionResultCallback', e, stackTrace));
     }
   }
 
