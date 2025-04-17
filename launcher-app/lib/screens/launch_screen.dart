@@ -2,6 +2,7 @@ import 'package:after_layout/after_layout.dart';
 import 'package:feralfile/cubits/ble_connection_cubit.dart';
 import 'package:feralfile/services/hardware_monitor_service.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
+import 'package:feralfile/services/rotate_service.dart';
 import 'package:feralfile/services/switcher_service.dart';
 import 'package:feralfile/services/websocket_service.dart';
 import 'package:feralfile/utils/response_layout.dart';
