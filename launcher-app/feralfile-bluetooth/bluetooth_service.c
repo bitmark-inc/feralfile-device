@@ -406,44 +406,83 @@ static void handle_command_write(GDBusConnection *conn,
                                  gpointer user_data) {
     GVariant *array_variant = NULL;
     GVariant *options_variant = NULL;
-    g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
+    const guchar *data = NULL; // Use const pointer for get_fixed_array result
+    gsize n_elements = 0;
+    guchar *data_copy = NULL; // For the malloc'd copy
 
-    gsize n_elements;
-    const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
+    g_warning("Actual received parameter type: %s", g_variant_get_type_string(parameters));
 
-    // Create a copy of the data
-    guchar *data_copy = (guchar *)malloc(n_elements);
-    memcpy(data_copy, data, n_elements);
-
-    log_info("[%s] (cmd_char) Received %zu bytes of data", LOG_TAG, n_elements);
-
-    // Optional hex string logging
-    char hex_string[n_elements * 3 + 1];
-    for (size_t i = 0; i < n_elements; i++) {
-        sprintf(hex_string + (i * 3), "%02x ", data_copy[i]);
-    }
-    hex_string[n_elements * 3 - 1] = '\0';
-    log_info("[%s] (cmd_char) Data: %s", LOG_TAG, hex_string);
-
-    // Use cmd_callback with the copied data
-    if (cmd_callback) {
-        cmd_callback(1, data_copy, (int)n_elements);
-    }
-
-    // Add Sentry breadcrumb
-    #ifdef SENTRY_DSN
-    if (sentry_initialized) {
-        sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received command data");
-        sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
-        sentry_add_breadcrumb(crumb);
-    }
-    #endif
-
-    g_variant_unref(array_variant);
-    if (options_variant) {
-        g_variant_unref(options_variant);
+    // Check if it's the type we expect: (ay a{sv})
+    if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(aya{sv})"))) {
+        g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
+        if (array_variant != NULL) {
+            data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
+            if (data == NULL) { // Check return of get_fixed_array too
+                log_error("[%s] (cmd_char) g_variant_get_fixed_array returned NULL from (aya{sv})", LOG_TAG);
+                n_elements = 0;
+            }
+        } else {
+            log_error("[%s] (cmd_char) Failed to extract array_variant from (aya{sv})", LOG_TAG);
+            n_elements = 0;
+        }
+    // Check if it's just a byte array 'ay' (common alternative)
+    } else if (g_variant_is_of_type(parameters, G_VARIANT_TYPE_BYTESTRING)) { // G_VARIANT_TYPE_BYTESTRING is 'ay'
+        // Get the 'ay' variant directly. 'parameters' itself is the 'ay' variant.
+        data = g_variant_get_fixed_array(parameters, &n_elements, sizeof(guchar));
+        if (data != NULL) {
+            log_warning("[%s] (cmd_char) Received 'ay' directly instead of '(aya{sv})'", LOG_TAG);
+        } else {
+            log_error("[%s] (cmd_char) g_variant_get_fixed_array returned NULL from 'ay'", LOG_TAG);
+            n_elements = 0;
+        }
+        // Note: No separate array_variant to unref in this case if using parameters directly
+        array_variant = NULL; // Ensure it's NULL if not assigned from the tuple case
+        options_variant = NULL;
+    } else {
+        log_error("[%s] (cmd_char) Received unexpected D-Bus parameter type: %s",
+                LOG_TAG, g_variant_get_type_string(parameters));
+        n_elements = 0;
     }
     
+    // Process data if successfully extracted
+    if (n_elements > 0 && data != NULL) {
+        data_copy = (guchar *)malloc(n_elements);
+        if (data_copy) {
+            memcpy(data_copy, data, n_elements);
+            log_info("[%s] (cmd_char) Received %zu bytes of data", LOG_TAG, n_elements);
+            // Optional hex string logging
+            char hex_string[n_elements * 3 + 1];
+            for (size_t i = 0; i < n_elements; i++) {
+                sprintf(hex_string + (i * 3), "%02x ", data_copy[i]);
+            }
+            hex_string[n_elements * 3 - 1] = '\0';
+            log_info("[%s] (cmd_char) Data: %s", LOG_TAG, hex_string);
+            if (cmd_callback) {
+                cmd_callback(1, data_copy, (int)n_elements); // Pass ownership
+            } else {
+                free(data_copy); // Free if no callback takes ownership
+            }
+            // Add Sentry breadcrumb
+            #ifdef SENTRY_DSN
+            if (sentry_initialized) {
+                sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received command data");
+                sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
+                sentry_add_breadcrumb(crumb);
+            }
+            #endif
+        } else {
+            log_error("[%s] (cmd_char) Failed to malloc data_copy", LOG_TAG);
+        }
+    } else {
+        log_warning("[%s] (cmd_char) No valid data extracted or 0 bytes received (n_elements=%zu)", LOG_TAG, n_elements);
+        // Maybe call callback with 0 length/error?
+        // if (cmd_callback) { cmd_callback(0, NULL, 0); } // Or let Dart handle it
+    }
+
+    // Clean up extracted variants (be careful with ref counting)
+    if (array_variant) g_variant_unref(array_variant);
+    if (options_variant) g_variant_unref(options_variant);
+
     g_dbus_method_invocation_return_value(invocation, NULL);
 }
 
