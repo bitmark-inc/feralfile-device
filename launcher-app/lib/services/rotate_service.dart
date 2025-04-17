@@ -4,10 +4,14 @@ import 'package:feralfile/services/config_service.dart';
 import 'package:feralfile/services/logger.dart';
 
 enum ScreenRotation {
-  normal, // 0°
-  right, // 90°
-  inverted, // 180°
-  left; // 270°
+  normal(0), // 0°
+  right(1), // 90°
+  inverted(2), // 180°
+  left(3); // 270°
+
+  // value
+  final int value;
+  const ScreenRotation(this.value);
 
   String get name {
     switch (this) {
@@ -52,8 +56,6 @@ enum ScreenRotation {
 }
 
 class RotateService {
-  static String? _primaryDisplay;
-
   static Future<void> _saveRotation(ScreenRotation rotation) async {
     await ConfigService.updateScreenRotation(rotation);
   }
@@ -72,18 +74,18 @@ class RotateService {
       {shouldSaveRotation = true}) async {
     try {
       // Convert enum to number value expected by the script
-      final displayRotateValue = _getDisplayRotateValue(screenRotation);
+      final displayRotateValue = screenRotation.value;
       final result = await Process.run('sudo', [
         '/home/feralfile/scripts/rotate-display.sh',
         displayRotateValue.toString()
       ]);
 
-      logger.info('result.exitCode: ${result?.exitCode}');
+      logger.info('result.exitCode: ${result.exitCode}');
 
       if (shouldSaveRotation) {
-          // Save the rotation to the config
-          _saveRotation(screenRotation);
-        }
+        // Save the rotation to the config
+        _saveRotation(screenRotation);
+      }
 
       // if (result.exitCode != 0) {
       //   logger.warning('System rotation script failed: ${result.stderr}');
@@ -143,17 +145,20 @@ class RotateService {
     return ScreenRotation.normal;
   }
 
-  // Helper to convert ScreenRotation to display_rotate values
-  static int _getDisplayRotateValue(ScreenRotation rotation) {
-    switch (rotation) {
-      case ScreenRotation.normal:
-        return 0;
-      case ScreenRotation.right:
-        return 1;
-      case ScreenRotation.inverted:
-        return 2;
-      case ScreenRotation.left:
-        return 3;
+  static Future<void> initializeRotation() async {
+    final savedRotation = await loadSavedRotation();
+    if (savedRotation != null) {
+      try {
+        final result = await rotateScreen(savedRotation);
+        if (result.exitCode != 0) {
+          logger.warning('Failed to rotate screen: ${result.stderr}');
+        } else {
+          await _saveRotation(savedRotation);
+          logger.info('Screen rotated to $savedRotation and saved setting');
+        }
+      } catch (e) {
+        logger.severe('Error applying saved rotation: $e');
+      }
     }
   }
 }

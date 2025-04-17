@@ -43,6 +43,9 @@ class _LaunchScreenState extends State<LaunchScreen>
 
   Future<void> _initializeApp() async {
     try {
+      // Initialize screen rotation
+      logger.info('Initializing screen rotation...');
+      await RotateService.initializeRotation();
       // await CursorHandler.initializeScreenDimensions();
       setState(() {
         _isInitializing = true;
