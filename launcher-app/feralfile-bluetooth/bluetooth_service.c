@@ -676,45 +676,114 @@ static void handle_property_change(GDBusConnection *connection,
                                  const gchar *signal_name,
                                  GVariant *parameters,
                                  gpointer user_data) {
+    log_info("[%s] handle_property_change received signal:", LOG_TAG);
+    log_info("[%s]   Sender: %s", LOG_TAG, sender_name ? sender_name : "(null)");
+    log_info("[%s]   Object Path: %s", LOG_TAG, object_path ? object_path : "(null)");
+    log_info("[%s]   Interface Name (Emitter): %s", LOG_TAG, interface_name ? interface_name : "(null)"); // Should be org.freedesktop.DBus.Properties
+    log_info("[%s]   Signal Name: %s", LOG_TAG, signal_name ? signal_name : "(null)"); // Should be PropertiesChanged
+    log_info("[%s]   Parameter Type: %s", LOG_TAG, parameters ? g_variant_get_type_string(parameters) : "(null)"); // Should be (sa{sv}as)
+
+    if (!parameters) {
+        log_warning("[%s] handle_property_change received NULL parameters.", LOG_TAG);
+        return;
+    }
+
+    // Check parameter type before trying to parse
+    if (!g_variant_is_of_type(parameters, G_VARIANT_TYPE("(sa{sv}as)"))) {
+        log_error("[%s] handle_property_change: Unexpected parameter type %s, expected (sa{sv}as)",
+                  LOG_TAG, g_variant_get_type_string(parameters));
+        return; // Cannot proceed if type is wrong
+    }
+
     GVariant *changed_properties;
     GVariant *invalidated_properties;
-    const gchar *interface;
+    const gchar *interface_from_signal;
     
     g_variant_get(parameters, "(&sa{sv}as)",
-                  &interface,
+                  &interface_from_signal,
                   &changed_properties,
                   &invalidated_properties);
+    
+    if (!interface_from_signal) {
+        log_warning("[%s] handle_property_change: Failed to get interface name from signal parameters.", LOG_TAG);
+        // Cannot proceed without interface name. Borrowed variants need no unref.
+        return;
+    }
+    log_info("[%s]   Interface from signal parameters: %s", LOG_TAG, interface_from_signal);
 
-    if (g_str_equal(interface, "org.bluez.Device1")) {
+    if (g_strcmp0(interface_from_signal, "org.bluez.Device1") == 0) {
+        log_info("[%s]   Signal is for targeted interface: org.bluez.Device1.", LOG_TAG);
+
+        if (!changed_properties) {
+            log_warning("[%s]   No changed_properties variant obtained from signal.", LOG_TAG);
+            // Borrowed variants need no unref.
+            return;
+        }
+        // Check if changed_properties is actually a dictionary
+        if (!g_variant_is_of_type(changed_properties, G_VARIANT_TYPE_DICTIONARY)) {
+             log_error("[%s]   Error: changed_properties variant is not a dictionary type (%s).",
+                       LOG_TAG, g_variant_get_type_string(changed_properties));
+             // Borrowed variants need no unref.
+             return;
+        }
+        log_info("[%s]   Processing changed properties...", LOG_TAG);
+        
         GVariantIter iter;
         const gchar *key;
         GVariant *value;
         
         g_variant_iter_init(&iter, changed_properties);
         while (g_variant_iter_next(&iter, "{&sv}", &key, &value)) {
-            if (g_str_equal(key, "Connected")) {
-                gboolean connected;
-                g_variant_get(value, "b", &connected);
-                
-                // Extract device ID from the device path
-                const char* device_id = strrchr(object_path, '/');
-                if (device_id) {
-                    device_id++; // Skip the '/'
-                    if (connection_callback) {
-                        connection_callback(device_id, connected ? 1 : 0);
-                    }
-                    
-                    // Log the connection state change
-                    log_info("[%s] Device %s %s", LOG_TAG, device_id, 
-                            connected ? "connected" : "disconnected");
-                }
+            if (!key) {
+                log_warning("[%s]     Got NULL key in changed properties.", LOG_TAG);
+                if (value) g_variant_unref(value); // Still need to unref value
+                continue;
             }
-            g_variant_unref(value);
-        }
-    }
+            log_info("[%s]     Changed property key: '%s'", LOG_TAG, key);
+
+            if (g_strcmp0(key, "Connected") == 0) {
+                log_info("[%s]     ++++ Found 'Connected' property. ++++", LOG_TAG);
+                if (value && g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN)) {
+                    gboolean connected = g_variant_get_boolean(value);
+                    log_info("[%s]     'Connected' value is: %s", LOG_TAG, connected ? "TRUE (Connected)" : "FALSE (Disconnected)");
+
+                    // Extract device ID suffix from the object path
+                    const char* device_id_suffix = object_path ? strrchr(object_path, '/') : NULL;
+                    if (device_id_suffix) {
+                        device_id_suffix++; // Skip the '/'
+                        log_info("[%s]     Extracted device ID suffix: %s", LOG_TAG, device_id_suffix);
+
+                        // --- Call the connection callback ---
+                        if (connection_callback) {
+                            log_info("[%s]     >>> Calling connection_callback (for device: %s, connected: %d)...", LOG_TAG, device_id_suffix, connected ? 1 : 0);
+                            connection_callback(device_id_suffix, connected ? 1 : 0);
+                            log_info("[%s]     <<< connection_callback called.", LOG_TAG);
+                        } else {
+                            log_warning("[%s]     connection_callback is NULL, cannot notify Dart.", LOG_TAG);
+                        }
+                    } else {
+                        log_warning("[%s]     Could not extract device ID suffix from object path: %s", LOG_TAG, object_path ? object_path : "(null)");
+                    }
+                } else {
+                    log_warning("[%s]     'Connected' property value is not a boolean or is NULL (Type: %s).",
+                                LOG_TAG, value ? g_variant_get_type_string(value) : "(null)");
+                }
+            } // End if key == "Connected"
+
+            // --- Important: Unref the 'value' GVariant obtained from g_variant_iter_next ---
+            if (value) {
+                g_variant_unref(value);
+                value = NULL; // Avoid potential double unref if loop behaves unexpectedly
+            }
+        } // End while loop 
+
+        log_info("[%s]   Finished iterating changed properties.", LOG_TAG);
+   } else {
+       // Log if the signal was for a different interface (e.g., Adapter1)
+        log_info("[%s]   Signal is for interface '%s', ignoring for device connection status.", LOG_TAG, interface_from_signal);
+   }
     
-    g_variant_unref(changed_properties);
-    g_variant_unref(invalidated_properties);
+    log_info("[%s] handle_property_change finished.", LOG_TAG);
 }
 
 // Then bluetooth_thread_func follows

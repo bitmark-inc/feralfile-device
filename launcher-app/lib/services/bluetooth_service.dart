@@ -69,11 +69,19 @@ class BluetoothService {
   }
 
   void _handleFFICallback(dynamic message) {
+    print('++++++ Main Isolate: _handleFFICallback RECEIVED message type: ${message.runtimeType} ++++++');
     try {
       if (message is _DeviceConnectionArgs) {
-        logger.info(
+        print('++++++ Main Isolate: _handleFFICallback PROCESSING _DeviceConnectionArgs ++++++');
+        if (_onDeviceConnectionChanged == null) {
+          print('++++++ Main Isolate: _onDeviceConnectionChanged IS NULL ++++++');
+        } else {
+          print('++++++ Main Isolate: Calling _onDeviceConnectionChanged... ++++++');
+          logger.info(
             '[MainIsolate] Device ${message.isConnected ? "connected" : "disconnected"}: ${message.deviceId}');
-        _onDeviceConnectionChanged?.call(message.deviceId, message.isConnected);
+          _onDeviceConnectionChanged!(message.deviceId, message.isConnected); // <--- 呼叫 Cubit 的處理函式
+          print('++++++ Main Isolate: FINISHED calling _onDeviceConnectionChanged ++++++'); // <-- 觀察這行
+        }
       }
       // **** Receive ChunkInfo object ****
       else if (message is ChunkInfo) {
@@ -92,6 +100,7 @@ class BluetoothService {
         }
       }
     } catch (e, stackTrace) {
+      print('++++++ Main Isolate: ERROR in _handleFFICallback: $e \n$stackTrace ++++++');
        logger.severe('[MainIsolate] Error handling FFI callback message: $e');
        logger.severe('Stack trace: $stackTrace');
     }
@@ -180,13 +189,17 @@ class BluetoothService {
 
   static void _staticDeviceConnectionCallback(
       Pointer<Utf8> deviceId, int connected) {
+        print('****** FFI CB ENTERED: _staticDeviceConnectionCallback ******');
     try {
       final deviceIdStr = deviceId.toDartString();
       final isConnected = connected != 0;
       logger.info(
         'Device ${isConnected ? "connected" : "disconnected"}: $deviceIdStr');
+        print('****** FFI CB SENDING: deviceId=$deviceIdStr, connected=$isConnected ******');
       _instance._ffiCallbackSendPort.send(_DeviceConnectionArgs(deviceIdStr, isConnected));
+      print('****** FFI CB SENT SUCCESSFULLY ******'); 
     } catch (e, stackTrace) {
+       print('****** FFI CB ERROR during send: $e \n$stackTrace ******');
        _instance._ffiCallbackSendPort.send(_FfiErrorArgs('DeviceConnectionCallback', e, stackTrace));
     }
   }
