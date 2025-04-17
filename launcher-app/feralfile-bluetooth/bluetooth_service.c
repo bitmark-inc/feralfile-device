@@ -695,19 +695,21 @@ static void handle_property_change(GDBusConnection *connection,
         return; // Cannot proceed if type is wrong
     }
 
-    GVariant *changed_properties;
-    GVariant *invalidated_properties;
-    const gchar *interface_from_signal;
+    const gchar *interface_from_signal = NULL; // Borrowed reference
+    GVariant *changed_properties = NULL;      // *** NEW reference ***
+    GVariant *invalidated_properties_variant = NULL;  // *** NEW reference ***
     
-    g_variant_get(parameters, "(&sa{sv}as)",
+    g_variant_get(parameters, "(&sa{sv}v)",
                   &interface_from_signal,
                   &changed_properties,
-                  &invalidated_properties);
+                  &invalidated_properties_variant);
     
     if (!interface_from_signal) {
-        log_warning("[%s] handle_property_change: Failed to get interface name from signal parameters.", LOG_TAG);
-        // Cannot proceed without interface name. Borrowed variants need no unref.
-        return;
+         log_warning("[%s] handle_property_change: Failed to get interface name from signal.", LOG_TAG);
+         // Unref newly acquired variants if they exist before returning
+         if (changed_properties) g_variant_unref(changed_properties);
+         if (invalidated_properties_variant) g_variant_unref(invalidated_properties_variant);
+         return;
     }
     log_info("[%s]   Interface from signal parameters: %s", LOG_TAG, interface_from_signal);
 
@@ -719,18 +721,19 @@ static void handle_property_change(GDBusConnection *connection,
             // Borrowed variants need no unref.
             return;
         }
-        // Check if changed_properties is actually a dictionary
-        if (!g_variant_is_of_type(changed_properties, G_VARIANT_TYPE_DICTIONARY)) {
-             log_error("[%s]   Error: changed_properties variant is not a dictionary type (%s).",
-                       LOG_TAG, g_variant_get_type_string(changed_properties));
-             // Borrowed variants need no unref.
-             return;
-        }
         log_info("[%s]   Processing changed properties...", LOG_TAG);
-        
+        if (!g_variant_is_of_type(changed_properties, G_VARIANT_TYPE_DICTIONARY)) {
+            log_error("[%s]   Error: changed_properties variant is not a dictionary type (%s).",
+                      LOG_TAG, g_variant_get_type_string(changed_properties));
+            // Unref newly acquired variants before returning
+            if (changed_properties) g_variant_unref(changed_properties); // Unref it now
+            if (invalidated_properties_variant) g_variant_unref(invalidated_properties_variant);
+            return;
+       }
+
         GVariantIter iter;
-        const gchar *key;
-        GVariant *value;
+        const gchar *key = NULL; // Borrowed key
+        GVariant *value = NULL;  // Floating reference from iter_next
         
         g_variant_iter_init(&iter, changed_properties);
         while (g_variant_iter_next(&iter, "{&sv}", &key, &value)) {
@@ -782,7 +785,19 @@ static void handle_property_change(GDBusConnection *connection,
        // Log if the signal was for a different interface (e.g., Adapter1)
         log_info("[%s]   Signal is for interface '%s', ignoring for device connection status.", LOG_TAG, interface_from_signal);
    }
-    
+   log_info("[%s] Cleaning up GVariants...", LOG_TAG);
+   
+   if (changed_properties) {
+        log_info("[%s] Unreffing changed_properties...", LOG_TAG);
+       g_variant_unref(changed_properties);
+        log_info("[%s] Unreffed changed_properties.", LOG_TAG);
+   }
+   if (invalidated_properties_variant) {
+        log_info("[%s] Unreffing invalidated_properties_variant...", LOG_TAG);
+       g_variant_unref(invalidated_properties_variant);
+        log_info("[%s] Unreffed invalidated_properties_variant.", LOG_TAG);
+   }
+
     log_info("[%s] handle_property_change finished.", LOG_TAG);
 }
 
