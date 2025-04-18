@@ -28,6 +28,8 @@ start_chromium() {
         --use-angle=gles \
         --enable-gpu-rasterization \
         --force-renderer-accessibility \
+        --show-fps-counter \
+        --show-gpu-internals \
         --media-router=0 \
         --enable-logging \
         --log-level=0 \
