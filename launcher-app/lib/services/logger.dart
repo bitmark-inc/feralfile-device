@@ -16,8 +16,7 @@ final Logger logger = Logger('FeralFileApp');
 late File _logFile;
 HttpServer? _logServer;
 final _logBuffer = <String>[];
-const int _maxBufferSize = 100; // Keep last 100 log entries
-const int _maxFileLines = 100; // Keep only last 100 lines in log file
+const int _maxBufferSize = 100;
 late SendPort _logIsolateSendPort;
 late Isolate _logIsolate;
 ReceivePort? _logReceivePort;
@@ -47,29 +46,14 @@ Future<void> _logFileHandler(SendPort mainSendPort) async {
   port.listen((message) async {
     if (message is _LogMessage) {
       try {
-        // Read existing log file if it exists
-        List<String> lines = [];
-        if (await logFile.exists()) {
-          lines = await logFile.readAsLines();
-        }
+        final logLine = message.message.trim() + '\n';
+        await logFile.writeAsString(logLine, mode: FileMode.append, flush: true);
 
-        // Add new log line
-        lines.add(message.message.trim());
-
-        // Keep only the last _maxFileLines
-        if (lines.length > _maxFileLines) {
-          lines = lines.sublist(lines.length - _maxFileLines);
-        }
-
-        // Write back to file
-        await logFile.writeAsString(lines.join('\n') + '\n');
-
-        // Track errors in main isolate if needed
         if (message.isError) {
           mainSendPort.send(message.message);
         }
       } catch (e) {
-        mainSendPort.send('Error in log isolate: $e');
+        mainSendPort.send('Error in log isolate writing to file: $e');
       }
     } else if (message == 'GET_LATEST_LOGS') {
       // Request for latest logs from main thread
@@ -166,24 +150,10 @@ void _setupSyncLogging() {
     print('$logMessage');
 
     try {
-      // Read existing log file if it exists
-      List<String> lines = [];
-      if (_logFile.existsSync()) {
-        lines = _logFile.readAsLinesSync();
-      }
-
-      // Add new log line
-      lines.add(logMessage.trim());
-
-      // Keep only the last _maxFileLines
-      if (lines.length > _maxFileLines) {
-        lines = lines.sublist(lines.length - _maxFileLines);
-      }
-
-      // Write back to file
-      _logFile.writeAsStringSync(lines.join('\n') + '\n');
+      final logLine = logMessage.trim() + '\n';
+      _logFile.writeAsStringSync(logLine, mode: FileMode.append, flush: true);
     } catch (e) {
-      print('Error writing to log file: $e');
+      print('Error writing to log file (sync): $e');
     }
 
     // Add to in-memory buffer
@@ -216,7 +186,6 @@ Future<void> startLogServer() async {
       if (request.method == 'GET') {
         switch (request.uri.path) {
           case '/logs/download':
-            // Serve the log file as a download with the latest content
             Uint8List bytes;
             try {
               bytes = await getLatestLogs();
@@ -279,7 +248,6 @@ Future<void> startLogServer() async {
             break;
 
           case '/logs':
-            // Serve logs as plain text
             request.response
               ..headers.contentType = ContentType.text
               ..write(_logBuffer.join())
@@ -308,8 +276,13 @@ String _formatLogsHtml(String logs) {
       .replaceAll('WARNING:', '<span class="warning">WARNING:</span>')
       .replaceAll('INFO:', '<span class="info">INFO:</span>')
       .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;');
+      .replaceAll('>', '&gt;')
+      .replaceAll('&lt;span class="error"&gt;', '<span class="error">')
+      .replaceAll('&lt;span class="warning"&gt;', '<span class="warning">')
+      .replaceAll('&lt;span class="info"&gt;', '<span class="info">')
+      .replaceAll('&lt;/span&gt;', '</span>');
 }
+
 
 void stopLogServer() {
   if (_logServer != null) {
@@ -434,18 +407,36 @@ Future<Uint8List> getLatestLogs() async {
     if (message is Map && message.containsKey('LOG_DATA')) {
       completer.complete(message['LOG_DATA']);
       responsePort.close();
+    } else if (message is String && message.startsWith('Error reading log file:')) {
+      completer.completeError(Exception(message));
+      responsePort.close();
     }
+  }, onError: (e) {
+      completer.completeError(e);
+      responsePort.close();
+  }, onDone: () {
+      if (!completer.isCompleted) {
+        completer.completeError(Exception("Log isolate response port closed unexpectedly."));
+      }
   });
+
 
   // Request logs from isolate
   _logIsolateSendPort.send('GET_LATEST_LOGS');
 
   // Wait for response with timeout
   try {
-    return await completer.future.timeout(Duration(seconds: 2), onTimeout: () {
-      responsePort.close();
-      return _logFile.readAsBytes();
-    });
+    return await completer.future.timeout(Duration(seconds: 5),
+       onTimeout: () async {
+          responsePort.close();
+          logger.warning('Timeout getting latest logs from isolate, reading directly.');
+          try {
+              return await _logFile.readAsBytes();
+          } catch (e) {
+              logger.severe('Error reading log file directly after timeout: $e');
+              return Uint8List(0);
+          }
+       });
   } catch (e) {
     logger.severe('Error getting latest logs: $e');
     try {
