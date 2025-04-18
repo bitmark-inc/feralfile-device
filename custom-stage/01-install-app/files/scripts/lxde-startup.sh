@@ -11,7 +11,7 @@ xset s noblank
 xset -dpms
 
 # Enable and start necessary systemd services if not already enabled
-for service in feralfile-launcher feralfile-chromium feralfile-watchdog feralfile-bt-agent; do
+for service in feralfile-launcher feralfile-chromium feralfile-watchdog; do
     if ! sudo systemctl is-enabled "$service.service" >/dev/null 2>&1; then
         sudo systemctl enable "$service.service"
         sudo systemctl start "$service.service"
