@@ -51,7 +51,7 @@ export default {
     }
 
     if (url.pathname.startsWith('/pool/')) {
-      const key = url.pathname.substring(1);
+      const key = url.pathname.replace('/pool/', '');
       const object = await env.BUCKET.get(key);
       
       if (!object) {
