@@ -141,7 +141,14 @@ export default {
         const key = `${branch}/${arch}/${filename}`;
     
         console.log(`Fetching APT index from key: ${key}`);
-        const object = await env.BUCKET.get(key);
+        let object = await env.BUCKET.get(key);
+        // FIXME: fallback to old release file to support old version, 
+        // remove this once main branch build the next version 0.4.3
+        if (!object && arch === 'arm64') {
+          const fallbackKey = `${branch}/${filename}`;
+          console.log(`Fetching old version APT index from key: ${key}`);
+          object = await env.BUCKET.get(fallbackKey);
+        }
         if (!object) {
           console.error(`Not found: ${key}`);
           return new Response(`${key} not found`, { status: 404 });
