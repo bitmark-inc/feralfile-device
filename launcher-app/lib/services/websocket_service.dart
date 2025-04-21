@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:feralfile/models/websocket_message.dart';
+import 'package:feralfile/services/app_data.dart';
 import 'package:feralfile/services/bluetooth_service.dart';
 import 'package:feralfile/services/commands/javascript_handler.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
@@ -10,6 +11,7 @@ import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/rotate_service.dart';
 
 const webRequestRotateMessageId = 'rotateDevice';
+const artworkCrashedMessageId = 'artworkCrashed';
 
 class WebSocketService {
   static WebSocketService? _instance;
@@ -145,6 +147,15 @@ class WebSocketService {
 
         if (rotation != null) {
           RotateService.rotateScreen(rotation, shouldSaveRotation: false);
+        }
+      }
+
+      if (data.messageID == artworkCrashedMessageId) {
+        try {
+          final crashInfo = jsonDecode(data.message) as Map<String, dynamic>;
+          await CrashReportService().recordCrash(crashInfo['artworkName']);
+        } catch (e) {
+          logger.warning('Error recording artwork crash: $e');
         }
       }
 
