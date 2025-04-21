@@ -23,7 +23,7 @@ ARCHS_LINE="${ARCHS[*]}"
 cat <<EOF
 Origin: feralfile-launcher
 Label: Feral File Repository
-Suite: ${BRANCH}
+Suite: stable
 Version: ${VERSION}
 Codename: ${BRANCH}
 Date: $(date -Ru)
@@ -37,7 +37,6 @@ generate_hash_block() {
   local algo_name=$1   # e.g. "MD5Sum", "SHA1", "SHA256"
   local cmd=$2         # e.g. "md5sum", "sha1sum", "sha256sum"
 
-  echo
   echo "${algo_name}:"
   for arch in "${ARCHS[@]}"; do
     find "./${arch}" -type f \( -name 'Packages' -o -name 'Packages.gz' \) | sort | \
