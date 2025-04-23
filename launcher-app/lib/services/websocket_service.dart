@@ -8,8 +8,10 @@ import 'package:feralfile/services/commands/javascript_handler.dart';
 import 'package:feralfile/services/internet_connectivity_service.dart';
 import 'package:feralfile/services/logger.dart';
 import 'package:feralfile/services/rotate_service.dart';
+import 'package:feralfile/utils/version_helper.dart';
 
 const webRequestRotateMessageId = 'rotateDevice';
+const sendDeviceInfoCommand = 'sendDeviceInfo';
 
 class WebSocketService {
   static WebSocketService? _instance;
@@ -86,6 +88,9 @@ class WebSocketService {
           WebSocket ws = await WebSocketTransformer.upgrade(request);
           _websiteSocket = ws;
           logger.info('[WebSocket] Website connected');
+
+          // Send device info to the website
+          unawaited(_sendDeviceInfo());
 
           ws.listen(
             (dynamic message) {
@@ -182,6 +187,23 @@ class WebSocketService {
   void _stopHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+  }
+
+  Future<void> _sendDeviceInfo() async {
+    final version = await VersionHelper.getInstalledVersion();
+    final deviceId = BluetoothService().getDeviceId();
+    _sendMessage(
+      WebSocketRequestMessage(
+        message: RequestMessageData(
+          command: sendDeviceInfoCommand,
+          request: {
+            'version': version,
+            'deviceId': deviceId,
+          },
+        ),
+      ),
+      true,
+    );
   }
 
   /// Sends a message to the website with an optional callback
