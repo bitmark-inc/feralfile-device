@@ -191,7 +191,7 @@ chromium --no-sandbox "$URL" \
 ROOT=$!
 C_PIDS=$(get_tree_pids "$ROOT")
 echo "Launched Chromium (PID: $ROOT)"
-sleep 3
+sleep 5
 
 while kill -0 $ROOT 2>/dev/null; do
   NOW_TS=$(date +%s)
