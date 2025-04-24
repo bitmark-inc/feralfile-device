@@ -8,6 +8,7 @@ GPU_SUFFIX=${2:-"fb000000.gpu"}
 SOC_ZONE=${3:-0}
 GPU_ZONE=${4:-5}
 DURATION=${5:-60}
+DELAY=${6:-5}
 
 GPU_NODE="/sys/class/devfreq/$GPU_SUFFIX"
 SOC_THERMAL="/sys/class/thermal/thermal_zone$SOC_ZONE"
@@ -191,7 +192,7 @@ chromium "$URL" \
 ROOT=$!
 C_PIDS=$(get_tree_pids "$ROOT")
 echo "Launched Chromium (PID: $ROOT)"
-sleep 5
+sleep "$DELAY"
 
 while kill -0 $ROOT 2>/dev/null; do
   NOW_TS=$(date +%s)
