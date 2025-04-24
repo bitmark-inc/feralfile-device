@@ -61,10 +61,19 @@ jobs:
           sudo apt-get install -y gawk wget git diffstat unzip texinfo gcc build-essential \
           chrpath socat cpio python3 python3-pip python3-pexpect xz-utils debianutils \
           iputils-ping python3-git python3-jinja2 libegl1-mesa libsdl1.2-dev pylint \
-          xterm python3-subunit mesa-common-dev zstd liblz4-tool rclone repo
+          xterm python3-subunit mesa-common-dev zstd liblz4-tool rclone
+
+      - name: Install Repo Tool
+        run: |
+          mkdir -p ~/.bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
+          chmod a+x ~/.bin/repo
+          echo 'export PATH=~/.bin:$PATH' >> ~/.bashrc
+          export PATH=~/.bin:$PATH
 
       - name: Initialize Yocto Repository
         run: |
+          export PATH=~/.bin:$PATH
           mkdir -p ~/yocto-rockchip-sdk
           cd ~/yocto-rockchip-sdk
           repo init -u https://github.com/radxa/yocto-manifests.git -b scarthgap
