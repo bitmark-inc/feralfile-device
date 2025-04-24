@@ -259,7 +259,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sum[smp]=$(bc -l <<<"${sum[smp]}+$sys_pct")
   sum[fps]=$(bc -l <<<"${sum[fps]}+$fps")
   ((cnt++))
-  sleep 3
+  sleep 1
 done
 
 kill "$ROOT" 2>/dev/null || true
