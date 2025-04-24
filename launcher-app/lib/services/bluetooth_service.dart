@@ -24,8 +24,6 @@ class _DeviceConnectionArgs {
   _DeviceConnectionArgs(this.deviceId, this.isConnected);
 }
 
-// *** No longer need _CommandArgs, we will send ChunkInfo directly ***
-
 class _CredentialsArgs {
   final WifiCredentials credentials;
   _CredentialsArgs(this.credentials);

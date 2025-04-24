@@ -393,7 +393,8 @@ static void log_info(const char* format, ...) {
     if (log_counter == 0) {
         request_log_flush();
     }
-
+    
+    // Add Sentry breadcrumb for info messages
     #ifdef SENTRY_DSN
     if (sentry_initialized) {
         sentry_value_t crumb = sentry_value_new_breadcrumb("info", message);
@@ -695,83 +696,44 @@ static void handle_command_write(GDBusConnection *conn,
                                  gpointer user_data) {
     GVariant *array_variant = NULL;
     GVariant *options_variant = NULL;
-    const guchar *data = NULL; // Use const pointer for get_fixed_array result
-    gsize n_elements = 0;
-    guchar *data_copy = NULL; // For the malloc'd copy
+    g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
 
-    g_warning("Actual received parameter type: %s", g_variant_get_type_string(parameters));
+    gsize n_elements;
+    const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
 
-    // Check if it's the type we expect: (ay a{sv})
-    if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(aya{sv})"))) {
-        g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
-        if (array_variant != NULL) {
-            data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
-            if (data == NULL) { // Check return of get_fixed_array too
-                log_error("[%s] (cmd_char) g_variant_get_fixed_array returned NULL from (aya{sv})", LOG_TAG);
-                n_elements = 0;
-            }
-        } else {
-            log_error("[%s] (cmd_char) Failed to extract array_variant from (aya{sv})", LOG_TAG);
-            n_elements = 0;
-        }
-    // Check if it's just a byte array 'ay' (common alternative)
-    } else if (g_variant_is_of_type(parameters, G_VARIANT_TYPE_BYTESTRING)) { // G_VARIANT_TYPE_BYTESTRING is 'ay'
-        // Get the 'ay' variant directly. 'parameters' itself is the 'ay' variant.
-        data = g_variant_get_fixed_array(parameters, &n_elements, sizeof(guchar));
-        if (data != NULL) {
-            log_warning("[%s] (cmd_char) Received 'ay' directly instead of '(aya{sv})'", LOG_TAG);
-        } else {
-            log_error("[%s] (cmd_char) g_variant_get_fixed_array returned NULL from 'ay'", LOG_TAG);
-            n_elements = 0;
-        }
-        // Note: No separate array_variant to unref in this case if using parameters directly
-        array_variant = NULL; // Ensure it's NULL if not assigned from the tuple case
-        options_variant = NULL;
-    } else {
-        log_error("[%s] (cmd_char) Received unexpected D-Bus parameter type: %s",
-                LOG_TAG, g_variant_get_type_string(parameters));
-        n_elements = 0;
+    // Create a copy of the data
+    guchar *data_copy = (guchar *)malloc(n_elements);
+    memcpy(data_copy, data, n_elements);
+
+    log_info("[%s] (cmd_char) Received %zu bytes of data", LOG_TAG, n_elements);
+
+    // Optional hex string logging
+    char hex_string[n_elements * 3 + 1];
+    for (size_t i = 0; i < n_elements; i++) {
+        sprintf(hex_string + (i * 3), "%02x ", data_copy[i]);
+    }
+    hex_string[n_elements * 3 - 1] = '\0';
+    log_info("[%s] (cmd_char) Data: %s", LOG_TAG, hex_string);
+
+    // Use cmd_callback with the copied data
+    if (cmd_callback) {
+        cmd_callback(1, data_copy, (int)n_elements);
+    }
+
+    // Add Sentry breadcrumb
+    #ifdef SENTRY_DSN
+    if (sentry_initialized) {
+        sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received command data");
+        sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
+        sentry_add_breadcrumb(crumb);
+    }
+    #endif
+
+    g_variant_unref(array_variant);
+    if (options_variant) {
+        g_variant_unref(options_variant);
     }
     
-    // Process data if successfully extracted
-    if (n_elements > 0 && data != NULL) {
-        data_copy = (guchar *)malloc(n_elements);
-        if (data_copy) {
-            memcpy(data_copy, data, n_elements);
-            log_info("[%s] (cmd_char) Received %zu bytes of data", LOG_TAG, n_elements);
-            // Optional hex string logging
-            char hex_string[n_elements * 3 + 1];
-            for (size_t i = 0; i < n_elements; i++) {
-                sprintf(hex_string + (i * 3), "%02x ", data_copy[i]);
-            }
-            hex_string[n_elements * 3 - 1] = '\0';
-            log_info("[%s] (cmd_char) Data: %s", LOG_TAG, hex_string);
-            if (cmd_callback) {
-                cmd_callback(1, data_copy, (int)n_elements); // Pass ownership
-            } else {
-                free(data_copy); // Free if no callback takes ownership
-            }
-            // Add Sentry breadcrumb
-            #ifdef SENTRY_DSN
-            if (sentry_initialized) {
-                sentry_value_t crumb = sentry_value_new_breadcrumb("bluetooth", "Received command data");
-                sentry_value_set_by_key(crumb, "data_length", sentry_value_new_int32((int32_t)n_elements));
-                sentry_add_breadcrumb(crumb);
-            }
-            #endif
-        } else {
-            log_error("[%s] (cmd_char) Failed to malloc data_copy", LOG_TAG);
-        }
-    } else {
-        log_warning("[%s] (cmd_char) No valid data extracted or 0 bytes received (n_elements=%zu)", LOG_TAG, n_elements);
-        // Maybe call callback with 0 length/error?
-        // if (cmd_callback) { cmd_callback(0, NULL, 0); } // Or let Dart handle it
-    }
-
-    // Clean up extracted variants (be careful with ref counting)
-    if (array_variant) g_variant_unref(array_variant);
-    if (options_variant) g_variant_unref(options_variant);
-
     g_dbus_method_invocation_return_value(invocation, NULL);
 }
 
@@ -965,129 +927,45 @@ static void handle_property_change(GDBusConnection *connection,
                                  const gchar *signal_name,
                                  GVariant *parameters,
                                  gpointer user_data) {
-    log_info("[%s] handle_property_change received signal:", LOG_TAG);
-    log_info("[%s]   Sender: %s", LOG_TAG, sender_name ? sender_name : "(null)");
-    log_info("[%s]   Object Path: %s", LOG_TAG, object_path ? object_path : "(null)");
-    log_info("[%s]   Interface Name (Emitter): %s", LOG_TAG, interface_name ? interface_name : "(null)"); // Should be org.freedesktop.DBus.Properties
-    log_info("[%s]   Signal Name: %s", LOG_TAG, signal_name ? signal_name : "(null)"); // Should be PropertiesChanged
-    log_info("[%s]   Parameter Type: %s", LOG_TAG, parameters ? g_variant_get_type_string(parameters) : "(null)"); // Should be (sa{sv}as)
-
-    if (!parameters) {
-        log_warning("[%s] handle_property_change received NULL parameters.", LOG_TAG);
-        return;
-    }
-
-    // Check parameter type before trying to parse
-    if (!g_variant_is_of_type(parameters, G_VARIANT_TYPE("(sa{sv}as)"))) {
-        log_error("[%s] handle_property_change: Unexpected parameter type %s, expected (sa{sv}as)",
-                  LOG_TAG, g_variant_get_type_string(parameters));
-        return; // Cannot proceed if type is wrong
-    }
-
-    const gchar *interface_from_signal = NULL; // Borrowed reference
-    GVariant *changed_properties = NULL;      // *** NEW reference ***
-    GVariant *invalidated_properties_variant = NULL;  // *** NEW reference ***
+    GVariant *changed_properties;
+    GVariant *invalidated_properties;
+    const gchar *interface;
     
-    g_variant_get(parameters, "(&sa{sv}v)",
-                  &interface_from_signal,
+    g_variant_get(parameters, "(&sa{sv}as)",
+                  &interface,
                   &changed_properties,
-                  &invalidated_properties_variant);
-    
-    if (!interface_from_signal) {
-         log_warning("[%s] handle_property_change: Failed to get interface name from signal.", LOG_TAG);
-         // Unref newly acquired variants if they exist before returning
-         if (changed_properties) g_variant_unref(changed_properties);
-         if (invalidated_properties_variant) g_variant_unref(invalidated_properties_variant);
-         return;
-    }
-    log_info("[%s]   Interface from signal parameters: %s", LOG_TAG, interface_from_signal);
+                  &invalidated_properties);
 
-    if (g_strcmp0(interface_from_signal, "org.bluez.Device1") == 0) {
-        log_info("[%s]   Signal is for targeted interface: org.bluez.Device1.", LOG_TAG);
-
-        if (!changed_properties) {
-            log_warning("[%s]   No changed_properties variant obtained from signal.", LOG_TAG);
-            // Borrowed variants need no unref.
-            return;
-        }
-        log_info("[%s]   Processing changed properties...", LOG_TAG);
-        if (!g_variant_is_of_type(changed_properties, G_VARIANT_TYPE_DICTIONARY)) {
-            log_error("[%s]   Error: changed_properties variant is not a dictionary type (%s).",
-                      LOG_TAG, g_variant_get_type_string(changed_properties));
-            // Unref newly acquired variants before returning
-            if (changed_properties) g_variant_unref(changed_properties); // Unref it now
-            if (invalidated_properties_variant) g_variant_unref(invalidated_properties_variant);
-            return;
-       }
-
+    if (g_str_equal(interface, "org.bluez.Device1")) {
         GVariantIter iter;
-        const gchar *key = NULL; // Borrowed key
-        GVariant *value = NULL;  // Floating reference from iter_next
+        const gchar *key;
+        GVariant *value;
         
         g_variant_iter_init(&iter, changed_properties);
         while (g_variant_iter_next(&iter, "{&sv}", &key, &value)) {
-            if (!key) {
-                log_warning("[%s]     Got NULL key in changed properties.", LOG_TAG);
-                if (value) g_variant_unref(value); // Still need to unref value
-                continue;
-            }
-            log_info("[%s]     Changed property key: '%s'", LOG_TAG, key);
-
-            if (g_strcmp0(key, "Connected") == 0) {
-                log_info("[%s]     ++++ Found 'Connected' property. ++++", LOG_TAG);
-                if (value && g_variant_is_of_type(value, G_VARIANT_TYPE_BOOLEAN)) {
-                    gboolean connected = g_variant_get_boolean(value);
-                    log_info("[%s]     'Connected' value is: %s", LOG_TAG, connected ? "TRUE (Connected)" : "FALSE (Disconnected)");
-
-                    // Extract device ID suffix from the object path
-                    const char* device_id_suffix = object_path ? strrchr(object_path, '/') : NULL;
-                    if (device_id_suffix) {
-                        device_id_suffix++; // Skip the '/'
-                        log_info("[%s]     Extracted device ID suffix: %s", LOG_TAG, device_id_suffix);
-
-                        // --- Call the connection callback ---
-                        if (connection_callback) {
-                            log_info("[%s]     >>> Calling connection_callback (for device: %s, connected: %d)...", LOG_TAG, device_id_suffix, connected ? 1 : 0);
-                            connection_callback(device_id_suffix, connected ? 1 : 0);
-                            log_info("[%s]     <<< connection_callback called.", LOG_TAG);
-                        } else {
-                            log_warning("[%s]     connection_callback is NULL, cannot notify Dart.", LOG_TAG);
-                        }
-                    } else {
-                        log_warning("[%s]     Could not extract device ID suffix from object path: %s", LOG_TAG, object_path ? object_path : "(null)");
+            if (g_str_equal(key, "Connected")) {
+                gboolean connected;
+                g_variant_get(value, "b", &connected);
+                
+                // Extract device ID from the device path
+                const char* device_id = strrchr(object_path, '/');
+                if (device_id) {
+                    device_id++; // Skip the '/'
+                    if (connection_callback) {
+                        connection_callback(device_id, connected ? 1 : 0);
                     }
-                } else {
-                    log_warning("[%s]     'Connected' property value is not a boolean or is NULL (Type: %s).",
-                                LOG_TAG, value ? g_variant_get_type_string(value) : "(null)");
+                    
+                    // Log the connection state change
+                    log_info("[%s] Device %s %s", LOG_TAG, device_id, 
+                            connected ? "connected" : "disconnected");
                 }
-            } // End if key == "Connected"
-
-            // --- Important: Unref the 'value' GVariant obtained from g_variant_iter_next ---
-            if (value) {
-                g_variant_unref(value);
-                value = NULL; // Avoid potential double unref if loop behaves unexpectedly
             }
-        } // End while loop 
-
-        log_info("[%s]   Finished iterating changed properties.", LOG_TAG);
-   } else {
-       // Log if the signal was for a different interface (e.g., Adapter1)
-        log_info("[%s]   Signal is for interface '%s', ignoring for device connection status.", LOG_TAG, interface_from_signal);
-   }
-   log_info("[%s] Cleaning up GVariants...", LOG_TAG);
-   
-   if (changed_properties) {
-        log_info("[%s] Unreffing changed_properties...", LOG_TAG);
-       g_variant_unref(changed_properties);
-        log_info("[%s] Unreffed changed_properties.", LOG_TAG);
-   }
-   if (invalidated_properties_variant) {
-        log_info("[%s] Unreffing invalidated_properties_variant...", LOG_TAG);
-       g_variant_unref(invalidated_properties_variant);
-        log_info("[%s] Unreffed invalidated_properties_variant.", LOG_TAG);
-   }
-
-    log_info("[%s] handle_property_change finished.", LOG_TAG);
+            g_variant_unref(value);
+        }
+    }
+    
+    g_variant_unref(changed_properties);
+    g_variant_unref(invalidated_properties);
 }
 
 // Then bluetooth_thread_func follows
@@ -1460,9 +1338,7 @@ int bluetooth_init(const char* custom_device_name) {
             // Set tags
             log_info("[%s] Setting Sentry tags", LOG_TAG);
             sentry_set_tag("service", "bluetooth");
-            log_info("[%s] Setting Sentry service bluetooth", LOG_TAG);
             sentry_set_tag("device_name", device_name);
-            log_info("[%s] Setting Sentry device_name %s", LOG_TAG, device_name);
             
             // Add initial breadcrumb
             sentry_value_t crumb = sentry_value_new_breadcrumb("default", "Bluetooth service initialized");

@@ -3,7 +3,6 @@ set -euo pipefail
 
 BRANCH="${1:-stable}"
 VERSION="${2:-0.0.1}"
-ARCH="${3:-arm64}"
 
 # 1) Detect which architectures have Packages or Packages.gz
 ARCHS=()

@@ -321,11 +321,7 @@ String _formatLogsHtml(String logs) {
       .replaceAll('WARNING:', '<span class="warning">WARNING:</span>')
       .replaceAll('INFO:', '<span class="info">INFO:</span>')
       .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('&lt;span class="error"&gt;', '<span class="error">')
-      .replaceAll('&lt;span class="warning"&gt;', '<span class="warning">')
-      .replaceAll('&lt;span class="info"&gt;', '<span class="info">')
-      .replaceAll('&lt;/span&gt;', '</span>');
+      .replaceAll('>', '&gt;');
 }
 
 
