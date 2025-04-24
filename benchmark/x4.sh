@@ -27,9 +27,62 @@ tmp() {
 NUM_CORES=$(nproc)
 
 # ─── CPU helpers ─────────────────────────────────────────────────────────────
-get_total_cpu() {
-  read -r _ u n s i io irq sirq st _ _ </proc/stat
-  echo $((u + n + s + i + io + irq + sirq + st))
+get_cpu_usages() {
+  # ----- Function: get total system time -----
+  get_total_idle() {
+    awk '/^cpu / { print $5 }' /proc/stat
+  }
+
+  get_total_sum() {
+    awk '/^cpu / {
+      sum=0; for (i=2; i<=5; i++) sum+=$i;
+      print sum
+    }' /proc/stat
+  }
+
+  # ----- Function: sum pid times (utime + stime) -----
+  get_pids_time() {
+    local sum=0
+    for pid in $C_PIDS; do
+      if [ -r "/proc/$pid/stat" ]; then
+        t=$(awk '{print $14 + $15}' "/proc/$pid/stat")
+        sum=$((sum + t))
+      fi
+    done
+    echo "$sum"
+  }
+
+  # First snapshot
+  total1=$(get_total_sum)
+  idle1=$(get_total_idle)
+  pids1=$(get_pids_time)
+
+  sleep 1
+
+  # Second snapshot
+  total2=$(get_total_sum)
+  idle2=$(get_total_idle)
+  pids2=$(get_pids_time)
+
+  # Delta
+  total2=$(get_total_sum)
+  idle2=$(get_total_idle)
+  pids2=$(get_pids_time)
+
+  # Calculate usage %
+  total_delta=$((total2 - total1))
+  idle_delta=$((idle2 - idle1))
+  pids_delta=$((pids2 - pids1))
+
+  if [ "$total_delta" -gt 0 ]; then
+    sys_pct=$(awk "BEGIN { printf \"%.1f\", ($total_delta - $idle_delta) / $total_delta * 100 }")
+    pid_pct=$(awk "BEGIN { printf \"%.1f\", $pids_delta / $total_delta * 100 }")
+  else
+    sys_pct="0.0"
+    pid_pct="0.0"
+  fi
+
+  echo "$sys_pct $pid_pct"
 }
 get_sys_cpu() {
   local idle_pct
@@ -60,24 +113,6 @@ get_tree_pids() {
     q=("${q[@]:1}" "${kids[@]}")
   done
   printf '%s ' "${a[@]}"
-}
-get_chromium_cpu_pct() {
-  read -a pids_arr <<<"$C_PIDS"
-  local top_cmd="top -bn2 -d 0.5"
-  for pid in "${pids_arr[@]}"; do
-    top_cmd+=" -p $pid"
-  done
-
-  local cpu_sum=$(
-    eval "$top_cmd" |
-      awk -v NUM_CORES=$NUM_CORES '
-      /^top/ { iter++; next }
-      $1 ~ /^[0-9]+$/ && iter==2 { sum += $9 }
-      END { printf "%.1f", sum / NUM_CORES }
-    '
-  )
-
-  echo $cpu_sum
 }
 chrome_time() {
   t=0
@@ -223,9 +258,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
   ((DUR > 0 && $(date +%s) - start >= DUR)) && break
   C_PIDS=$(get_tree_pids "$ROOT")
 
-  sys_cpu=$(get_sys_cpu)
-  ch_cpu=$(get_chromium_cpu_pct)
-
+  read sys_cpu ch_cpu <<<$(get_cpu_usages)
   cpu_freq=$(get_cpu_freq)
   cpu_temp=$(get_cpu_temp)
   read -r gpu_busy gpu_freq <<<"$(gpu_stats)"
@@ -260,7 +293,6 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sum[smp]=$(bc -l <<<"${sum[smp]}+$sys_pct")
   sum[fps]=$(bc -l <<<"${sum[fps]}+$fps")
   ((cnt++))
-  sleep 3
 done
 
 kill "$ROOT" 2>/dev/null || true
