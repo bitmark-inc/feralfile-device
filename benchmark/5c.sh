@@ -32,14 +32,15 @@ get_cpu_avg_freq() {
   ((count > 0)) && echo $((sum / count / 1000)) || echo 0
 }
 
-get_chromium_pids() {
-  echo "$CHROMIUM_PID $(pgrep -f 'chromium|chrome|chromium-bin' | grep -v $$)"
+get_tree_pids(){ local q=("$1") a=("$1") kids
+  while ((${#q[@]})); do
+    kids=($(pgrep -P "${q[0]}")) && a+=("${kids[@]}"); q=("${q[@]:1}" "${kids[@]}")
+  done; printf '%s ' "${a[@]}"; 
 }
 
 get_chromium_cpu_pct() {
-  local pids=$(get_chromium_pids | xargs | tr ' ' ',')
-  [[ -z "$pids" ]] && { echo 0; return; }
-  local cpu_sum=$(top -bn2 -d 0.1 -p "$pids" \
+  local pids_str=$(IFS=,; echo "${C_PIDS[*]}")
+  local cpu_sum=$(top -bn2 -d 0.1 -p "$pids_str" \
     | awk -v NUM_CORES=$NUM_CORES '
         /^top/ { iter++; next }
         $1 ~ /^[0-9]+$/ && iter==2 { sum += $9 }
@@ -50,7 +51,7 @@ get_chromium_cpu_pct() {
 
 get_chromium_mem_stats() {
   local sum_kb=0
-  for pid in $(get_chromium_pids); do
+  for pid in $C_PIDS; do
     if [ -r "/proc/$pid/smaps" ]; then
       sum_kb=$((sum_kb + $(awk '/^Pss:/ {sum+=$2} END{print sum}' /proc/$pid/smaps)))
     elif [ -r "/proc/$pid/status" ]; then
@@ -92,27 +93,80 @@ get_dev_info() {
   fi
 }
 
+# ─── FPS helper  (CDP → fallback 0) ──────────────────────────────────────────
+DEBUG_PORT=9222
+
+ws_url() {                               # first “page” target’s WS URL
+  curl -s http://127.0.0.1:$DEBUG_PORT/json |
+    jq -r '[ .[] | select(.type=="page") ][0].webSocketDebuggerUrl'
+}
+
+fps_from_metrics() {                     # tier-1 (fast, native)
+  command -v websocat &>/dev/null || return
+  local ws; ws=$(ws_url); [[ -z $ws || $ws == null ]] && return
+  websocat -n1 "$ws" <<< '{"id":1,"method":"Performance.enable"}' >/dev/null 2>&1
+  websocat -n1 "$ws" <<< '{"id":2,"method":"Performance.getMetrics"}' |
+    jq -r '.result.metrics[]? | select(.name=="FramesPerSecond") | .value' |
+    awk '{printf "%.0f",$1}'
+}
+
+fps_from_rAF() {                               # Tier-2, always works
+  command -v websocat &>/dev/null || return
+  local ws; ws=$(ws_url); [[ -z $ws || $ws == null ]] && return
+
+  # JavaScript snippet: count rAF for 1s, return FPS
+  local js='(async()=>{let c=0,s=performance.now();function f(ts){c++; if(ts-s<1000) requestAnimationFrame(f);}requestAnimationFrame(f);await new Promise(r=>setTimeout(r,1050));return Math.round(c*1000/(performance.now()-s));})();'
+
+  printf '{"id":3,"method":"Runtime.evaluate","params":{"expression":"%s","awaitPromise":true,"returnByValue":true}}\n' \
+         "$js" \
+    | websocat -n1 "$ws" \
+    | jq -r '.result.result.value // empty'
+}
+
+get_fps() {
+  local fps
+
+  # Tier-1: Performance.getMetrics
+  fps=$(fps_from_metrics 2>/dev/null)
+  if [[ $fps =~ ^[0-9]+$ && $fps -gt 0 ]]; then
+      echo "$fps"; return
+  fi
+
+  # Tier-2: one-second rAF counter
+  fps=$(fps_from_rAF 2>/dev/null)
+  if [[ $fps =~ ^[0-9]+$ && $fps -gt 0 ]]; then
+      echo "$fps"; return
+  fi
+
+  echo 0                                  # couldn’t measure
+}
+
 get_sys_cpu_usage >/dev/null; sleep 1
 
 sum_CU=0 sum_SU=0 sum_CF=0 sum_ST=0 \
-sum_GU=0 sum_GF=0 sum_GT=0 \
+sum_GU=0 sum_GF=0 sum_FPS=0 sum_GT=0 \
 sum_CM=0 sum_CMP=0 sum_SU_M=0 sum_SP=0
 count=0
 
 START_TS=$(date +%s)
 
-chromium --no-sandbox --kiosk --show-fps-counter "$URL" &
-CHROMIUM_PID=$!
-echo "Launched Chromium (PID: $CHROMIUM_PID)"
+chromium --no-sandbox "$URL" \
+  --remote-debugging-port=$DEBUG_PORT \
+  --show-fps-counter \
+  2>/dev/null &
+ROOT=$!
+C_PIDS=$(get_tree_pids "$ROOT")
+echo "Launched Chromium (PID: $ROOT)"
 sleep 3
 
-while kill -0 $CHROMIUM_PID 2>/dev/null; do
+while kill -0 $ROOT 2>/dev/null; do
   NOW_TS=$(date +%s)
   ELAPSED=$((NOW_TS - START_TS))
   if (( DURATION > 0 && ELAPSED >= DURATION )); then
     echo "Exiting..."
     break
   fi
+  C_PIDS=$(get_tree_pids "$ROOT")
 
   NOW=$(date "+%F %T")
   SYS_CPU=$(get_sys_cpu_usage)
@@ -124,15 +178,17 @@ while kill -0 $CHROMIUM_PID 2>/dev/null; do
   GPU_TEMP=$(awk '{printf "%.1f", $1/1000}' "$GPU_THERMAL/temp")
   read SYS_MEM_USED SYS_MEM_TOTAL <<< $(grep -E 'MemTotal|MemAvailable' /proc/meminfo | awk 'NR==1{t=$2} NR==2{a=$2} END{printf "%d %d",(t-a)/1024,t/1024}')
   SYS_MEM_PCT=$(awk "BEGIN{printf \"%.1f\", ($SYS_MEM_USED/$SYS_MEM_TOTAL)*100}")
+  FPS=$(get_fps); [[ -z $FPS ]] && FPS=0
 
   echo "$NOW"
   echo "============================================================="
+  printf "\n%(%F %T)T | PIDs: %s\n" -1 "$C_PIDS"
   printf "CPU : Chromium: %5s | System: %5s @%4s MHz | Temp: %s\n" \
     "$(color_usage $CHR_CPU)" "$(color_usage $SYS_CPU)" "$CPU_FREQ" "$(color_temp $SOC_TEMP)"
   printf "MEM : Chromium: %5s MB (%5s) | Sys: %5s/%5s MB (%5s)\n" \
     "$CHR_MEM" "$(color_usage $CHR_MEM_PCT)" "$SYS_MEM_USED" "$SYS_MEM_TOTAL" "$(color_usage $SYS_MEM_PCT)"
-  printf "GPU : %5s @%4s MHz | Temp: %s\n" \
-    "$(color_usage $G_USAGE)" "$G_FREQ" "$(color_temp $GPU_TEMP)"
+  printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
+    "$(color_usage $G_USAGE)" "$G_FREQ" "$FPS" "$(color_temp $GPU_TEMP)"
   echo "============================================================="
 
   sum_CU=$(awk "BEGIN{print $sum_CU+$CHR_CPU}")
@@ -141,6 +197,7 @@ while kill -0 $CHROMIUM_PID 2>/dev/null; do
   sum_ST=$(awk "BEGIN{print $sum_ST+$SOC_TEMP}")
   sum_GU=$(awk "BEGIN{print $sum_GU+$G_USAGE}")
   sum_GF=$(awk "BEGIN{print $sum_GF+$G_FREQ}")
+  sum_FPS=$(awk "BEGIN{print $sum_FPS+$FPS}")
   sum_GT=$(awk "BEGIN{print $sum_GT+$GPU_TEMP}")
   sum_CM=$(awk "BEGIN{print $sum_CM+$CHR_MEM}")
   sum_CMP=$(awk "BEGIN{print $sum_CMP+$CHR_MEM_PCT}")
@@ -150,7 +207,7 @@ while kill -0 $CHROMIUM_PID 2>/dev/null; do
   sleep 1
 done
 
-kill $CHROMIUM_PID 2>/dev/null || true
+kill $ROOT 2>/dev/null || true
 echo "Chromium closed."
 
 if (( count > 0 )); then
@@ -160,6 +217,7 @@ if (( count > 0 )); then
   AVG_ST=$(awk "BEGIN{printf \"%.1f\", $sum_ST/$count}")
   AVG_GU=$(awk "BEGIN{printf \"%.1f\", $sum_GU/$count}")
   AVG_GF=$(awk "BEGIN{printf \"%d\",   $sum_GF/$count}")
+  AVG_FPS=$(awk "BEGIN{printf \"%d\",   $sum_FPS/$count}")
   AVG_GT=$(awk "BEGIN{printf \"%.1f\", $sum_GT/$count}")
   AVG_CM=$(awk "BEGIN{printf \"%d\",   $sum_CM/$count}")
   AVG_CMP=$(awk "BEGIN{printf \"%.1f\", $sum_CMP/$count}")
@@ -178,6 +236,6 @@ printf "CPU : Chromium: %5s | System: %5s @%4s MHz | Temp: %s\n" \
   "$(color_usage $AVG_CU)" "$(color_usage $AVG_SU)" "$AVG_CF" "$(color_temp $AVG_ST)"
 printf "MEM : Chromium: %5s MB (%5s) | Sys: %5s/%5s MB (%5s)\n" \
   "$AVG_CM" "$(color_usage $AVG_CMP)" "$AVG_SU_M" "$SYS_MEM_TOTAL" "$(color_usage $AVG_SP)"
-printf "GPU : %5s @%4s MHz | Temp: %s\n" \
-  "$(color_usage $AVG_GU)" "$AVG_GF" "$(color_temp $AVG_GT)"
+printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
+  "$(color_usage $AVG_GU)" "$AVG_GF" "$AVG_FPS" "$(color_temp $AVG_GT)"
 echo "============================================================="
