@@ -293,16 +293,6 @@ jobs:
             --verbose \
             --stats=1s
 
-      - name: Download other arch Package files from the same branch
-        run: |
-          mkdir dist/arm64
-          rclone copy "r2:${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}/${{ github.ref_name }}/arm64" "dist/arm64" \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=32 \
-            --verbose \
-            --stats=1s
-
       - name: Check for existing GPG key
         run: |
           if gpg --list-secret-keys "${{ secrets.APT_GPG_SIGN_KEY_ID }}" > /dev/null 2>&1; then
@@ -318,8 +308,49 @@ jobs:
           mkdir amd64
           dpkg-scanpackages --arch amd64 --multiversion pool > ./amd64/Packages
           cat ./amd64/Packages | gzip -9 > ./amd64/Packages.gz
-          chmod +x ../../scripts/create-release.sh
-          ../../scripts/create-release.sh ${{ github.ref_name }} ${{ inputs.version }}> Release
+          
+          # Modified to explicitly set architecture to amd64 only
+          echo "Origin: feralfile-launcher" > Release
+          echo "Label: Feral File Repository" >> Release
+          echo "Suite: stable" >> Release
+          echo "Version: ${{ inputs.version }}" >> Release
+          echo "Codename: ${{ github.ref_name }}" >> Release
+          echo "Date: $(date -Ru)" >> Release
+          echo "Architectures: amd64" >> Release
+          echo "Components: main" >> Release
+          echo "Description: Feral File Connection Assistant" >> Release
+          
+          # Add hash sections
+          echo "MD5Sum:" >> Release
+          find "./amd64" -type f \( -name 'Packages' -o -name 'Packages.gz' \) | sort | \
+          while read -r file; do
+            filename=$(basename "$file")
+            checksum=$(md5sum "$file" | awk '{print $1}')
+            size=$(stat -c '%s' "$file")
+            printf " %s %d main/binary-amd64/%s\n" \
+              "$checksum" "$size" "$filename" >> Release
+          done
+          
+          echo "SHA1:" >> Release
+          find "./amd64" -type f \( -name 'Packages' -o -name 'Packages.gz' \) | sort | \
+          while read -r file; do
+            filename=$(basename "$file")
+            checksum=$(sha1sum "$file" | awk '{print $1}')
+            size=$(stat -c '%s' "$file")
+            printf " %s %d main/binary-amd64/%s\n" \
+              "$checksum" "$size" "$filename" >> Release
+          done
+          
+          echo "SHA256:" >> Release
+          find "./amd64" -type f \( -name 'Packages' -o -name 'Packages.gz' \) | sort | \
+          while read -r file; do
+            filename=$(basename "$file")
+            checksum=$(sha256sum "$file" | awk '{print $1}')
+            size=$(stat -c '%s' "$file")
+            printf " %s %d main/binary-amd64/%s\n" \
+              "$checksum" "$size" "$filename" >> Release
+          done
+          
           gpg --batch --yes --pinentry-mode loopback \
               --passphrase "${{ secrets.APT_GPG_SIGN_KEY_PASSPHRASE }}" \
               --default-key "${{ secrets.APT_GPG_SIGN_KEY_ID }}" \
