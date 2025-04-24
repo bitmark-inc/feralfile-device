@@ -65,7 +65,7 @@ class BluetoothService {
     _commandService.initialize(this);
     _ffiCallbackSendPort = _ffiCallbackPort.sendPort;
     _ffiCallbackPort.listen(_handleFFICallback);
-    _bindings.bluetooth_set_logfile(logFilePath.toNativeUtf8());
+    _bindings.bluetooth_set_logfile(systemLogFilePath.toNativeUtf8());
   }
 
   void _handleFFICallback(dynamic message) {

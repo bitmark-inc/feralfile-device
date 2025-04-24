@@ -1,0 +1,146 @@
+name: Build Feral File Device Image with Yocto Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image version'
+        required: true
+        default: '0.0.1'
+      existing_app_version:
+        description: 'Existing app version (leave empty to build new app)'
+        required: false
+        type: string
+      environment:
+        description: "Environment to build"
+        required: false
+        default: "Development"
+        type: choice
+        options:
+          - Development
+          - Production
+
+jobs:
+  # --- STEP 1: Reuse Build App Job ---
+  build-app:
+    name: Build Feral File Launcher App
+    if: ${{ github.event.inputs.existing_app_version == '' }}
+    uses: ./.github/workflows/build-app-x86.yml
+    with:
+      version: ${{ github.event.inputs.version }}
+      environment: ${{ github.event.inputs.environment }}
+    secrets:
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SUPPORT_URL: ${{ secrets.SUPPORT_URL }}
+      SUPPORT_API_KEY: ${{ secrets.SUPPORT_API_KEY }}
+      METRICS_URL: ${{ secrets.METRICS_URL }}
+      METRICS_API_KEY: ${{ secrets.METRICS_API_KEY }}
+      APT_GPG_SIGN_KEY_PASSPHRASE: ${{ secrets.APT_GPG_SIGN_KEY_PASSPHRASE }}
+      APT_GPG_SIGN_KEY_ID: ${{ secrets.APT_GPG_SIGN_KEY_ID }}
+      SENTRY_DSN_BLUETOOTH_LIB: ${{ secrets.SENTRY_DSN_BLUETOOTH_LIB }}
+      SENTRY_DSN_APP: ${{ secrets.SENTRY_DSN_APP }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+
+  # --- STEP 2: Build Yocto Image for Radxa ROCK 5C ---
+  build-image:
+    name: Generate Radxa ROCK 5C Yocto Image
+    runs-on: self-hosted
+    needs: [build-app]
+    if: ${{ always() && (needs.build-app.result == 'success' || needs.build-app.result == 'skipped') }}
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up locale
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y locales
+          sudo locale-gen en_US.UTF-8
+          sudo update-locale LANG=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export LC_ALL=en_US.UTF-8
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get install -y gawk wget git diffstat unzip texinfo gcc build-essential \
+          chrpath socat cpio python3 python3-pip python3-pexpect xz-utils debianutils \
+          iputils-ping python3-git python3-jinja2 libegl1-mesa libsdl1.2-dev pylint \
+          xterm python3-subunit mesa-common-dev zstd liblz4-tool rclone
+
+      - name: Install Repo Tool
+        run: |
+          mkdir -p ~/.bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
+          chmod a+x ~/.bin/repo
+          echo 'export PATH=~/.bin:$PATH' >> ~/.bashrc
+          export PATH=~/.bin:$PATH
+
+      - name: Initialize Yocto Repository
+        run: |
+          export PATH=~/.bin:$PATH
+          mkdir -p ~/yocto-rockchip-sdk
+          cd ~/yocto-rockchip-sdk
+          repo init -u https://github.com/radxa/yocto-manifests.git -b scarthgap
+          repo sync -j$(nproc)
+
+      - name: Initialize Build Environment
+        run: |
+          cd ~/yocto-rockchip-sdk
+          source ./oe-init-build-env
+
+      - name: Configure Build for ROCK 5C
+        run: |
+          cd ~/yocto-rockchip-sdk
+          source ./oe-init-build-env
+          rm -f conf/local.conf
+          cp ../meta-radxa/conf/machine/rockchip-rk3588-rock-5c.conf .
+          ln -sf rockchip-rk3588-rock-5c.conf conf/local.conf
+
+      - name: Build Yocto Image
+        run: |
+          cd ~/yocto-rockchip-sdk
+          source ./oe-init-build-env
+          bitbake core-image-minimal
+
+      - name: Configure rclone
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf << EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+          secret_access_key = ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
+          endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          acl = private
+          no_check_bucket = true
+          EOF
+
+      - name: Upload to Cloudflare R2
+        run: |
+          cd ~/yocto-rockchip-sdk
+          # Upload both wic and update.img files
+          rclone copyto "build/tmp/deploy/images/rockchip-rk3588-rock-5c/core-image-minimal-rockchip-rk3588-rock-5c.rootfs.wic" \
+            "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_${{ github.event.inputs.version }}.wic" \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=7 \
+            --verbose \
+            --stats=1s
+          
+          rclone copyto "build/tmp/deploy/images/rockchip-rk3588-rock-5c/core-image-minimal-rockchip-rk3588-rock-5c.rootfs.update.img" \
+            "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_${{ github.event.inputs.version }}.update.img" \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=7 \
+            --verbose \
+            --stats=1s
+
+      - name: Cleanup
+        if: always()
+        run: |
+          sudo rm -rf ~/yocto-rockchip-sdk
