@@ -16,15 +16,18 @@ tmp(){ (( $(bc <<<"$1>75") ))&&printf "${RED}%.1f°C%s" "$1" "$NC"||
         (( $(bc <<<"$1>60") ))&&printf "${YEL}%.1f°C%s" "$1" "$NC"||
                                    printf "${GRN}%.1f°C%s" "$1" "$NC"; }
 
+NUM_CORES=$(nproc)
+
 # ─── CPU helpers ─────────────────────────────────────────────────────────────
 CLK_TCK=$(getconf CLK_TCK)           # jiffies per second
 get_total_cpu(){ read _ u n s i io irq sirq st _ _ < /proc/stat; echo $((u+n+s+i+io+irq+sirq+st)); }
 PREV_IDLE=0 PREV_TOTAL=0
-get_sys_cpu(){ read _ u n s i io irq sirq st _ _ < /proc/stat
-  idle=$((i+io)); tot=$((idle+u+n+s+irq+sirq+st))
-  diff_i=$((idle-PREV_IDLE)); diff_t=$((tot-PREV_TOTAL))
-  PREV_IDLE=$idle PREV_TOTAL=$tot
-  ((diff_t))&&echo $(( (1000*(diff_t-diff_i)/diff_t+5)/10 ))||echo 0; }
+get_sys_cpu(){
+  local idle_pct=$(top -bn2 -d 0.1 | grep "Cpu(s)" | tail -n1 \
+    | awk -F',' '{ for(i=1;i<NF;i++) if($i~"id") print $i }' \
+    | awk '{print $1}')
+  awk "BEGIN{printf \"%d\", 100 - $idle_pct}"
+}
 get_cpu_freq(){ sum=0 cnt=0
   for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq; do
     [[ -r $f ]]&&sum=$((sum+$(<"$f")))&&((cnt++))
@@ -36,6 +39,17 @@ get_tree_pids(){ local q=("$1") a=("$1") kids
   while ((${#q[@]})); do
     kids=($(pgrep -P "${q[0]}")) && a+=("${kids[@]}"); q=("${q[@]:1}" "${kids[@]}")
   done; printf '%s ' "${a[@]}"; }
+get_chromium_cpu_pct() {
+  local pids_str=$(IFS=,; echo "${C_PIDS[*]}")
+  local cpu_sum=$(top -bn2 -d 0.1 -p "$pids_str" \
+    | awk -v NUM_CORES=$NUM_CORES '
+        /^top/ { iter++; next }
+        $1 ~ /^[0-9]+$/ && iter==2 { sum += $9 }
+        END { printf "%.1f", sum / NUM_CORES }
+      ')
+  echo $cpu_sum
+}
+
 chrome_time(){ t=0; for p in $C_PIDS; do read -ra st < /proc/$p/stat 2>/dev/null||continue
   t=$((t+st[13]+st[14])); done; echo $t; }
 chrome_mem(){ kb=0; for p in $C_PIDS; do
@@ -142,9 +156,7 @@ chromium-browser --no-sandbox "$URL" \
 ROOT=$!
 sleep 5                           # allow renderer + CDP
 
-TOTAL_PREV=$(get_total_cpu)
 C_PIDS=$(get_tree_pids "$ROOT")
-PROC_PREV=$(chrome_time)          #<<< initial snapshot *after* launch
 MEM_TOTAL=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
 
 # ─── accumulators ───────────────────────────────────────────────────────────
@@ -157,10 +169,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
   C_PIDS=$(get_tree_pids "$ROOT")
 
   sys_cpu=$(get_sys_cpu)
-  tot_cur=$(get_total_cpu); proc_cur=$(chrome_time)
-  diff_t=$((tot_cur-TOTAL_PREV)); diff_p=$((proc_cur-PROC_PREV))
-  ch_cpu=$( ((diff_t)) && printf "%.1f" "$(bc -l <<<"$diff_p*100/$diff_t")" || echo 0 )
-  TOTAL_PREV=$tot_cur PROC_PREV=$proc_cur
+  ch_cpu=$(get_chromium_cpu_pct)
 
   cpu_freq=$(get_cpu_freq); cpu_temp=$(get_cpu_temp)
   read gpu_busy gpu_freq <<<"$(gpu_stats)"
@@ -187,7 +196,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sum[cm]=$((sum[cm]+ch_mem)); sum[cmp]=$(bc -l <<<"${sum[cmp]}+$ch_pct")
   sum[sm]=$((sum[sm]+sys_used)); sum[smp]=$(bc -l <<<"${sum[smp]}+$sys_pct")
   sum[fps]=$(bc -l <<<"${sum[fps]}+$fps"); ((cnt++))
-  sleep 3
+  sleep 1
 done
 
 kill "$ROOT" 2>/dev/null || true
