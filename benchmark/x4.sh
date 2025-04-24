@@ -6,6 +6,7 @@ set -uo pipefail # -e off because intel_gpu_top → 124 on timeout
 
 URL=${1:-https://example.com}
 DUR=${2:-60}
+DELAY=${3:-5}
 
 # ─── colour helpers ──────────────────────────────────────────────────────────
 RED=$'\e[0;31m'
@@ -207,7 +208,7 @@ chromium-browser "$URL" \
   --autoplay-policy=no-user-gesture-required \
   2>/dev/null &
 ROOT=$!
-sleep 5 # allow renderer + CDP
+sleep "$DELAY" # allow renderer + CDP
 
 C_PIDS=$(get_tree_pids "$ROOT")
 MEM_TOTAL=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
@@ -259,7 +260,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sum[smp]=$(bc -l <<<"${sum[smp]}+$sys_pct")
   sum[fps]=$(bc -l <<<"${sum[fps]}+$fps")
   ((cnt++))
-  sleep 1
+  sleep 3
 done
 
 kill "$ROOT" 2>/dev/null || true
