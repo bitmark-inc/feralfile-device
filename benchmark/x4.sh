@@ -195,7 +195,7 @@ get_fps() {
 }
 
 # ─── launch Chromium ────────────────────────────────────────────────────────
-chromium-browser --no-sandbox "$URL" \
+chromium-browser "$URL" \
   --remote-debugging-port=$DEBUG_PORT \
   --kiosk \
   --no-first-run \

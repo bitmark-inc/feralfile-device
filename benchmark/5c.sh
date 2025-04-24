@@ -177,7 +177,7 @@ count=0
 
 START_TS=$(date +%s)
 
-chromium --no-sandbox "$URL" \
+chromium "$URL" \
   --remote-debugging-port=$DEBUG_PORT \
   --kiosk \
   --no-first-run \
@@ -239,7 +239,7 @@ while kill -0 $ROOT 2>/dev/null; do
   sum_SU_M=$(awk "BEGIN{print $sum_SU_M+$SYS_MEM_USED}")
   sum_SP=$(awk "BEGIN{print $sum_SP+$SYS_MEM_PCT}")
   ((count++))
-  sleep 1
+  sleep 3
 done
 
 kill $ROOT 2>/dev/null || true
