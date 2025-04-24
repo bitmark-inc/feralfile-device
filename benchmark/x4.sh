@@ -32,7 +32,7 @@ get_total_cpu() {
 }
 get_sys_cpu() {
   local idle_pct
-  idle_pct=$(top -bn2 -d 0.1 | grep "Cpu(s)" | tail -n1 |
+  idle_pct=$(top -bn2 -d 0.5 | grep "Cpu(s)" | tail -n1 |
     awk -F',' '{ for(i=1;i<NF;i++) if($i~"id") print $i }' |
     awk '{print $1}')
   awk "BEGIN{printf \"%d\", 100 - $idle_pct}"
@@ -62,7 +62,7 @@ get_tree_pids() {
 }
 get_chromium_cpu_pct() {
   read -a pids_arr <<<"$C_PIDS"
-  local top_cmd="top -bn2 -d 0.1"
+  local top_cmd="top -bn2 -d 0.5"
   for pid in "${pids_arr[@]}"; do
     top_cmd+=" -p $pid"
   done

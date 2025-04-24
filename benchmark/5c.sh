@@ -21,7 +21,7 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 
 get_sys_cpu_usage() {
-  local idle_pct=$(top -bn2 -d 0.1 | grep "Cpu(s)" | tail -n1 |
+  local idle_pct=$(top -bn2 -d 0.5 | grep "Cpu(s)" | tail -n1 |
     awk -F',' '{ for(i=1;i<NF;i++) if($i~"id") print $i }' |
     awk '{print $1}')
   awk "BEGIN{printf \"%d\", 100 - $idle_pct}"
@@ -46,7 +46,7 @@ get_tree_pids() {
 
 get_chromium_cpu_pct() {
   read -a pids_arr <<<"$C_PIDS"
-  local top_cmd="top -bn2 -d 0.1"
+  local top_cmd="top -bn2 -d 0.5"
   for pid in "${pids_arr[@]}"; do
     top_cmd+=" -p $pid"
   done
@@ -239,7 +239,7 @@ while kill -0 $ROOT 2>/dev/null; do
   sum_SU_M=$(awk "BEGIN{print $sum_SU_M+$SYS_MEM_USED}")
   sum_SP=$(awk "BEGIN{print $sum_SP+$SYS_MEM_PCT}")
   ((count++))
-  sleep 3
+  sleep 1
 done
 
 kill $ROOT 2>/dev/null || true
