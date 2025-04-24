@@ -61,18 +61,21 @@ get_tree_pids() {
   printf '%s ' "${a[@]}"
 }
 get_chromium_cpu_pct() {
-  local pids_str
-  pids_str=$(
-    IFS=,
-    echo "${C_PIDS[*]}"
+  read -a pids_arr <<<"$C_PIDS"
+  local top_cmd="top -bn2 -d 0.1"
+  for pid in "${pids_arr[@]}"; do
+    top_cmd+=" -p $pid"
+  done
+
+  local cpu_sum=$(
+    eval "$top_cmd" |
+      awk -v NUM_CORES=$NUM_CORES '
+      /^top/ { iter++; next }
+      $1 ~ /^[0-9]+$/ && iter==2 { sum += $9 }
+      END { printf "%.1f", sum / NUM_CORES }
+    '
   )
-  local cpu_sum
-  cpu_sum=$(top -bn2 -d 0.1 -p "$pids_str" |
-    awk -v NUM_CORES="$NUM_CORES" '
-        /^top/ { iter++; next }
-        $1 ~ /^[0-9]+$/ && iter==2 { sum += $9 }
-        END { printf "%.1f", sum / NUM_CORES }
-      ')
+
   echo $cpu_sum
 }
 chrome_time() {
