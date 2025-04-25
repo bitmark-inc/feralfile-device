@@ -337,7 +337,7 @@ if ((count > 0)); then
   AVG_SU_M=$(awk "BEGIN{printf \"%d\",   $sum_SU_M/$count}")
   AVG_SP=$(awk "BEGIN{printf \"%.1f\", $sum_SP/$count}")
   AVG_JU=$(awk "BEGIN{printf \"%.1f\", $sum_JU/$count}")
-  AVG_JT=$(awk "BEGIN{printf \"%.1f\", $sum_AVG_JT/$count}")
+  AVG_JT=$(awk "BEGIN{printf \"%.1f\", $sum_JT/$count}")
   AVG_JPCT=$(awk "BEGIN{printf \"%.1f\", $sum_JPCT/$count}")
 else
   echo "No average data."
