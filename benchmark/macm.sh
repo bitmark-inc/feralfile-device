@@ -334,8 +334,6 @@ while kill -0 "$ROOT" 2>/dev/null; do
     if collect_data; then
         ((cnt++))
     fi
-
-    sleep 1
 done
 
 # Clean up
