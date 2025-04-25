@@ -354,7 +354,7 @@ avg_gpu_freq=$(echo "scale=0; ${sum[gf]}/$cnt" | bc)
 echo -e "\nAverage over $cnt samples"
 printf "CPU : Chromium:%7s | System:%7s @%4d MHz | Temp:%s\n" \
     "$(pct "$(avg cu)")" "$(pct "$(avg su)")" "$avg_cpu_freq" "$(tmp "$(avg ct)")"
-printf "MEM : Chromium:%4d MB (%7s) | System:%4d/%4d MB (%7s)\n" \
+printf "MEM : Chromium:%.2f MB (%7s) | System:%.2f/%.2f MB (%7s)\n" \
     "$(avg_i cm)" "$(pct "$(avg cmp)")" "$(avg_i sm)" "$sys_tot" "$(pct "$(avg smp)")"
 printf "GPU : %7s @%4d MHz | Temp:%s | FPS:%s\n" \
     "$(pct "$(avg gu)")" "$avg_gpu_freq" "$(tmp "$(avg gt)")" "$(avg fps)"
