@@ -3,7 +3,7 @@
 # macm.sh  — Apple-Silicon edition
 # Usage:  ./macm.sh [URL] [SECONDS]
 ###############################################################################
-set -uo pipefail  # Removed -e to prevent unwanted exits
+set -uo pipefail # Removed -e to prevent unwanted exits
 
 # Error handling function
 handle_error() {
@@ -54,9 +54,13 @@ tmp() {
 
 NUM_CORES=$(sysctl -n hw.logicalcpu)
 
-macmon_sample() { 
+macmon_sample() {
     # Use set +e locally to prevent exit on failure
-    { set +e; macmon pipe -s1 -i1000 | tail -1 || echo "{}"; set -e; } 
+    {
+        set +e
+        macmon pipe -s1 -i1000 | tail -1 || echo "{}"
+        set -e
+    }
 }
 
 get_sys_cpu() {
@@ -114,7 +118,7 @@ get_mem_stats() {
 get_tree_pids() {
     local parent_pid="$1"
     echo -n "$parent_pid "
-    
+
     # Find all child processes where parent_pid is the PPID
     ps -ax -o ppid,pid | grep "^[[:space:]]*$parent_pid " | awk '{print $2}' | while read child_pid; do
         echo -n "$child_pid "
@@ -124,10 +128,10 @@ get_tree_pids() {
 # Main loop that collects data for each iteration
 collect_data() {
     C_PIDS=$(get_tree_pids "$ROOT" 2>/dev/null || echo "$ROOT")
-    
+
     # Get a single sample per iteration to ensure consistency
     sample=$(macmon_sample 2>/dev/null || echo "{}")
-    
+
     # Skip this iteration if the sample is empty
     if [[ -z "$sample" || "$sample" == "{}" ]]; then
         echo "Warning: Failed to get macmon sample, retrying..."
@@ -149,17 +153,24 @@ collect_data() {
         sys_pct=0
     fi
 
+    # JS heap stats
+    if ! read -r t_heap u_heap heap_pct <<<"$(js_heap 2>/dev/null)"; then
+        t_heap=0
+        u_heap=0
+        heap_pct=0
+    fi
+
     # Process-specific metrics
     ch_cpu=$(get_chromium_cpu_pct 2>/dev/null || echo "0")
     ch_mem=$(chrome_mem 2>/dev/null || echo "0")
-    
+
     # Avoid division by zero
     if [[ "$sys_tot" -gt 0 ]]; then
         ch_pct=$(bc -l <<<"scale=1; $ch_mem*100/$sys_tot" 2>/dev/null || echo "0")
     else
         ch_pct="0.0"
     fi
-    
+
     fps=$(get_fps 2>/dev/null || echo "0.0")
 
     # Display the metrics
@@ -170,6 +181,7 @@ collect_data() {
         "$ch_mem" "$(pct $ch_pct)" "$sys_used" "$sys_tot" "$(pct $sys_pct)"
     printf "GPU : %7s @%4d MHz | Temp:%s | FPS:%s\n" \
         "$(pct $gpu_busy)" "$gpu_freq" "$(tmp $gpu_temp)" "$fps"
+    printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$u_heap" "$t_heap" "$(pct $heap_pct)"
 
     # Accumulate the metrics for later averaging
     sum[cu]=$(bc -l <<<"${sum[cu]}+$ch_cpu" 2>/dev/null || echo "${sum[cu]}")
@@ -184,19 +196,22 @@ collect_data() {
     sum[sm]=$((sum[sm] + sys_used))
     sum[smp]=$(bc -l <<<"${sum[smp]}+$sys_pct" 2>/dev/null || echo "${sum[smp]}")
     sum[fps]=$(bc -l <<<"${sum[fps]}+$fps" 2>/dev/null || echo "${sum[fps]}")
+    sum[ju]=$(bc -l <<<"${sum[ju]}+$u_heap" 2>/dev/null || echo "${sum[ju]}")
+    sum[jt]=$(bc -l <<<"${sum[jt]}+$t_heap" 2>/dev/null || echo "${sum[jt]}")
+    sum[jpct]=$(bc -l <<<"${sum[jpct]}+$heap_pct" 2>/dev/null || echo "${sum[jpct]}")
 
     return 0
 }
 
-get_chromium_cpu_pct() { 
-    ps -o %cpu= -p "${C_PIDS// /,}" 2>/dev/null | awk -v c=$NUM_CORES '{s+=$1} END{printf "%.1f", s/c}' || echo "0.0" 
+get_chromium_cpu_pct() {
+    ps -o %cpu= -p "${C_PIDS// /,}" 2>/dev/null | awk -v c=$NUM_CORES '{s+=$1} END{printf "%.1f", s/c}' || echo "0.0"
 }
-chrome_mem() { 
-    ps -o rss= -p "${C_PIDS// /,}" 2>/dev/null | awk '{k+=$1} END{print int(k/1024)}' || echo "0" 
+chrome_mem() {
+    ps -o rss= -p "${C_PIDS// /,}" 2>/dev/null | awk '{k+=$1} END{print int(k/1024)}' || echo "0"
 }
 
-ws_url() { 
-    curl -s http://127.0.0.1:$DEBUG_PORT/json 2>/dev/null | jq -r '[.[]|select(.type=="page")][0].webSocketDebuggerUrl' || echo "" 
+ws_url() {
+    curl -s http://127.0.0.1:$DEBUG_PORT/json 2>/dev/null | jq -r '[.[]|select(.type=="page")][0].webSocketDebuggerUrl' || echo ""
 }
 fps_from_metrics() {
     command -v websocat &>/dev/null || return 1
@@ -237,6 +252,39 @@ get_fps() {
     fi
 }
 
+js_heap() {
+    # Check for required tools
+    command -v websocat &>/dev/null || return 1
+    
+    # Get WebSocket URL for DevTools Protocol
+    local ws
+    ws=$(ws_url)
+    [[ -z "$ws" || "$ws" == "null" ]] && return 1
+    
+    # Helper function to query JavaScript values
+    get_js_value() {
+        local expr="$1"
+        printf '{"id":4,"method":"Runtime.evaluate","params":{"expression":"%s","returnByValue":true}}\n' "$expr" | \
+        websocat -n1 "$ws" 2>/dev/null | \
+        jq -r '.result.result.value // 0'
+    }
+    
+    # Get heap metrics - performance.memory is Chrome-specific
+    local t_heap; t_heap=$(get_js_value "performance.memory ? performance.memory.totalJSHeapSize : 0")
+    local u_heap; u_heap=$(get_js_value "performance.memory ? performance.memory.usedJSHeapSize : 0")
+    
+    # Verify we got valid data
+    [[ "$t_heap" == "0" || -z "$t_heap" ]] && return 1
+    
+    # Convert to MB and calculate percentage
+    local t_mb; t_mb=$(echo "scale=2; $t_heap/1024/1024" | bc)
+    local u_mb; u_mb=$(echo "scale=2; $u_heap/1024/1024" | bc)
+    local pct; pct=$(echo "scale=1; $u_heap*100/$t_heap" | bc)
+    
+    # Output as "total_mb used_mb percentage"
+    printf "%.2f %.2f %.1f" "$t_mb" "$u_mb" "$pct"
+}
+
 if [[ -n "${CHROMIUM_BIN:-}" && -x "$CHROMIUM_BIN" ]]; then
     : # use the caller-supplied path verbatim
 else
@@ -269,7 +317,7 @@ sleep "$DELAY"
 C_PIDS=$(get_tree_pids "$ROOT" 2>/dev/null || echo "$ROOT")
 
 declare -A sum
-for k in cu su cf ct gu gf gt cm cmp sm smp fps; do sum[$k]=0; done
+for k in cu su cf ct gu gf gt cm cmp sm smp fps ju jt jpct; do sum[$k]=0; done
 cnt=0
 start=$(date +%s)
 
@@ -286,7 +334,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
     if collect_data; then
         ((cnt++))
     fi
-    
+
     sleep 1
 done
 
@@ -312,6 +360,7 @@ printf "MEM : Chromium:%4d MB (%7s) | System:%4d/%4d MB (%7s)\n" \
     "$(avg_i cm)" "$(pct "$(avg cmp)")" "$(avg_i sm)" "$sys_tot" "$(pct "$(avg smp)")"
 printf "GPU : %7s @%4d MHz | Temp:%s | FPS:%s\n" \
     "$(pct "$(avg gu)")" "$avg_gpu_freq" "$(tmp "$(avg gt)")" "$(avg fps)"
+printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$(avg_i ju)" "$(avg_i jt)" "$(pct "$(avg jpct)")"
 
 trap - EXIT
 cleanup
