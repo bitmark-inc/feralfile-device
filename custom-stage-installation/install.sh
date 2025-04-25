@@ -1,7 +1,8 @@
 #!/bin/bash -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-CUSTOM_STAGE_DIR="$SCRIPT_DIR/custom-stage"
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+CUSTOM_STAGE_DIR="$PARENT_DIR/custom-stage"
 
 # Check if running as root
 if [ "$(id -u)" -ne 0 ]; then
@@ -76,8 +77,9 @@ chmod -R 755 /home/feralfile/services
 cp "$CUSTOM_STAGE_DIR/01-install-app/files/migrate.sh" /home/feralfile/migrate.sh
 chmod 755 /home/feralfile/migrate.sh
 
-if [ -f "$SCRIPT_DIR/feralfile-launcher.conf" ]; then
-    cp "$SCRIPT_DIR/feralfile-launcher.conf" /home/feralfile/.config/feralfile/feralfile-launcher.conf
+# Check for feralfile-launcher.conf in parent directory
+if [ -f "$PARENT_DIR/feralfile-launcher.conf" ]; then
+    cp "$PARENT_DIR/feralfile-launcher.conf" /home/feralfile/.config/feralfile/feralfile-launcher.conf
     chmod 644 /home/feralfile/.config/feralfile/feralfile-launcher.conf
 else
     echo "Warning: feralfile-launcher.conf not found"
