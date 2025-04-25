@@ -50,6 +50,9 @@ void main() async {
         exit(0);
       });
 
+      // Disable hardware monitoring to resolve freezing issue
+      // HardwareMonitorService().startMonitoring();
+
       runApp(
         MultiBlocProvider(
           providers: [
