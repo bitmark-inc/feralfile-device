@@ -17,8 +17,7 @@ late File _appLogFile;
 late File _systemLogFile;
 HttpServer? _logServer;
 final _logBuffer = <String>[];
-const int _maxBufferSize = 100; // Keep last 100 log entries
-const int _maxFileLines = 100; // Keep only last 100 lines in log file
+const int _maxBufferSize = 100;
 late SendPort _logIsolateSendPort;
 late Isolate _logIsolate;
 ReceivePort? _logReceivePort;
@@ -61,48 +60,13 @@ Future<void> _logFileHandler(SendPort mainSendPort) async {
   port.listen((message) async {
     if (message is _LogMessage) {
       try {
-        // Create parent directory if it doesn't exist
-        final parent = appLogFile.parent;
-        if (!await parent.exists()) {
-          await parent.create(recursive: true);
-        }
-
-        // Read existing log file if it exists
-        List<String> lines = [];
-        if (await appLogFile.exists()) {
-          try {
-            lines = await appLogFile.readAsLines();
-          } catch (e) {
-            mainSendPort.send('Error reading app log file: $e');
-            // If reading fails, start with an empty log rather than failing completely
-          }
-        }
-
-        // Add new log line
-        lines.add(message.message.trim());
-
-        // Keep only the last _maxFileLines
-        if (lines.length > _maxFileLines) {
-          lines = lines.sublist(lines.length - _maxFileLines);
-        }
-
-        // Write back to file
-        try {
-          await appLogFile.writeAsString(lines.join('\n') + '\n');
-        } catch (e) {
-          // Try to write the file from scratch if appending fails
-          mainSendPort
-              .send('Error writing to app log file, trying to recreate: $e');
-          await appLogFile.writeAsString(message.message.trim() + '\n',
-              mode: FileMode.write);
-        }
-
-        // Track errors in main isolate if needed
+        final logLine = message.message.trim() + '\n';
+        await appLogFile.writeAsString(logLine, mode: FileMode.append, flush: true);
         if (message.isError) {
           mainSendPort.send(message.message);
         }
       } catch (e) {
-        mainSendPort.send('Error in log isolate: $e');
+        mainSendPort.send('Error in log isolate writing to file: $e');
       }
     }
   });
@@ -189,24 +153,10 @@ void _setupSyncLogging() {
     print('$logMessage');
 
     try {
-      // Read existing log file if it exists
-      List<String> lines = [];
-      if (_appLogFile.existsSync()) {
-        lines = _appLogFile.readAsLinesSync();
-      }
-
-      // Add new log line
-      lines.add(logMessage.trim());
-
-      // Keep only the last _maxFileLines
-      if (lines.length > _maxFileLines) {
-        lines = lines.sublist(lines.length - _maxFileLines);
-      }
-
-      // Write back to file
-      _appLogFile.writeAsStringSync(lines.join('\n') + '\n');
+      final logLine = logMessage.trim() + '\n';
+      _appLogFile.writeAsStringSync(logLine, mode: FileMode.append, flush: true);
     } catch (e) {
-      print('Error writing to app log file: $e');
+      print('Error writing to log file (sync): $e');
     }
 
     // Add to in-memory buffer
@@ -343,7 +293,6 @@ Future<void> startLogServer() async {
             break;
 
           case '/logs':
-            // Serve logs as plain text
             request.response
               ..headers.contentType = ContentType.text
               ..write(_logBuffer.join())
@@ -374,6 +323,7 @@ String _formatLogsHtml(String logs) {
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;');
 }
+
 
 void stopLogServer() {
   if (_logServer != null) {

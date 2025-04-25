@@ -177,8 +177,7 @@ class BLEConnectionCubit extends Cubit<BLEConnectionState> {
   }
 
   void _handleDeviceConnectionChanged(String deviceId, bool connected) {
-    logger.info(
-        '[BLEConnectionCubit] Device $deviceId ${connected ? "connected" : "disconnected"}');
+    logger.info('[BLEConnectionCubit] Device $deviceId ${connected ? "connected" : "disconnected"}');
 
     if (connected) {
       // Check if this is a new device (never seen before)
