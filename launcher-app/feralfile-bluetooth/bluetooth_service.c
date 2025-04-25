@@ -642,10 +642,55 @@ static void handle_write_value(GDBusConnection *conn,
                                gpointer user_data) {
     GVariant *array_variant = NULL;
     GVariant *options_variant = NULL;
+    
+    // Add error checking for parameters
+    if (!parameters) {
+        log_error("[%s] (setup_char) Received NULL parameters", LOG_TAG);
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        return;
+    }
+    
+    // Log the parameter type
+    log_info("[%s] (setup_char) Parameter type: %s", LOG_TAG, g_variant_get_type_string(parameters));
+    
+    // Safely extract the parameters
+    if (!g_variant_is_of_type(parameters, G_VARIANT_TYPE("(aya{sv})"))) {
+        log_error("[%s] (setup_char) Parameters not of expected type (aya{sv}): got %s", 
+                 LOG_TAG, g_variant_get_type_string(parameters));
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        return;
+    }
+    
     g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
+    
+    // Check if array_variant is valid
+    if (!array_variant) {
+        log_error("[%s] (setup_char) Failed to extract array variant", LOG_TAG);
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        return;
+    }
+    
+    // Check if array_variant is of correct type
+    if (!g_variant_is_of_type(array_variant, G_VARIANT_TYPE_ARRAY)) {
+        log_error("[%s] (setup_char) array_variant not of array type: %s", 
+                 LOG_TAG, g_variant_get_type_string(array_variant));
+        g_variant_unref(array_variant);
+        if (options_variant) g_variant_unref(options_variant);
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        return;
+    }
 
     gsize n_elements;
     const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
+    
+    // Check if data extraction succeeded
+    if (!data) {
+        log_error("[%s] (setup_char) Failed to extract data from array variant", LOG_TAG);
+        g_variant_unref(array_variant);
+        if (options_variant) g_variant_unref(options_variant);
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        return;
+    }
 
     // Create a copy of the data
     guchar *data_copy = (guchar *)malloc(n_elements);
@@ -696,10 +741,55 @@ static void handle_command_write(GDBusConnection *conn,
                                  gpointer user_data) {
     GVariant *array_variant = NULL;
     GVariant *options_variant = NULL;
+    
+    // Add error checking for parameters
+    if (!parameters) {
+        log_error("[%s] (cmd_char) Received NULL parameters", LOG_TAG);
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        return;
+    }
+    
+    // Log the parameter type
+    log_info("[%s] (cmd_char) Parameter type: %s", LOG_TAG, g_variant_get_type_string(parameters));
+    
+    // Safely extract the parameters
+    if (!g_variant_is_of_type(parameters, G_VARIANT_TYPE("(aya{sv})"))) {
+        log_error("[%s] (cmd_char) Parameters not of expected type (aya{sv}): got %s", 
+                 LOG_TAG, g_variant_get_type_string(parameters));
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        return;
+    }
+    
     g_variant_get(parameters, "(@aya{sv})", &array_variant, &options_variant);
+    
+    // Check if array_variant is valid
+    if (!array_variant) {
+        log_error("[%s] (cmd_char) Failed to extract array variant", LOG_TAG);
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        return;
+    }
+    
+    // Check if array_variant is of correct type
+    if (!g_variant_is_of_type(array_variant, G_VARIANT_TYPE_ARRAY)) {
+        log_error("[%s] (cmd_char) array_variant not of array type: %s", 
+                 LOG_TAG, g_variant_get_type_string(array_variant));
+        g_variant_unref(array_variant);
+        if (options_variant) g_variant_unref(options_variant);
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        return;
+    }
 
     gsize n_elements;
     const guchar *data = g_variant_get_fixed_array(array_variant, &n_elements, sizeof(guchar));
+    
+    // Check if data extraction succeeded
+    if (!data) {
+        log_error("[%s] (cmd_char) Failed to extract data from array variant", LOG_TAG);
+        g_variant_unref(array_variant);
+        if (options_variant) g_variant_unref(options_variant);
+        g_dbus_method_invocation_return_value(invocation, NULL);
+        return;
+    }
 
     // Create a copy of the data
     guchar *data_copy = (guchar *)malloc(n_elements);
