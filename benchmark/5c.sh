@@ -336,8 +336,8 @@ if ((count > 0)); then
   AVG_CMP=$(awk "BEGIN{printf \"%.1f\", $sum_CMP/$count}")
   AVG_SU_M=$(awk "BEGIN{printf \"%d\",   $sum_SU_M/$count}")
   AVG_SP=$(awk "BEGIN{printf \"%.1f\", $sum_SP/$count}")
-  AVG_JU=$(awk "BEGIN{printf \"%.1f\", $sum_JU/$count}")
-  AVG_JT=$(awk "BEGIN{printf \"%.1f\", $sum_JT/$count}")
+  AVG_JU=$(awk "BEGIN{printf \"%.2f\", $sum_JU/$count}")
+  AVG_JT=$(awk "BEGIN{printf \"%.2f\", $sum_JT/$count}")
   AVG_JPCT=$(awk "BEGIN{printf \"%.1f\", $sum_JPCT/$count}")
 else
   echo "No average data."
@@ -354,5 +354,5 @@ printf "MEM : Chromium: %5s MB (%5s) | Sys: %5s/%5s MB (%5s)\n" \
   "$AVG_CM" "$(color_usage $AVG_CMP)" "$AVG_SU_M" "$SYS_MEM_TOTAL" "$(color_usage $AVG_SP)"
 printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
   "$(color_usage $AVG_GU)" "$AVG_GF" "$AVG_FPS" "$(color_temp $AVG_GT)"
-printf "JS Heap : %5s//%5s MB (%7s)\n" "$AVG_JU" "$AVG_JT" "$(color_usage $AVG_JPCT)"
+printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$AVG_JU" "$AVG_JT" "$(color_usage $AVG_JPCT)"
 echo "============================================================="
