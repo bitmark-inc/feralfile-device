@@ -351,7 +351,7 @@ kill "$ROOT" 2>/dev/null || true
 }
 
 avg() { printf "%.1f" "$(bc -l <<<"${sum[$1]}/$cnt")"; }
-avg_i() { echo $((sum[$1] / cnt)); }
+avg_i() { echo "$(bc -l <<<"scale=2; ${sum[$1]}/$cnt")"; }
 
 echo -e "\nAverage over $cnt samples"
 printf "CPU : Chromium:%7s | System:%7s @%4d MHz | Temp:%s\n" \
