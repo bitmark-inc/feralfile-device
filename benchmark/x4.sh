@@ -354,10 +354,10 @@ avg() { printf "%.1f" "$(bc -l <<<"${sum[$1]}/$cnt")"; }
 avg_i() { echo "$(bc -l <<<"scale=2; ${sum[$1]}/$cnt")"; }
 
 echo -e "\nAverage over $cnt samples"
-printf "CPU : Chromium:%7s | System:%7s @%4d MHz | Temp:%s\n" \
+printf "CPU : Chromium:%7s | System:%7s @%.0f MHz | Temp:%s\n" \
   "$(pct "$(avg cu)")" "$(pct "$(avg su)")" "$(avg_i cf)" "$(tmp "$(avg ct)")"
-printf "MEM : Chromium:%4d MB (%7s) | System:%4d/%4d MB (%7s)\n" \
+printf "MEM : Chromium:%.2f MB (%7s) | System:%.2f/%.2f MB (%7s)\n" \
   "$(avg_i cm)" "$(pct "$(avg cmp)")" "$(avg_i sm)" "$((MEM_TOTAL / 1024))" "$(pct "$(avg smp)")"
-printf "GPU : %7s @%4d MHz | FPS:%s\n" \
+printf "GPU : %7s @%.0f MHz | FPS:%s\n" \
   "$(pct "$(avg gu)")" "$(avg_i gf)" "$(avg fps)"
 printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$(avg_i ju)" "$(avg_i jt)" "$(pct "$(avg jpct)")"
