@@ -16,36 +16,44 @@ if ! id -u feralfile &>/dev/null; then
     useradd -m -s /bin/bash feralfile
 fi
 
-# Install packages from 00-packages
-echo "Installing packages from 00-packages..."
+# Install Ubuntu-compatible packages (from 00-packages)
+echo "Installing packages equivalent to 00-packages..."
 apt-get update
+apt-get install -y \
+    alsa-utils \
+    policykit-1 \
+    chromium-browser \
+    fonts-droid-fallback \
+    fonts-liberation2 \
+    obconf \
+    python3-pyqt5 \
+    python3-opengl \
+    python3-sentry-sdk \
+    python3-websockets \
+    vulkan-tools mesa-vulkan-drivers \
+    ffmpeg
 
-# Read and install packages from 00-packages
-if [ -f "$CUSTOM_STAGE_DIR/00-install-packages/00-packages" ]; then
-    while read -r line; do
-        if [ -n "$line" ]; then
-            apt-get install -y $line
-        fi
-    done < "$CUSTOM_STAGE_DIR/00-install-packages/00-packages"
-else
-    echo "Warning: 00-packages file not found"
-fi
+# Install Ubuntu-compatible packages (from 00-packages-nr)
+echo "Installing Ubuntu equivalents to 00-packages-nr..."
+apt-get install -y \
+    xserver-xorg xinit xdotool \
+    unclutter \
+    mousepad \
+    eom \
+    lxde \
+    zenity xdg-utils \
+    lightdm \
+    git
 
-# Read and install packages from 00-packages-nr
-echo "Installing additional packages..."
-if [ -f "$CUSTOM_STAGE_DIR/00-install-packages/00-packages-nr" ]; then
-    while read -r line; do
-        if [ -n "$line" ]; then
-            apt-get install -y $line
-        fi
-    done < "$CUSTOM_STAGE_DIR/00-install-packages/00-packages-nr"
-else
-    echo "Warning: 00-packages-nr file not found"
-fi
+# Notes on package changes from Raspberry Pi OS to Ubuntu:
+# - Removed: rpi-chromium-mods (Raspberry Pi specific)
+# - Removed: libwidevinecdm0 (Raspberry Pi specific DRM)
+# - Removed: gldriver-test (Raspberry Pi specific)
+# - Changed: chromium -> chromium-browser (Ubuntu package name)
 
 # Set up automatic login (equivalent to the raspi-config command)
 echo "Setting up automatic login..."
-# This is Ubuntu-specific and replaces the raspi-config command
+# This is Ubuntu-specific
 mkdir -p /etc/lightdm/lightdm.conf.d/
 cat > /etc/lightdm/lightdm.conf.d/12-autologin.conf << EOF
 [Seat:*]
@@ -94,7 +102,7 @@ chmod 644 /etc/apt/trusted.gpg.d/feralfile.asc
 echo "Setting up user permissions..."
 usermod -a -G bluetooth,dialout feralfile
 
-# Install from bluez.sh
+# Install BlueZ - Ubuntu version check
 echo "Installing/upgrading BlueZ..."
 DESIRED_BLUE_Z_VERSION="5.79"
 if command -v bluetoothd >/dev/null 2>&1; then
@@ -133,51 +141,14 @@ else
   echo "BlueZ is already up to date (version $CURRENT_VERSION)."
 fi
 
-# Install specific Mesa versions
-echo "Setting up Mesa libraries..."
-target_version="23.2.1-1~bpo12+rpt3"
-packages=(
-  libgbm1_23.2.1-1~bpo12+rpt3_arm64.deb
-  libglapi-mesa_23.2.1-1~bpo12+rpt3_arm64.deb
-  libgl1-mesa-dri_23.2.1-1~bpo12+rpt3_arm64.deb
-  libegl-mesa0_23.2.1-1~bpo12+rpt3_arm64.deb
-  libglx-mesa0_23.2.1-1~bpo12+rpt3_arm64.deb
-)
-base_url="https://archive.raspberrypi.com/debian/pool/main/m/mesa"
-
-packages_to_check=(
-  libgbm1
-  libglapi-mesa
-  libgl1-mesa-dri
-  libegl-mesa0
-  libglx-mesa0
-)
-
-echo "Downloading .deb files..."
-for pkg in "${packages[@]}"; do
-  wget -nc "$base_url/$pkg" || echo "Failed to download $pkg, continuing..."
-done
-
-apt-get install -y libdrm-nouveau2
-
-echo "Installing packages..."
-for pkg in "${packages[@]}"; do
-  if [ -f "./$pkg" ]; then
-    dpkg -i "./$pkg" || echo "Failed to install $pkg, continuing..."
-  else
-    echo "Package file $pkg not found."
-  fi
-done
-
-echo "Holding packages to prevent upgrades..."
-apt-mark hold libegl-mesa0 libgbm1 libgl1-mesa-dri libglapi-mesa libglx-mesa0
-
-dpkg -r mesa-libgallium || echo "mesa-libgallium not installed or already removed"
-
-echo "Cleaning up .deb files..."
-for pkg in "${packages[@]}"; do
-  rm -f "./$pkg"
-done
+# For Mesa packages - use Ubuntu packages instead of Raspberry Pi specific ones
+echo "Installing Mesa packages from Ubuntu repositories..."
+apt-get install -y \
+    libgbm1 \
+    libglapi-mesa \
+    libgl1-mesa-dri \
+    libegl-mesa0 \
+    libglx-mesa0
 
 # Create system service files
 echo "Setting up system services..."
@@ -321,7 +292,9 @@ EOF
 # Install Feralfile Launcher
 echo "Installing Feralfile Launcher..."
 apt update
-apt -y install feralfile-launcher
+apt -y install feralfile-launcher || {
+    echo "Warning: Failed to install feralfile-launcher. Make sure the repository is correctly set up."
+}
 
 # Enable services
 echo "Enabling services..."
