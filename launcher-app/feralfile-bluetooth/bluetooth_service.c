@@ -1141,13 +1141,13 @@ static void* bluetooth_thread_func(void* arg) {
             pthread_exit(NULL);
         }
 
-        // Step 9: Register the application
+        // Step 9: Register the application with a timeout
         g_dbus_proxy_call_sync(
             gatt_manager,
             "RegisterApplication",
             g_variant_new("(oa{sv})", "/com/feralfile/display", NULL),
             G_DBUS_CALL_FLAGS_NONE,
-            -1,
+            5000, // 5 second timeout instead of -1 (infinite)
             NULL,
             &error
         );
@@ -1221,21 +1221,32 @@ static void* bluetooth_thread_func(void* arg) {
             pthread_exit(NULL);
         }
 
-        // Step 13: Register the advertisement
+        // Step 13: Register the advertisement with a timeout
         g_dbus_proxy_call_sync(
             advertising_manager,
             "RegisterAdvertisement",
             g_variant_new("(oa{sv})", advertisement_path, NULL),
             G_DBUS_CALL_FLAGS_NONE,
-            -1,
+            5000, // 5 second timeout instead of -1 (infinite)
             NULL,
             &error
         );
         if (error) {
-            log_error("[%s] Advertisement registration failed: %s",
-                      LOG_TAG,
-                      error->message);
+            log_error("[%s] Advertisement registration failed: %s", LOG_TAG, error->message);
             g_error_free(error);
+            error = NULL;
+            
+            // Properly clean up resources before exiting
+            if (advertising_manager) {
+                g_object_unref(advertising_manager);
+                advertising_manager = NULL;
+            }
+            
+            if (connection) {
+                g_object_unref(connection);
+                connection = NULL;
+            }
+            
             pthread_exit(NULL);
         }
 
@@ -1487,6 +1498,11 @@ void bluetooth_stop() {
 }
 
 void bluetooth_notify(const unsigned char* data, int length) {
+    if (!connection) {
+        log_error("[%s] Cannot notify: not connected", LOG_TAG);
+        return;
+    }
+    
     // Log the hex string for debugging
     char hex_string[length * 3 + 1];
     for (size_t i = 0; i < length; i++) {
