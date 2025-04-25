@@ -346,7 +346,7 @@ if ((cnt == 0)); then
 fi
 
 avg() { printf "%.1f" "$(bc -l <<<"${sum[$1]}/$cnt")"; }
-avg_i() { echo $((sum[$1] / cnt)); }
+avg_i() { echo "$(bc -l <<<"scale=2; ${sum[$1]}/$cnt")"; }
 
 avg_cpu_freq=$(echo "scale=0; ${sum[cf]}/$cnt" | bc)
 avg_gpu_freq=$(echo "scale=0; ${sum[gf]}/$cnt" | bc)
