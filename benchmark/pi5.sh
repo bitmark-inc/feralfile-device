@@ -232,9 +232,48 @@ get_fps() {
   echo 0 # couldn’t measure
 }
 
+js_heap() {
+  # Check for required tools
+  command -v websocat &>/dev/null || return 1
+
+  # Get WebSocket URL for DevTools Protocol
+  local ws
+  ws=$(ws_url)
+  [[ -z "$ws" || "$ws" == "null" ]] && return 1
+
+  # Helper function to query JavaScript values
+  get_js_value() {
+    local expr="$1"
+    printf '{"id":4,"method":"Runtime.evaluate","params":{"expression":"%s","returnByValue":true}}\n' "$expr" |
+      websocat -n1 "$ws" 2>/dev/null |
+      jq -r '.result.result.value // 0'
+  }
+
+  # Get heap metrics - performance.memory is Chrome-specific
+  local t_heap
+  t_heap=$(get_js_value "performance.memory ? performance.memory.totalJSHeapSize : 0")
+  local u_heap
+  u_heap=$(get_js_value "performance.memory ? performance.memory.usedJSHeapSize : 0")
+
+  # Verify we got valid data
+  [[ "$t_heap" == "0" || -z "$t_heap" ]] && return 1
+
+  # Convert to MB and calculate percentage
+  local t_mb
+  t_mb=$(echo "scale=2; $t_heap/1024/1024" | bc)
+  local u_mb
+  u_mb=$(echo "scale=2; $u_heap/1024/1024" | bc)
+  local pct
+  pct=$(echo "scale=1; $u_heap*100/$t_heap" | bc)
+
+  # Output as "total_mb used_mb percentage"
+  printf "%.2f %.2f %.1f" "$t_mb" "$u_mb" "$pct"
+}
+
 sum_CU=0 sum_SU=0 sum_CF=0 sum_ST=0 \
   sum_GU=0 sum_GF=0 sum_FPS=0 sum_GT=0 \
-  sum_CM=0 sum_CMP=0 sum_SU_M=0 sum_SP=0
+  sum_CM=0 sum_CMP=0 sum_SU_M=0 sum_SP=0 \
+  sum_JU=0 sum_JT=0 sum_JPCT=0 
 count=0
 
 START_TS=$(date +%s)
@@ -275,6 +314,13 @@ while kill -0 $ROOT 2>/dev/null; do
   SYS_MEM_PCT=$(awk "BEGIN{printf \"%.1f\", ($SYS_MEM_USED/$SYS_MEM_TOTAL)*100}")
   FPS=$(get_fps)
 
+  # JS heap stats
+  if ! read -r T_HEAP U_HEAP HEAP_PCT <<<"$(js_heap 2>/dev/null)"; then
+    T_HEAP=0
+    U_HEAP=0
+    HEAP_PCT=0
+  fi
+
   echo "$NOW"
   echo "============================================================="
   printf "\n%(%F %T)T | PIDs: %s\n" -1 "$C_PIDS"
@@ -284,6 +330,7 @@ while kill -0 $ROOT 2>/dev/null; do
     "$CHR_MEM" "$(color_usage $CHR_MEM_PCT)" "$SYS_MEM_USED" "$SYS_MEM_TOTAL" "$(color_usage $SYS_MEM_PCT)"
   printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
     "$(color_usage $G_USAGE)" "$G_FREQ" "$FPS" "$(color_temp $GPU_TEMP)"
+  printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$U_HEAP" "$T_HEAP" "$(color_usage $HEAP_PCT)"
   echo "============================================================="
 
   sum_CU=$(awk "BEGIN{print $sum_CU+$CHR_CPU}")
@@ -298,6 +345,9 @@ while kill -0 $ROOT 2>/dev/null; do
   sum_CMP=$(awk "BEGIN{print $sum_CMP+$CHR_MEM_PCT}")
   sum_SU_M=$(awk "BEGIN{print $sum_SU_M+$SYS_MEM_USED}")
   sum_SP=$(awk "BEGIN{print $sum_SP+$SYS_MEM_PCT}")
+  sum_JU=$(awk "BEGIN{print $sum_JU+$U_HEAP}")
+  sum_JT=$(awk "BEGIN{print $sum_JT+$T_HEAP}")
+  sum_JPCT=$(awk "BEGIN{print $sum_JPCT+$HEAP_PCT}")
   ((count++))
 done
 
@@ -317,6 +367,9 @@ if ((count > 0)); then
   AVG_CMP=$(awk "BEGIN{printf \"%.1f\", $sum_CMP/$count}")
   AVG_SU_M=$(awk "BEGIN{printf \"%d\",   $sum_SU_M/$count}")
   AVG_SP=$(awk "BEGIN{printf \"%.1f\", $sum_SP/$count}")
+  AVG_JU=$(awk "BEGIN{printf \"%.1f\", $sum_JU/$count}")
+  AVG_JT=$(awk "BEGIN{printf \"%.1f\", $sum_AVG_JT/$count}")
+  AVG_JPCT=$(awk "BEGIN{printf \"%.1f\", $sum_JPCT/$count}")
 else
   echo "No average data."
   exit 1
@@ -332,4 +385,5 @@ printf "MEM : Chromium: %5s MB (%5s) | Sys: %5s/%5s MB (%5s)\n" \
   "$AVG_CM" "$(color_usage $AVG_CMP)" "$AVG_SU_M" "$SYS_MEM_TOTAL" "$(color_usage $AVG_SP)"
 printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
   "$(color_usage $AVG_GU)" "$AVG_GF" "$AVG_FPS" "$(color_temp $AVG_GT)"
+printf "JS Heap : %5s//%5s MB (%7s)\n" "$AVG_JU" "$AVG_JT" "$(color_usage $AVG_JPCT)"
 echo "============================================================="
