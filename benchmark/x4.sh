@@ -321,7 +321,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
     "$(pct "$ch_cpu")" "$(pct "$sys_cpu")" "$cpu_freq" "$(tmp "$cpu_temp")"
   printf "MEM : Chromium:%4d MB (%7s) | System:%4d/%4d MB (%7s)\n" \
     "$ch_mem" "$(pct "$ch_pct")" "$sys_used" "$sys_tot" "$(pct "$sys_pct")"
-  printf "GPU : %7s @%4d MHz | FPS:%s\n" "$(pct "$gpu_busy")" "$gpu_freq" "$fps"
+  printf "GPU : %7s @%4d MHz | Temp: %s | FPS:%s\n" "$(pct "$gpu_busy")" "$gpu_freq" "$(tmp "$cpu_temp")" "$fps"
   printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$u_heap" "$t_heap" "$(pct $heap_pct)"
 
   # accum
