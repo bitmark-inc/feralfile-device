@@ -230,6 +230,44 @@ get_fps() {
   echo 0 # couldn’t measure
 }
 
+js_heap() {
+  # Check for required tools
+  command -v websocat &>/dev/null || return 1
+
+  # Get WebSocket URL for DevTools Protocol
+  local ws
+  ws=$(ws_url)
+  [[ -z "$ws" || "$ws" == "null" ]] && return 1
+
+  # Helper function to query JavaScript values
+  get_js_value() {
+    local expr="$1"
+    printf '{"id":4,"method":"Runtime.evaluate","params":{"expression":"%s","returnByValue":true}}\n' "$expr" |
+      websocat -n1 "$ws" 2>/dev/null |
+      jq -r '.result.result.value // 0'
+  }
+
+  # Get heap metrics - performance.memory is Chrome-specific
+  local t_heap
+  t_heap=$(get_js_value "performance.memory ? performance.memory.totalJSHeapSize : 0")
+  local u_heap
+  u_heap=$(get_js_value "performance.memory ? performance.memory.usedJSHeapSize : 0")
+
+  # Verify we got valid data
+  [[ "$t_heap" == "0" || -z "$t_heap" ]] && return 1
+
+  # Convert to MB and calculate percentage
+  local t_mb
+  t_mb=$(echo "scale=2; $t_heap/1024/1024" | bc)
+  local u_mb
+  u_mb=$(echo "scale=2; $u_heap/1024/1024" | bc)
+  local pct
+  pct=$(echo "scale=1; $u_heap*100/$t_heap" | bc)
+
+  # Output as "total_mb used_mb percentage"
+  printf "%.2f %.2f %.1f" "$t_mb" "$u_mb" "$pct"
+}
+
 # ─── launch Chromium ────────────────────────────────────────────────────────
 chromium-browser "$URL" \
   --remote-debugging-port=$DEBUG_PORT \
@@ -250,7 +288,7 @@ MEM_TOTAL=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
 
 # ─── accumulators ───────────────────────────────────────────────────────────
 declare -A sum
-for k in cu su cf ct gu gf gt cm cmp sm smp fps; do sum[$k]=0; done
+for k in cu su cf ct gu gf gt cm cmp sm smp fps ju jt jpct; do sum[$k]=0; done
 cnt=0 start=$(date +%s)
 
 # ─── main loop ──────────────────────────────────────────────────────────────
@@ -270,6 +308,12 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sys_pct=$(printf "%.1f" "$(bc -l <<<"$sys_used*100/$sys_tot")")
   fps=$(get_fps)
   [[ -z $fps ]] && fps=0
+  # JS heap stats
+  if ! read -r t_heap u_heap heap_pct <<<"$(js_heap 2>/dev/null)"; then
+    t_heap=0
+    u_heap=0
+    heap_pct=0
+  fi
 
   # ─── live output ─────────────────────────────────────────────────────────
   printf "\n%(%F %T)T | PIDs: %s\n" -1 "$C_PIDS"
@@ -278,6 +322,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
   printf "MEM : Chromium:%4d MB (%7s) | System:%4d/%4d MB (%7s)\n" \
     "$ch_mem" "$(pct "$ch_pct")" "$sys_used" "$sys_tot" "$(pct "$sys_pct")"
   printf "GPU : %7s @%4d MHz | FPS:%s\n" "$(pct "$gpu_busy")" "$gpu_freq" "$fps"
+  printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$u_heap" "$t_heap" "$(pct $heap_pct)"
 
   # accum
   sum[cu]=$(bc -l <<<"${sum[cu]}+$ch_cpu")
@@ -292,6 +337,10 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sum[sm]=$((sum[sm] + sys_used))
   sum[smp]=$(bc -l <<<"${sum[smp]}+$sys_pct")
   sum[fps]=$(bc -l <<<"${sum[fps]}+$fps")
+  sum[ju]=$(bc -l <<<"${sum[ju]}+$u_heap")
+  sum[jt]=$(bc -l <<<"${sum[jt]}+$t_heap")
+  sum[jpct]=$(bc -l <<<"${sum[jpct]}+$heap_pct")
+
   ((cnt++))
 done
 
@@ -311,3 +360,4 @@ printf "MEM : Chromium:%4d MB (%7s) | System:%4d/%4d MB (%7s)\n" \
   "$(avg_i cm)" "$(pct "$(avg cmp)")" "$(avg_i sm)" "$((MEM_TOTAL / 1024))" "$(pct "$(avg smp)")"
 printf "GPU : %7s @%4d MHz | FPS:%s\n" \
   "$(pct "$(avg gu)")" "$(avg_i gf)" "$(avg fps)"
+printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$(avg_i ju)" "$(avg_i jt)" "$(pct "$(avg jpct)")"
