@@ -1363,51 +1363,9 @@ static void* bluetooth_thread_func(void* arg) {
             pthread_exit(NULL);
         }
 
-        // Try to explicitly set the Notify property for the cmd_char
-        log_info("[%s] Explicitly setting Notify capability for cmd_char...", LOG_TAG);
-        GDBusProxy *cmd_proxy = g_dbus_proxy_new_sync(
-            connection,
-            G_DBUS_PROXY_FLAGS_NONE,
-            NULL,
-            "org.bluez",
-            "/org/bluez",
-            "org.freedesktop.DBus.Properties",
-            NULL,
-            &error
-        );
-
-        if (error || !cmd_proxy) {
-            log_warning("[%s] Failed to create proxy for setting Notify capability: %s", 
-                       LOG_TAG, error ? error->message : "Unknown error");
-            if (error) g_error_free(error);
-        } else {
-            // Try to explicitly set Notify property
-            const gchar* flags[] = {"write", "write-without-response", "notify", NULL};
-            GVariant *flags_variant = g_variant_new_strv(flags, -1);
-            
-            g_dbus_proxy_call_sync(
-                cmd_proxy,
-                "Set",
-                g_variant_new("(ssv)", 
-                            "org.bluez.GattCharacteristic1", 
-                            "Flags", 
-                            flags_variant),
-                G_DBUS_CALL_FLAGS_NONE,
-                -1,
-                NULL,
-                &error
-            );
-            
-            if (error) {
-                log_warning("[%s] Failed to explicitly set Notify capability: %s", 
-                           LOG_TAG, error->message);
-                g_error_free(error);
-            } else {
-                log_info("[%s] Successfully set Notify capability", LOG_TAG);
-            }
-            
-            g_object_unref(cmd_proxy);
-        }
+        // Remove the attempt to explicitly set the Notify property as it's not needed
+        // The notification capability is already included in the characteristic flags
+        log_info("[%s] Command characteristic registered with notify capability", LOG_TAG);
 
         // Step 7: Register the engineering characteristic
         eng_char_reg_id = g_dbus_connection_register_object(
@@ -1811,6 +1769,29 @@ void bluetooth_notify(const unsigned char* data, int length) {
         return;
     }
     
+    // Check platform details - might help diagnose Rock 5c-specific issues
+    FILE *fp;
+    char platform_info[256] = "unknown";
+    fp = popen("cat /proc/device-tree/model 2>/dev/null || echo 'unknown platform'", "r");
+    if (fp) {
+        if (fgets(platform_info, sizeof(platform_info), fp) != NULL) {
+            platform_info[strcspn(platform_info, "\n")] = 0; // Remove newline
+        }
+        pclose(fp);
+    }
+    log_info("[%s] Platform detected: %s", LOG_TAG, platform_info);
+    
+    // Additional BlueZ version check for diagnostics
+    fp = popen("bluetoothd --version 2>/dev/null || echo 'unknown'", "r");
+    if (fp) {
+        char bluez_version[256] = "unknown";
+        if (fgets(bluez_version, sizeof(bluez_version), fp) != NULL) {
+            bluez_version[strcspn(bluez_version, "\n")] = 0; // Remove newline
+            log_info("[%s] BlueZ version for notification: %s", LOG_TAG, bluez_version);
+        }
+        pclose(fp);
+    }
+    
     GError *error = NULL;
 
     // Check if notifications are enabled
@@ -1833,7 +1814,13 @@ void bluetooth_notify(const unsigned char* data, int length) {
             log_error("[%s] Failed to get cmd_char proxy: %s", 
                      LOG_TAG, error ? error->message : "Unknown error");
             if (error) g_error_free(error);
-            return; // Can't continue if we can't verify characteristic
+            
+            // On the Rock 5c, we'll try an alternative approach
+            if (strstr(platform_info, "Radxa") != NULL || strstr(platform_info, "ROCK") != NULL) {
+                log_info("[%s] Radxa platform detected, using alternative notification approach", LOG_TAG);
+                try_direct_notification(data, length);
+            }
+            return;
         } else {
             log_info("[%s] cmd_char characteristic is registered with BlueZ", LOG_TAG);
             // Force setting the cmd_char_notify_enabled to true and try notification anyway
@@ -1863,25 +1850,60 @@ void bluetooth_notify(const unsigned char* data, int length) {
     // Log more details about the notification
     log_info("[%s] Sending notification on: /com/feralfile/display/service0/cmd_char", LOG_TAG);
     
-    gboolean result = g_dbus_connection_emit_signal(connection,
-        NULL,
-        "/com/feralfile/display/service0/cmd_char",
-        "org.freedesktop.DBus.Properties",
-        "PropertiesChanged",
-        g_variant_new("(sa{sv}as)",
-                     "org.bluez.GattCharacteristic1",
-                     builder,
-                     NULL),
-        &error);
+    // Try a different approach on Rock 5c
+    if (strstr(platform_info, "Radxa") != NULL || strstr(platform_info, "ROCK") != NULL) {
+        log_info("[%s] Using Rock 5c specific notification approach with interface", LOG_TAG);
+        
+        // First try regular approach
+        gboolean result = g_dbus_connection_emit_signal(connection,
+            NULL,
+            "/com/feralfile/display/service0/cmd_char",
+            "org.freedesktop.DBus.Properties",
+            "PropertiesChanged",
+            g_variant_new("(sa{sv}as)",
+                         "org.bluez.GattCharacteristic1",
+                         builder,
+                         NULL),
+            &error);
 
-    if (!result || error) {
-        log_error("[%s] Failed to emit notification signal: %s", 
-                 LOG_TAG, error ? error->message : "Unknown error");
-        if (error) {
-            g_error_free(error);
+        if (!result || error) {
+            log_error("[%s] Failed to emit notification signal: %s", 
+                     LOG_TAG, error ? error->message : "Unknown error");
+            if (error) {
+                g_error_free(error);
+                error = NULL;
+            }
+            
+            // Try alternative directly to the device using direct notification
+            try_direct_notification(data, length);
+        } else {
+            log_info("[%s] Standard notification signal emitted successfully", LOG_TAG);
+            
+            // Even on success, also try direct notification on Rock 5c
+            try_direct_notification(data, length);
         }
     } else {
-        log_info("[%s] Notification signal emitted successfully", LOG_TAG);
+        // Standard approach for Raspberry Pi and other platforms
+        gboolean result = g_dbus_connection_emit_signal(connection,
+            NULL,
+            "/com/feralfile/display/service0/cmd_char",
+            "org.freedesktop.DBus.Properties",
+            "PropertiesChanged",
+            g_variant_new("(sa{sv}as)",
+                         "org.bluez.GattCharacteristic1",
+                         builder,
+                         NULL),
+            &error);
+
+        if (!result || error) {
+            log_error("[%s] Failed to emit notification signal: %s", 
+                     LOG_TAG, error ? error->message : "Unknown error");
+            if (error) {
+                g_error_free(error);
+            }
+        } else {
+            log_info("[%s] Notification signal emitted successfully", LOG_TAG);
+        }
     }
 
     g_variant_builder_unref(builder);
@@ -1892,9 +1914,6 @@ void bluetooth_notify(const unsigned char* data, int length) {
         log_error("[%s] Failed to flush D-Bus connection: %s", LOG_TAG, error->message);
         g_error_free(error);
     }
-
-    // After the normal notification mechanism, try the direct method
-    try_direct_notification(data, length);
 }
 
 void bluetooth_send_engineering_data(const unsigned char* data, int length) {
@@ -2202,6 +2221,18 @@ static void try_direct_notification(const unsigned char* data, int length) {
         return;
     }
     
+    // Check platform details
+    FILE *fp;
+    char platform_info[256] = "unknown";
+    fp = popen("cat /proc/device-tree/model 2>/dev/null || echo 'unknown platform'", "r");
+    if (fp) {
+        if (fgets(platform_info, sizeof(platform_info), fp) != NULL) {
+            platform_info[strcspn(platform_info, "\n")] = 0; // Remove newline
+        }
+        pclose(fp);
+    }
+    log_info("[%s] Platform detected for direct notification: %s", LOG_TAG, platform_info);
+    
     // Create value
     GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
                                             data, length, sizeof(guchar));
@@ -2229,6 +2260,48 @@ static void try_direct_notification(const unsigned char* data, int length) {
         log_error("[%s] Failed to get BlueZ objects for notification: %s", 
                  LOG_TAG, error ? error->message : "Unknown error");
         if (error) g_error_free(error);
+        
+        // Special case for Rock 5c - try a different D-Bus method
+        if (strstr(platform_info, "Radxa") != NULL || strstr(platform_info, "ROCK") != NULL) {
+            log_info("[%s] Rock 5c detected, trying alternative notification method", LOG_TAG);
+            
+            // Create a direct D-Bus message
+            GDBusMessage *message = g_dbus_message_new_method_call(
+                "org.bluez",
+                "/com/feralfile/display/service0/cmd_char",
+                "org.bluez.GattCharacteristic1",
+                "WriteValue"
+            );
+            
+            if (message) {
+                // Build body with value and empty options
+                GVariantBuilder builder;
+                g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
+                g_dbus_message_set_body(message, g_variant_new("(@aya{sv})", value, &builder));
+                
+                // Send the message
+                GDBusMessage *reply = g_dbus_connection_send_message_with_reply_sync(
+                    connection,
+                    message,
+                    G_DBUS_SEND_MESSAGE_FLAGS_NONE,
+                    -1,
+                    NULL,
+                    NULL,
+                    &error
+                );
+                
+                if (error || !reply) {
+                    log_error("[%s] Rock 5c direct notification failed: %s", 
+                             LOG_TAG, error ? error->message : "Unknown error");
+                    if (error) g_error_free(error);
+                } else {
+                    log_info("[%s] Rock 5c direct notification sent successfully", LOG_TAG);
+                    g_object_unref(reply);
+                }
+                
+                g_object_unref(message);
+            }
+        }
         return;
     }
     
@@ -2288,9 +2361,20 @@ static void try_direct_notification(const unsigned char* data, int length) {
     for (guint i = 0; i < connected_devices->len; i++) {
         gchar *device_path = g_array_index(connected_devices, gchar*, i);
         
-        // Try to get BlueZ's version of our characteristic
+        // Try different paths for different platforms
         gchar char_path[256];
-        snprintf(char_path, sizeof(char_path), "%s/service0/char0004", device_path); // BlueZ might use a different path format
+        
+        // Rock 5c might use a different path format
+        if (strstr(platform_info, "Radxa") != NULL || strstr(platform_info, "ROCK") != NULL) {
+            // Try with direct UUID format (common on newer BlueZ)
+            snprintf(char_path, sizeof(char_path), "%s/service%s/char%s", 
+                    device_path, 
+                    FERALFILE_SERVICE_UUID, 
+                    FERALFILE_CMD_CHAR_UUID);
+        } else {
+            // Standard path format
+            snprintf(char_path, sizeof(char_path), "%s/service0/char0004", device_path);
+        }
         
         log_info("[%s] Attempting direct notification to device: %s", LOG_TAG, device_path);
         log_info("[%s] Trying characteristic path: %s", LOG_TAG, char_path);
@@ -2315,7 +2399,7 @@ static void try_direct_notification(const unsigned char* data, int length) {
                 error = NULL;
             }
             
-            // Try to discover the actual path
+            // Try to discover the actual path - this is more reliable than guessing
             GVariant *char_result = g_dbus_connection_call_sync(
                 connection,
                 "org.bluez",
@@ -2421,7 +2505,33 @@ static void try_direct_notification(const unsigned char* data, int length) {
                 error = NULL;
             }
             
-            // Try to write the value
+            // Try a special way for Radxa Rock 5c first
+            if (strstr(platform_info, "Radxa") != NULL || strstr(platform_info, "ROCK") != NULL) {
+                // Try the special "NotifyValue" method if it exists (some BlueZ versions)
+                GVariant *notify_result = g_dbus_proxy_call_sync(
+                    char_proxy,
+                    "NotifyValue",
+                    g_variant_new("(aya{sv})", value, NULL),
+                    G_DBUS_CALL_FLAGS_NONE,
+                    -1,
+                    NULL,
+                    &error
+                );
+                
+                if (error) {
+                    log_warning("[%s] NotifyValue failed (expected, trying WriteValue): %s", 
+                               LOG_TAG, error->message);
+                    g_error_free(error);
+                    error = NULL;
+                } else {
+                    log_info("[%s] NotifyValue method succeeded!", LOG_TAG);
+                    if (notify_result) {
+                        g_variant_unref(notify_result);
+                    }
+                }
+            }
+            
+            // Fall back to regular WriteValue for all platforms
             GVariant *notify_result = g_dbus_proxy_call_sync(
                 char_proxy,
                 "WriteValue",
