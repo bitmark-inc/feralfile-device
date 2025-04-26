@@ -84,6 +84,10 @@ static char advertisement_path[MAX_ADV_PATH_LENGTH] = "/com/feralfile/display/ad
 
 static int sentry_initialized = 0;
 
+// Track notification status
+static gboolean cmd_char_notify_enabled = FALSE;
+static gboolean eng_char_notify_enabled = FALSE;
+
 // Function declarations
 static void setup_dbus_signal_handlers(GDBusConnection *connection);
 static void handle_property_change(GDBusConnection *connection,
@@ -731,6 +735,45 @@ static void handle_write_value(GDBusConnection *conn,
 // ----------------------------------------------------------------------------
 // Handler for cmd_char writes
 // ----------------------------------------------------------------------------
+static void handle_cmd_char_method(GDBusConnection *conn,
+                                 const gchar *sender,
+                                 const gchar *object_path,
+                                 const gchar *interface_name,
+                                 const gchar *method_name,
+                                 GVariant *parameters,
+                                 GDBusMethodInvocation *invocation,
+                                 gpointer user_data) {
+    
+    log_info("[%s] Method %s called on cmd_char by %s", LOG_TAG, method_name, sender);
+    
+    if (g_strcmp0(method_name, "WriteValue") == 0) {
+        // Handle write the same as before
+        handle_command_write(conn, sender, object_path, interface_name, 
+                            method_name, parameters, invocation, user_data);
+    } 
+    else if (g_strcmp0(method_name, "StartNotify") == 0) {
+        log_info("[%s] StartNotify called for cmd_char by %s", LOG_TAG, sender);
+        cmd_char_notify_enabled = TRUE;
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    } 
+    else if (g_strcmp0(method_name, "StopNotify") == 0) {
+        log_info("[%s] StopNotify called for cmd_char by %s", LOG_TAG, sender);
+        cmd_char_notify_enabled = FALSE;
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    }
+    else {
+        // Unknown method
+        log_warning("[%s] Unknown method %s called on cmd_char", LOG_TAG, method_name);
+        g_dbus_method_invocation_return_error(invocation,
+                                             G_DBUS_ERROR,
+                                             G_DBUS_ERROR_UNKNOWN_METHOD,
+                                             "Unknown method: %s", method_name);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Handler for cmd_char writes
+// ----------------------------------------------------------------------------
 static void handle_command_write(GDBusConnection *conn,
                                  const gchar *sender,
                                  const gchar *object_path,
@@ -828,6 +871,40 @@ static void handle_command_write(GDBusConnection *conn,
 }
 
 // ----------------------------------------------------------------------------
+// Handler for eng_char writes
+// ----------------------------------------------------------------------------
+static void handle_eng_char_method(GDBusConnection *conn,
+                                 const gchar *sender,
+                                 const gchar *object_path,
+                                 const gchar *interface_name,
+                                 const gchar *method_name,
+                                 GVariant *parameters,
+                                 GDBusMethodInvocation *invocation,
+                                 gpointer user_data) {
+    
+    log_info("[%s] Method %s called on eng_char by %s", LOG_TAG, method_name, sender);
+    
+    if (g_strcmp0(method_name, "StartNotify") == 0) {
+        log_info("[%s] StartNotify called for eng_char by %s", LOG_TAG, sender);
+        eng_char_notify_enabled = TRUE;
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    } 
+    else if (g_strcmp0(method_name, "StopNotify") == 0) {
+        log_info("[%s] StopNotify called for eng_char by %s", LOG_TAG, sender);
+        eng_char_notify_enabled = FALSE;
+        g_dbus_method_invocation_return_value(invocation, NULL);
+    }
+    else {
+        // Unknown method
+        log_warning("[%s] Unknown method %s called on eng_char", LOG_TAG, method_name);
+        g_dbus_method_invocation_return_error(invocation,
+                                             G_DBUS_ERROR,
+                                             G_DBUS_ERROR_UNKNOWN_METHOD,
+                                             "Unknown method: %s", method_name);
+    }
+}
+
+// ----------------------------------------------------------------------------
 // VTables
 // ----------------------------------------------------------------------------
 static const GDBusInterfaceVTable service_vtable = {
@@ -845,14 +922,14 @@ static const GDBusInterfaceVTable setup_char_vtable = {
 
 // Separate vtable for command characteristic
 static const GDBusInterfaceVTable cmd_char_vtable = {
-    .method_call = handle_command_write,
+    .method_call = handle_cmd_char_method,
     .get_property = char_get_property,
     .set_property = NULL
 };
 
 // Vtable for engineering characteristic
 static const GDBusInterfaceVTable eng_char_vtable = {
-    .method_call = NULL,  // No write methods needed
+    .method_call = handle_eng_char_method,
     .get_property = char_get_property,
     .set_property = NULL
 };
@@ -1058,6 +1135,86 @@ static void handle_property_change(GDBusConnection *connection,
     g_variant_unref(invalidated_properties);
 }
 
+// Check BlueZ version and configuration
+static void check_bluez_configuration() {
+    FILE *fp;
+    char buffer[1024];
+    
+    log_info("[%s] Checking BlueZ configuration...", LOG_TAG);
+    
+    // Check BlueZ version
+    fp = popen("bluetoothd --version", "r");
+    if (fp) {
+        if (fgets(buffer, sizeof(buffer), fp) != NULL) {
+            buffer[strcspn(buffer, "\n")] = 0;  // Remove newline
+            log_info("[%s] BlueZ version: %s", LOG_TAG, buffer);
+        }
+        pclose(fp);
+    } else {
+        log_warning("[%s] Failed to get BlueZ version", LOG_TAG);
+    }
+    
+    // Check BlueZ daemon status
+    fp = popen("systemctl status bluetooth", "r");
+    if (fp) {
+        log_info("[%s] BlueZ service status:", LOG_TAG);
+        int line_count = 0;
+        while (fgets(buffer, sizeof(buffer), fp) != NULL && line_count < 10) {
+            buffer[strcspn(buffer, "\n")] = 0;  // Remove newline
+            log_info("[%s]   %s", LOG_TAG, buffer);
+            line_count++;
+        }
+        pclose(fp);
+    }
+    
+    // Check if notifications are enabled globally in BlueZ
+    fp = popen("grep -i notification /etc/bluetooth/main.conf 2>/dev/null || echo 'No notification settings found in main.conf'", "r");
+    if (fp) {
+        log_info("[%s] BlueZ notification settings:", LOG_TAG);
+        while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+            buffer[strcspn(buffer, "\n")] = 0;  // Remove newline
+            log_info("[%s]   %s", LOG_TAG, buffer);
+        }
+        pclose(fp);
+    }
+    
+    // Check loaded BlueZ plugins
+    fp = popen("grep -i BLUEZ_PLUGINS /etc/init.d/bluetooth 2>/dev/null || echo 'No plugin settings found'", "r");
+    if (fp) {
+        log_info("[%s] BlueZ plugins:", LOG_TAG);
+        while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+            buffer[strcspn(buffer, "\n")] = 0;  // Remove newline
+            log_info("[%s]   %s", LOG_TAG, buffer);
+        }
+        pclose(fp);
+    }
+    
+    // Check if D-Bus is working properly
+    fp = popen("dbus-send --system --print-reply --dest=org.bluez / org.freedesktop.DBus.Introspectable.Introspect 2>&1 | head -n 10", "r");
+    if (fp) {
+        log_info("[%s] D-Bus introspection test:", LOG_TAG);
+        int line_count = 0;
+        while (fgets(buffer, sizeof(buffer), fp) != NULL && line_count < 5) {
+            buffer[strcspn(buffer, "\n")] = 0;  // Remove newline
+            log_info("[%s]   %s", LOG_TAG, buffer);
+            line_count++;
+        }
+        pclose(fp);
+    }
+    
+    // Check system architecture
+    fp = popen("uname -a", "r");
+    if (fp) {
+        if (fgets(buffer, sizeof(buffer), fp) != NULL) {
+            buffer[strcspn(buffer, "\n")] = 0;  // Remove newline
+            log_info("[%s] System: %s", LOG_TAG, buffer);
+        }
+        pclose(fp);
+    }
+    
+    log_info("[%s] BlueZ configuration check completed", LOG_TAG);
+}
+
 // Then bluetooth_thread_func follows
 static void* bluetooth_thread_func(void* arg) {
     GError *error = NULL;
@@ -1192,6 +1349,52 @@ static void* bluetooth_thread_func(void* arg) {
                       error ? error->message : "Unknown error");
             if (error) g_error_free(error);
             pthread_exit(NULL);
+        }
+
+        // Try to explicitly set the Notify property for the cmd_char
+        log_info("[%s] Explicitly setting Notify capability for cmd_char...", LOG_TAG);
+        GDBusProxy *cmd_proxy = g_dbus_proxy_new_sync(
+            connection,
+            G_DBUS_PROXY_FLAGS_NONE,
+            NULL,
+            "org.bluez",
+            "/org/bluez",
+            "org.freedesktop.DBus.Properties",
+            NULL,
+            &error
+        );
+
+        if (error || !cmd_proxy) {
+            log_warning("[%s] Failed to create proxy for setting Notify capability: %s", 
+                       LOG_TAG, error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+        } else {
+            // Try to explicitly set Notify property
+            const gchar* flags[] = {"write", "write-without-response", "notify", NULL};
+            GVariant *flags_variant = g_variant_new_strv(flags, -1);
+            
+            g_dbus_proxy_call_sync(
+                cmd_proxy,
+                "Set",
+                g_variant_new("(ssv)", 
+                            "org.bluez.GattCharacteristic1", 
+                            "Flags", 
+                            flags_variant),
+                G_DBUS_CALL_FLAGS_NONE,
+                -1,
+                NULL,
+                &error
+            );
+            
+            if (error) {
+                log_warning("[%s] Failed to explicitly set Notify capability: %s", 
+                           LOG_TAG, error->message);
+                g_error_free(error);
+            } else {
+                log_info("[%s] Successfully set Notify capability", LOG_TAG);
+            }
+            
+            g_object_unref(cmd_proxy);
         }
 
         // Step 7: Register the engineering characteristic
@@ -1333,6 +1536,9 @@ static void* bluetooth_thread_func(void* arg) {
         retry_count = 0;  // Reset retry count
         log_info("[%s] Bluetooth initialized successfully", LOG_TAG);
 
+        // Check adapter and registration status
+        check_bluetooth_adapter();
+
         // Run the main loop
         g_main_loop_run(main_loop);
 
@@ -1376,6 +1582,9 @@ int bluetooth_init(const char* custom_device_name) {
     }
     
     log_info("[%s] Initializing Bluetooth in background thread", LOG_TAG);
+    
+    // Check BlueZ configuration
+    check_bluez_configuration();
     
     // First check if bluetooth service is active
     if (!is_bluetooth_service_active()) {
@@ -1585,15 +1794,64 @@ void bluetooth_notify(const unsigned char* data, int length) {
     hex_string[length * 3 - 1] = '\0';
     log_info("[%s] Notifying data: %s", LOG_TAG, hex_string);
 
+    if (!connection) {
+        log_error("[%s] Cannot send notification: no D-Bus connection", LOG_TAG);
+        return;
+    }
+    
+    GError *error = NULL;
+
+    // Check if notifications are enabled
+    if (!cmd_char_notify_enabled) {
+        log_warning("[%s] Cannot send notification: notifications not enabled for cmd_char", LOG_TAG);
+        
+        // Try to check if characteristic is registered properly with bluez
+        GDBusProxy *proxy = g_dbus_proxy_new_sync(
+            connection,
+            G_DBUS_PROXY_FLAGS_NONE,
+            NULL,
+            "org.bluez",
+            "/com/feralfile/display/service0/cmd_char",
+            "org.bluez.GattCharacteristic1",
+            NULL,
+            &error
+        );
+        
+        if (error || !proxy) {
+            log_error("[%s] Failed to get cmd_char proxy: %s", 
+                     LOG_TAG, error ? error->message : "Unknown error");
+            if (error) g_error_free(error);
+            return; // Can't continue if we can't verify characteristic
+        } else {
+            log_info("[%s] cmd_char characteristic is registered with BlueZ", LOG_TAG);
+            // Force setting the cmd_char_notify_enabled to true and try notification anyway
+            log_info("[%s] Forcing notification attempt even though notifications not enabled", LOG_TAG);
+            cmd_char_notify_enabled = TRUE;
+            g_object_unref(proxy);
+        }
+    }
+
     // Create GVariant for the notification value
     GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
                                               data, length, sizeof(guchar));
+    if (!value) {
+        log_error("[%s] Failed to create notification value variant", LOG_TAG);
+        return;
+    }
 
     // Emit PropertiesChanged signal
     GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
+    if (!builder) {
+        log_error("[%s] Failed to create variant builder", LOG_TAG);
+        return;
+    }
+    
     g_variant_builder_add(builder, "{sv}", "Value", value);
 
-    g_dbus_connection_emit_signal(connection,
+    // Log more details about the notification
+    log_info("[%s] Sending notification on: /com/feralfile/display/service0/cmd_char", LOG_TAG);
+    
+    gboolean result = g_dbus_connection_emit_signal(connection,
         NULL,
         "/com/feralfile/display/service0/cmd_char",
         "org.freedesktop.DBus.Properties",
@@ -1602,9 +1860,102 @@ void bluetooth_notify(const unsigned char* data, int length) {
                      "org.bluez.GattCharacteristic1",
                      builder,
                      NULL),
-        NULL);
+        &error);
+
+    if (!result || error) {
+        log_error("[%s] Failed to emit notification signal: %s", 
+                 LOG_TAG, error ? error->message : "Unknown error");
+        if (error) {
+            g_error_free(error);
+        }
+    } else {
+        log_info("[%s] Notification signal emitted successfully", LOG_TAG);
+    }
 
     g_variant_builder_unref(builder);
+    
+    // Flush the connection to ensure signal is sent immediately
+    g_dbus_connection_flush_sync(connection, NULL, &error);
+    if (error) {
+        log_error("[%s] Failed to flush D-Bus connection: %s", LOG_TAG, error->message);
+        g_error_free(error);
+    }
+
+    // After the normal notification mechanism, try the direct method
+    try_direct_notification(data, length);
+}
+
+void bluetooth_send_engineering_data(const unsigned char* data, int length) {
+    if (!connection) {
+        log_error("[%s] Cannot send engineering data: not connected", LOG_TAG);
+        return;
+    }
+
+    // Log the hex string for debugging
+    char hex_string[length * 3 + 1];
+    for (size_t i = 0; i < length; i++) {
+        sprintf(hex_string + (i * 3), "%02x ", data[i]);
+    }
+    hex_string[length * 3 - 1] = '\0';
+    log_info("[%s] Sending engineering data: %s", LOG_TAG, hex_string);
+
+    GError *error = NULL;
+    
+    // Check if notifications are enabled
+    if (!eng_char_notify_enabled) {
+        log_warning("[%s] Cannot send notification: notifications not enabled for eng_char", LOG_TAG);
+        return;
+    }
+
+    // Create GVariant for the notification value
+    GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
+                                              data, length, sizeof(guchar));
+    if (!value) {
+        log_error("[%s] Failed to create engineering data variant", LOG_TAG);
+        return;
+    }
+
+    // Emit PropertiesChanged signal
+    GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
+    if (!builder) {
+        log_error("[%s] Failed to create variant builder for engineering data", LOG_TAG);
+        return;
+    }
+    
+    g_variant_builder_add(builder, "{sv}", "Value", value);
+
+    // Log more details about the notification
+    log_info("[%s] Sending notification on: /com/feralfile/display/service0/eng_char", LOG_TAG);
+    
+    gboolean result = g_dbus_connection_emit_signal(connection,
+        NULL,
+        "/com/feralfile/display/service0/eng_char",
+        "org.freedesktop.DBus.Properties",
+        "PropertiesChanged",
+        g_variant_new("(sa{sv}as)",
+                     "org.bluez.GattCharacteristic1",
+                     builder,
+                     NULL),
+        &error);
+
+    if (!result || error) {
+        log_error("[%s] Failed to emit engineering notification signal: %s", 
+                 LOG_TAG, error ? error->message : "Unknown error");
+        if (error) {
+            g_error_free(error);
+        }
+    } else {
+        log_info("[%s] Engineering notification signal emitted successfully", LOG_TAG);
+    }
+
+    g_variant_builder_unref(builder);
+    
+    // Flush the connection to ensure signal is sent immediately
+    g_dbus_connection_flush_sync(connection, NULL, &error);
+    if (error) {
+        log_error("[%s] Failed to flush D-Bus connection: %s", LOG_TAG, error->message);
+        g_error_free(error);
+    }
 }
 
 const char* bluetooth_get_mac_address() {
@@ -1638,38 +1989,455 @@ void bluetooth_free_data(unsigned char* data) {
     }
 }
 
-void bluetooth_send_engineering_data(const unsigned char* data, int length) {
+// Check Bluetooth adapter status
+static void check_bluetooth_adapter() {
+    GError *error = NULL;
+    
+    log_info("[%s] Checking Bluetooth adapter status...", LOG_TAG);
+    
     if (!connection) {
-        log_error("[%s] Cannot send engineering data: not connected", LOG_TAG);
+        log_error("[%s] Cannot check adapter: no D-Bus connection", LOG_TAG);
         return;
     }
-
-    // Log the hex string for debugging
-    char hex_string[length * 3 + 1];
-    for (size_t i = 0; i < length; i++) {
-        sprintf(hex_string + (i * 3), "%02x ", data[i]);
-    }
-    hex_string[length * 3 - 1] = '\0';
-    log_info("[%s] Sending engineering data: %s", LOG_TAG, hex_string);
-
-    // Create GVariant for the notification value
-    GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
-                                              data, length, sizeof(guchar));
-
-    // Emit PropertiesChanged signal
-    GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
-    g_variant_builder_add(builder, "{sv}", "Value", value);
-
-    g_dbus_connection_emit_signal(connection,
+    
+    // Try to get adapter properties
+    GDBusProxy *adapter_proxy = g_dbus_proxy_new_sync(
+        connection,
+        G_DBUS_PROXY_FLAGS_NONE,
         NULL,
-        "/com/feralfile/display/service0/eng_char",
+        "org.bluez",
+        "/org/bluez/hci0",
         "org.freedesktop.DBus.Properties",
-        "PropertiesChanged",
-        g_variant_new("(sa{sv}as)",
-                     "org.bluez.GattCharacteristic1",
-                     builder,
-                     NULL),
-        NULL);
+        NULL,
+        &error
+    );
+    
+    if (error || !adapter_proxy) {
+        log_error("[%s] Failed to create adapter proxy: %s", 
+                 LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return;
+    }
+    
+    // Get adapter powered status
+    GVariant *result = g_dbus_proxy_call_sync(
+        adapter_proxy,
+        "Get",
+        g_variant_new("(ss)", "org.bluez.Adapter1", "Powered"),
+        G_DBUS_CALL_FLAGS_NONE,
+        -1,
+        NULL,
+        &error
+    );
+    
+    if (error || !result) {
+        log_error("[%s] Failed to get adapter powered state: %s", 
+                 LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+    } else {
+        GVariant *variant = NULL;
+        g_variant_get(result, "(v)", &variant);
+        gboolean powered = g_variant_get_boolean(variant);
+        log_info("[%s] Adapter powered: %s", LOG_TAG, powered ? "true" : "false");
+        g_variant_unref(variant);
+        g_variant_unref(result);
+    }
+    
+    // Get adapter name
+    result = g_dbus_proxy_call_sync(
+        adapter_proxy,
+        "Get",
+        g_variant_new("(ss)", "org.bluez.Adapter1", "Name"),
+        G_DBUS_CALL_FLAGS_NONE,
+        -1,
+        NULL,
+        &error
+    );
+    
+    if (error || !result) {
+        log_warning("[%s] Failed to get adapter name: %s", 
+                   LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+    } else {
+        GVariant *variant = NULL;
+        g_variant_get(result, "(v)", &variant);
+        const gchar *name = g_variant_get_string(variant, NULL);
+        log_info("[%s] Adapter name: %s", LOG_TAG, name);
+        g_variant_unref(variant);
+        g_variant_unref(result);
+    }
+    
+    // Test if GATT service and characteristics registration was successful
+    log_info("[%s] Testing characteristics registration...", LOG_TAG);
+    
+    // Try to get registered objects
+    result = g_dbus_connection_call_sync(
+        connection,
+        "org.bluez",
+        "/",
+        "org.freedesktop.DBus.ObjectManager",
+        "GetManagedObjects",
+        NULL,
+        G_VARIANT_TYPE("(a{oa{sa{sv}}})"),
+        G_DBUS_CALL_FLAGS_NONE,
+        -1,
+        NULL,
+        &error
+    );
+    
+    if (error || !result) {
+        log_error("[%s] Failed to get BlueZ managed objects: %s", 
+                 LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+    } else {
+        GVariant *objects_dict;
+        g_variant_get(result, "(@a{oa{sa{sv}}})", &objects_dict);
+        
+        log_info("[%s] Checking for our service and characteristics in BlueZ...", LOG_TAG);
+        
+        // Extract all paths
+        GVariantIter iter;
+        gchar *object_path;
+        GVariant *interfaces_dict;
+        
+        g_variant_iter_init(&iter, objects_dict);
+        gboolean found_service = FALSE;
+        gboolean found_cmd_char = FALSE;
+        gboolean found_eng_char = FALSE;
+        
+        while (g_variant_iter_loop(&iter, "{&o@a{sa{sv}}}", &object_path, &interfaces_dict)) {
+            if (strstr(object_path, "feralfile") != NULL) {
+                log_info("[%s]   Found our object: %s", LOG_TAG, object_path);
+                
+                if (strstr(object_path, "service0") != NULL && strstr(object_path, "char") == NULL) {
+                    found_service = TRUE;
+                } else if (strstr(object_path, "cmd_char") != NULL) {
+                    found_cmd_char = TRUE;
+                    
+                    // Dump the interfaces and properties for cmd_char
+                    GVariantIter iface_iter;
+                    gchar *interface_name;
+                    GVariant *properties;
+                    
+                    g_variant_iter_init(&iface_iter, interfaces_dict);
+                    while (g_variant_iter_loop(&iface_iter, "{&s@a{sv}}", &interface_name, &properties)) {
+                        log_info("[%s]     Interface: %s", LOG_TAG, interface_name);
+                        
+                        if (g_strcmp0(interface_name, "org.bluez.GattCharacteristic1") == 0) {
+                            GVariantIter prop_iter;
+                            gchar *prop_name;
+                            GVariant *prop_value;
+                            
+                            g_variant_iter_init(&prop_iter, properties);
+                            while (g_variant_iter_loop(&prop_iter, "{&sv}", &prop_name, &prop_value)) {
+                                if (g_strcmp0(prop_name, "Flags") == 0) {
+                                    GVariantIter flag_iter;
+                                    gchar *flag;
+                                    gboolean has_notify = FALSE;
+                                    
+                                    g_variant_iter_init(&flag_iter, prop_value);
+                                    log_info("[%s]       Flags:", LOG_TAG);
+                                    while (g_variant_iter_loop(&flag_iter, "s", &flag)) {
+                                        log_info("[%s]         %s", LOG_TAG, flag);
+                                        if (g_strcmp0(flag, "notify") == 0) {
+                                            has_notify = TRUE;
+                                        }
+                                    }
+                                    
+                                    if (!has_notify) {
+                                        log_error("[%s] cmd_char does NOT have notify flag!", LOG_TAG);
+                                    }
+                                } else {
+                                    gchar *value_str = g_variant_print(prop_value, TRUE);
+                                    log_info("[%s]       %s: %s", LOG_TAG, prop_name, value_str);
+                                    g_free(value_str);
+                                }
+                            }
+                        }
+                    }
+                } else if (strstr(object_path, "eng_char") != NULL) {
+                    found_eng_char = TRUE;
+                }
+            }
+        }
+        
+        if (!found_service) {
+            log_error("[%s] Our service was NOT found in BlueZ!", LOG_TAG);
+        }
+        if (!found_cmd_char) {
+            log_error("[%s] cmd_char was NOT found in BlueZ!", LOG_TAG);
+        }
+        if (!found_eng_char) {
+            log_error("[%s] eng_char was NOT found in BlueZ!", LOG_TAG);
+        }
+        
+        g_variant_unref(objects_dict);
+        g_variant_unref(result);
+    }
+    
+    g_object_unref(adapter_proxy);
+    log_info("[%s] Bluetooth adapter check completed", LOG_TAG);
+}
 
-    g_variant_builder_unref(builder);
+// Try direct notification through BlueZ
+static void try_direct_notification(const unsigned char* data, int length) {
+    GError *error = NULL;
+    
+    log_info("[%s] Attempting direct notification through BlueZ...", LOG_TAG);
+    
+    if (!connection) {
+        log_error("[%s] Cannot send direct notification: no D-Bus connection", LOG_TAG);
+        return;
+    }
+    
+    // Create value
+    GVariant *value = g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE,
+                                            data, length, sizeof(guchar));
+    if (!value) {
+        log_error("[%s] Failed to create direct notification value variant", LOG_TAG);
+        return;
+    }
+    
+    // Try to get all connected devices
+    GVariant *result = g_dbus_connection_call_sync(
+        connection,
+        "org.bluez",
+        "/",
+        "org.freedesktop.DBus.ObjectManager",
+        "GetManagedObjects",
+        NULL,
+        G_VARIANT_TYPE("(a{oa{sa{sv}}})"),
+        G_DBUS_CALL_FLAGS_NONE,
+        -1,
+        NULL,
+        &error
+    );
+    
+    if (error || !result) {
+        log_error("[%s] Failed to get BlueZ objects for notification: %s", 
+                 LOG_TAG, error ? error->message : "Unknown error");
+        if (error) g_error_free(error);
+        return;
+    }
+    
+    GVariant *objects_dict;
+    g_variant_get(result, "(@a{oa{sa{sv}}})", &objects_dict);
+    
+    // Find connected devices
+    GVariantIter iter;
+    gchar *object_path;
+    GVariant *interfaces_dict;
+    GArray *connected_devices = g_array_new(FALSE, FALSE, sizeof(gchar*));
+    
+    g_variant_iter_init(&iter, objects_dict);
+    while (g_variant_iter_loop(&iter, "{&o@a{sa{sv}}}", &object_path, &interfaces_dict)) {
+        if (strstr(object_path, "dev_") != NULL) {
+            // This is a device, check if connected
+            GVariantIter iface_iter;
+            gchar *interface_name;
+            GVariant *properties;
+            
+            g_variant_iter_init(&iface_iter, interfaces_dict);
+            while (g_variant_iter_loop(&iface_iter, "{&s@a{sv}}", &interface_name, &properties)) {
+                if (g_strcmp0(interface_name, "org.bluez.Device1") == 0) {
+                    // Check Connected property
+                    GVariantIter prop_iter;
+                    gchar *prop_name;
+                    GVariant *prop_value;
+                    
+                    g_variant_iter_init(&prop_iter, properties);
+                    while (g_variant_iter_loop(&prop_iter, "{&sv}", &prop_name, &prop_value)) {
+                        if (g_strcmp0(prop_name, "Connected") == 0) {
+                            gboolean connected = g_variant_get_boolean(prop_value);
+                            if (connected) {
+                                // Store the connected device path
+                                gchar *device_path = g_strdup(object_path);
+                                g_array_append_val(connected_devices, device_path);
+                                log_info("[%s] Found connected device: %s", LOG_TAG, device_path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Clean up objects dict
+    g_variant_unref(objects_dict);
+    g_variant_unref(result);
+    
+    if (connected_devices->len == 0) {
+        log_warning("[%s] No connected devices found for direct notification", LOG_TAG);
+        g_array_free(connected_devices, TRUE);
+        return;
+    }
+    
+    // For each connected device, try to send notification directly
+    for (guint i = 0; i < connected_devices->len; i++) {
+        gchar *device_path = g_array_index(connected_devices, gchar*, i);
+        
+        // Try to get BlueZ's version of our characteristic
+        gchar char_path[256];
+        snprintf(char_path, sizeof(char_path), "%s/service0/char0004", device_path); // BlueZ might use a different path format
+        
+        log_info("[%s] Attempting direct notification to device: %s", LOG_TAG, device_path);
+        log_info("[%s] Trying characteristic path: %s", LOG_TAG, char_path);
+        
+        // Try to get the CMD characteristic from BlueZ
+        GDBusProxy *char_proxy = g_dbus_proxy_new_sync(
+            connection,
+            G_DBUS_PROXY_FLAGS_NONE,
+            NULL,
+            "org.bluez",
+            char_path,
+            "org.bluez.GattCharacteristic1",
+            NULL,
+            &error
+        );
+        
+        if (error || !char_proxy) {
+            log_warning("[%s] Failed to get direct characteristic proxy, trying to discover: %s", 
+                       LOG_TAG, error ? error->message : "Unknown error");
+            if (error) {
+                g_error_free(error);
+                error = NULL;
+            }
+            
+            // Try to discover the actual path
+            GVariant *char_result = g_dbus_connection_call_sync(
+                connection,
+                "org.bluez",
+                "/",
+                "org.freedesktop.DBus.ObjectManager",
+                "GetManagedObjects",
+                NULL,
+                G_VARIANT_TYPE("(a{oa{sa{sv}}})"),
+                G_DBUS_CALL_FLAGS_NONE,
+                -1,
+                NULL,
+                &error
+            );
+            
+            if (error || !char_result) {
+                log_error("[%s] Failed to get objects for characteristic discovery: %s", 
+                         LOG_TAG, error ? error->message : "Unknown error");
+                if (error) g_error_free(error);
+            } else {
+                GVariant *char_objects_dict;
+                g_variant_get(char_result, "(@a{oa{sa{sv}}})", &char_objects_dict);
+                
+                // Find characteristic by UUID
+                g_variant_iter_init(&iter, char_objects_dict);
+                while (g_variant_iter_loop(&iter, "{&o@a{sa{sv}}}", &object_path, &interfaces_dict)) {
+                    // Look for a path that contains the device path and might be a characteristic
+                    if (strstr(object_path, device_path) != NULL && 
+                        strstr(object_path, "char") != NULL) {
+                        
+                        log_info("[%s] Found potential characteristic: %s", LOG_TAG, object_path);
+                        
+                        // Check if it has the right UUID
+                        GVariantIter iface_iter;
+                        gchar *interface_name;
+                        GVariant *properties;
+                        
+                        g_variant_iter_init(&iface_iter, interfaces_dict);
+                        while (g_variant_iter_loop(&iface_iter, "{&s@a{sv}}", &interface_name, &properties)) {
+                            if (g_strcmp0(interface_name, "org.bluez.GattCharacteristic1") == 0) {
+                                GVariantIter prop_iter;
+                                gchar *prop_name;
+                                GVariant *prop_value;
+                                
+                                g_variant_iter_init(&prop_iter, properties);
+                                while (g_variant_iter_loop(&prop_iter, "{&sv}", &prop_name, &prop_value)) {
+                                    if (g_strcmp0(prop_name, "UUID") == 0) {
+                                        const gchar *uuid = g_variant_get_string(prop_value, NULL);
+                                        if (g_ascii_strcasecmp(uuid, FERALFILE_CMD_CHAR_UUID) == 0) {
+                                            // This is our characteristic!
+                                            log_info("[%s] Found our CMD characteristic: %s", LOG_TAG, object_path);
+                                            
+                                            // Create proxy for this characteristic
+                                            char_proxy = g_dbus_proxy_new_sync(
+                                                connection,
+                                                G_DBUS_PROXY_FLAGS_NONE,
+                                                NULL,
+                                                "org.bluez",
+                                                object_path,
+                                                "org.bluez.GattCharacteristic1",
+                                                NULL,
+                                                &error
+                                            );
+                                            
+                                            if (error || !char_proxy) {
+                                                log_error("[%s] Failed to get discovered characteristic proxy: %s", 
+                                                         LOG_TAG, error ? error->message : "Unknown error");
+                                                if (error) g_error_free(error);
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (char_proxy) break; // Found and created the proxy
+                    }
+                }
+                
+                g_variant_unref(char_objects_dict);
+                g_variant_unref(char_result);
+            }
+        }
+        
+        if (char_proxy) {
+            // Try to send notification
+            log_info("[%s] Attempting direct WriteValue call for cmd_char", LOG_TAG);
+            
+            // First ensure notifications are enabled
+            g_dbus_proxy_call_sync(
+                char_proxy,
+                "StartNotify",
+                NULL,
+                G_DBUS_CALL_FLAGS_NONE,
+                -1,
+                NULL,
+                &error
+            );
+            
+            if (error) {
+                log_warning("[%s] Failed to start notifications: %s", 
+                           LOG_TAG, error->message);
+                g_error_free(error);
+                error = NULL;
+            }
+            
+            // Try to write the value
+            GVariant *notify_result = g_dbus_proxy_call_sync(
+                char_proxy,
+                "WriteValue",
+                g_variant_new("(aya{sv})", value, NULL),
+                G_DBUS_CALL_FLAGS_NONE,
+                -1,
+                NULL,
+                &error
+            );
+            
+            if (error) {
+                log_error("[%s] Direct write failed: %s", 
+                         LOG_TAG, error->message);
+                g_error_free(error);
+            } else {
+                log_info("[%s] Direct write sent successfully", LOG_TAG);
+                if (notify_result) {
+                    g_variant_unref(notify_result);
+                }
+            }
+            
+            g_object_unref(char_proxy);
+        } else {
+            log_error("[%s] Failed to find cmd_char for direct notification", LOG_TAG);
+        }
+        
+        g_free(device_path);
+    }
+    
+    g_array_free(connected_devices, TRUE);
 }
