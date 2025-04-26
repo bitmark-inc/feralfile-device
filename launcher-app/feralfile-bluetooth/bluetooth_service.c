@@ -103,6 +103,18 @@ static void enqueue_log_message(const char* message);
 static void request_log_flush(void);
 static void shutdown_log_thread(void);
 
+// Add these forward declarations to fix the compilation errors
+static void handle_command_write(GDBusConnection *conn,
+                               const gchar *sender,
+                               const gchar *object_path,
+                               const gchar *interface_name,
+                               const gchar *method_name,
+                               GVariant *parameters,
+                               GDBusMethodInvocation *invocation,
+                               gpointer user_data);
+static void check_bluetooth_adapter(void);
+static void try_direct_notification(const unsigned char* data, int length);
+
 // Initialize the log buffer
 static void init_log_buffer(void) {
     pthread_mutex_lock(&log_mutex);
@@ -1990,7 +2002,7 @@ void bluetooth_free_data(unsigned char* data) {
 }
 
 // Check Bluetooth adapter status
-static void check_bluetooth_adapter() {
+static void check_bluetooth_adapter(void) {
     GError *error = NULL;
     
     log_info("[%s] Checking Bluetooth adapter status...", LOG_TAG);
