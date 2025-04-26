@@ -80,7 +80,18 @@ get_cpu_freq() {
     pcpu_raw=$(echo "$sample" | jq -r '."pcpu_usage"[0]' 2>/dev/null || echo "0")
     ecpu_raw=$(echo "$sample" | jq -r '."ecpu_usage"[0]' 2>/dev/null || echo "0")
 
-    echo "scale=0; ($pcpu_raw + $ecpu_raw) / 1000" | bc
+    # Get the total raw frequency
+    local total
+    total=$(echo "scale=1; $pcpu_raw + $ecpu_raw" | bc)
+    
+    # Simple threshold-based detection
+    # If the value is large (>10000), it's likely in KHz and needs conversion to MHz
+    if (( $(echo "$total > 10000" | bc -l) )); then
+        echo "scale=0; $total / 1000" | bc
+    # Otherwise it's already in MHz
+    else
+        echo "scale=0; $total" | bc
+    fi
 }
 
 get_cpu_temp() {
@@ -90,7 +101,17 @@ get_cpu_temp() {
 
 get_gpu_freq() {
     local sample="$1"
-    echo "scale=0; $(echo "$sample" | jq -r '."gpu_usage"[0]' 2>/dev/null || echo "0")" | bc
+    local gpu_raw=0
+    gpu_raw=$(echo "$sample" | jq -r '."gpu_usage"[0]' 2>/dev/null || echo "0")
+    
+    # Simple threshold-based detection
+    # If the value is large (>10000), it's likely in KHz and needs conversion to MHz
+    if (( $(echo "$gpu_raw > 10000" | bc -l) )); then
+        echo "scale=0; $gpu_raw / 1000" | bc
+    # Otherwise it's already in MHz
+    else
+        echo "scale=0; $gpu_raw" | bc
+    fi
 }
 
 get_gpu_busy() {
