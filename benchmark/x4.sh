@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ################################################################################
-# Usage:  ./monitor_chromium.sh [URL] [SECONDS]
+# Usage:  ./x4.sh [URL] [SECONDS] [DELAY]
 ################################################################################
 set -uo pipefail # -e off because intel_gpu_top → 124 on timeout
 
@@ -184,17 +184,6 @@ ws_url() { # first “page” target’s WS URL
     jq -r '[ .[] | select(.type=="page") ][0].webSocketDebuggerUrl'
 }
 
-fps_from_metrics() { # tier-1 (fast, native)
-  command -v websocat &>/dev/null || return
-  local ws
-  ws=$(ws_url)
-  [[ -z $ws || $ws == null ]] && return
-  websocat -n1 "$ws" <<<'{"id":1,"method":"Performance.enable"}' >/dev/null 2>&1
-  websocat -n1 "$ws" <<<'{"id":2,"method":"Performance.getMetrics"}' |
-    jq -r '.result.metrics[]? | select(.name=="FramesPerSecond") | .value' |
-    awk '{printf "%.0f",$1}'
-}
-
 fps_from_rAF() { # Tier-2, always works
   command -v websocat &>/dev/null || return
   local ws
@@ -210,17 +199,76 @@ fps_from_rAF() { # Tier-2, always works
     jq -r '.result.result.value // empty'
 }
 
+#─── Energy helpers ────────────────────────────────────────────
+find_zone() {
+  local want=$1 base=/sys/class/powercap/intel-rapl:0
+  for n in "$base"/*/name; do
+    [[ $(<"$n") == "$want" ]] && {
+      echo "${n%/*}"
+      return 0
+    }
+  done
+  return 1 # not found
+}
+
+PKG=/sys/class/powercap/intel-rapl:0 # package zone
+CORE=$(find_zone core)               # PP0
+GPU=$(find_zone uncore || find_zone gpu) || {
+  echo "✗  This firmware does not expose a PP1/uncore domain." >&2
+  exit 1
+}
+
+# ─── read PL1 & PL2 (µW → W) ───────────────────────────────────────────────
+read -r PL1_uW < <(sudo cat "$PKG/constraint_0_power_limit_uw") # long-term cap
+read -r PL2_uW < <(sudo cat "$PKG/constraint_1_power_limit_uw") # short-term cap
+PL1=$(awk "BEGIN{printf \"%.2f\", $PL1_uW/1e6}")   # :contentReference[oaicite:0]{index=0}
+PL2=$(awk "BEGIN{printf \"%.2f\", $PL2_uW/1e6}")
+[[ $PL1_uW -gt 0 && $PL2_uW -gt 0 ]] || {
+  echo "PL1 or PL2 is zero—check your package limits" >&2
+}
+
+# Read the per-domain rollover limit from max_energy_range_uj (32-bit by spec)
+MAX_CORE=$(<"$CORE/max_energy_range_uj")
+MAX_GPU=$(<"$GPU/max_energy_range_uj")
+
+# Initial samples
+read -r c_prev < <(sudo cat "$CORE/energy_uj")
+read -r g_prev < <(sudo cat "$GPU/energy_uj")
+prev_watts_ts=$(date +%s.%N)
+get_watts() {
+  curr_ts=$(date +%s.%N)
+  read -r c_curr < <(sudo cat "$CORE/energy_uj")
+  read -r g_curr < <(sudo cat "$GPU/energy_uj")
+
+  # ----------- handle 32-bit wrap-around per domain -----------
+  ((c_curr < c_prev)) && c_curr=$((c_curr + MAX_CORE))
+  ((g_curr < g_prev)) && g_curr=$((g_curr + MAX_GPU))
+
+  # actual elapsed time in seconds (float)
+  dt=$(awk "BEGIN{print $curr_ts - $prev_watts_ts}")
+
+  # ----------- µJ → W (µJ / 1 000 000) ------------------------
+  w_core=$(awk "BEGIN{printf \"%.2f\", ($c_curr-$c_prev)/1e6/$dt}")
+  w_gpu=$(awk "BEGIN{printf \"%.2f\", ($g_curr-$g_prev)/1e6/$dt}")
+
+  # percentages of PL1 & PL2
+  pc1=$(awk "BEGIN{printf \"%.1f\", $w_core/$PL1*100}")
+  pc2=$(awk "BEGIN{printf \"%.1f\", $w_core/$PL2*100}")
+  pg1=$(awk "BEGIN{printf \"%.1f\", $w_gpu/$PL1*100}")
+  pg2=$(awk "BEGIN{printf \"%.1f\", $w_gpu/$PL2*100}")
+
+  # slide window
+  c_prev=$((c_curr % MAX_CORE))
+  g_prev=$((g_curr % MAX_GPU))
+  prev_watts_ts=$curr_ts
+
+  printf "%6s %6s %6s %6s %6s %6s\n" \
+    "$w_core" "$pc1" "$pc2" "$w_gpu" "$pg1" "$pg2"
+}
+
+#─── Chromium helpers ──────────────────────────────────────────
 get_fps() {
   local fps
-
-  # Tier-1: Performance.getMetrics
-  fps=$(fps_from_metrics 2>/dev/null)
-  if [[ $fps =~ ^[0-9]+$ && $fps -gt 0 ]]; then
-    echo "$fps"
-    return
-  fi
-
-  # Tier-2: one-second rAF counter
   fps=$(fps_from_rAF 2>/dev/null)
   if [[ $fps =~ ^[0-9]+$ && $fps -gt 0 ]]; then
     echo "$fps"
@@ -288,7 +336,7 @@ MEM_TOTAL=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
 
 # ─── accumulators ───────────────────────────────────────────────────────────
 declare -A sum
-for k in cu su cf ct gu gf gt cm cmp sm smp fps ju jt jpct; do sum[$k]=0; done
+for k in cu su cf ct gu gf gt cm cmp sm smp fps ju jt jpct cw gw cwpct1 cwpct2 gwpct1 gwpct2; do sum[$k]=0; done
 cnt=0 start=$(date +%s)
 
 # ─── main loop ──────────────────────────────────────────────────────────────
@@ -296,7 +344,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
   ((DUR > 0 && $(date +%s) - start >= DUR)) && break
   C_PIDS=$(get_tree_pids "$ROOT")
 
-  read sys_cpu ch_cpu <<<$(get_cpu_usages)
+  read sys_cpu ch_cpu <<<"$(get_cpu_usages)"
   cpu_freq=$(get_cpu_freq)
   cpu_temp=$(get_cpu_temp)
   read -r gpu_busy gpu_freq <<<"$(gpu_stats)"
@@ -314,14 +362,15 @@ while kill -0 "$ROOT" 2>/dev/null; do
     u_heap=0
     heap_pct=0
   fi
+  read cw cwpct1 cwpct2 gw gwpct1 gwpct2 <<<"$(get_watts)"
 
   # ─── live output ─────────────────────────────────────────────────────────
   printf "\n%(%F %T)T | PIDs: %s\n" -1 "$C_PIDS"
-  printf "CPU : Chromium:%7s | System:%7s @%4d MHz | Temp:%s\n" \
-    "$(pct "$ch_cpu")" "$(pct "$sys_cpu")" "$cpu_freq" "$(tmp "$cpu_temp")"
+  printf "CPU : Chromium:%7s | System:%7s @%4d MHz | Temp:%s | Watts(%%PL1 %%PL2): %.2f W(%7s %7s)\n" \
+    "$(pct "$ch_cpu")" "$(pct "$sys_cpu")" "$cpu_freq" "$(tmp "$cpu_temp")" "$cw" "$(pct "$cwpct1")" "$(pct "$cwpct2")"
   printf "MEM : Chromium:%4d MB (%7s) | System:%4d/%4d MB (%7s)\n" \
     "$ch_mem" "$(pct "$ch_pct")" "$sys_used" "$sys_tot" "$(pct "$sys_pct")"
-  printf "GPU : %7s @%4d MHz | Temp: %s | FPS:%s\n" "$(pct "$gpu_busy")" "$gpu_freq" "$(tmp "$cpu_temp")" "$fps"
+  printf "GPU : %7s @%4d MHz | Temp: %s | Watts(%%PL1 %%PL2): %.2f W(%7s %7s) | FPS:%s\n" "$(pct "$gpu_busy")" "$gpu_freq" "$(tmp "$cpu_temp")" "$gw" "$(pct "$gwpct1")" "$(pct "$gwpct2")" "$fps"
   printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$u_heap" "$t_heap" "$(pct $heap_pct)"
 
   # accum
@@ -340,6 +389,12 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sum[ju]=$(bc -l <<<"${sum[ju]}+$u_heap")
   sum[jt]=$(bc -l <<<"${sum[jt]}+$t_heap")
   sum[jpct]=$(bc -l <<<"${sum[jpct]}+$heap_pct")
+  sum[cw]=$(bc -l <<<"${sum[cw]}+$cw")
+  sum[cwpct1]=$(bc -l <<<"${sum[cwpct1]}+$cwpct1")
+  sum[cwpct2]=$(bc -l <<<"${sum[cwpct2]}+$cwpct2")
+  sum[gw]=$(bc -l <<<"${sum[gw]}+$gw")
+  sum[gwpct1]=$(bc -l <<<"${sum[gwpct1]}+$gwpct1")
+  sum[gwpct2]=$(bc -l <<<"${sum[gwpct2]}+$gwpct2")
 
   ((cnt++))
 done
@@ -354,10 +409,10 @@ avg() { printf "%.1f" "$(bc -l <<<"${sum[$1]}/$cnt")"; }
 avg_i() { echo "$(bc -l <<<"scale=2; ${sum[$1]}/$cnt")"; }
 
 echo -e "\nAverage over $cnt samples"
-printf "CPU : Chromium:%7s | System:%7s @%.0f MHz | Temp:%s\n" \
-  "$(pct "$(avg cu)")" "$(pct "$(avg su)")" "$(avg_i cf)" "$(tmp "$(avg ct)")"
+printf "CPU : Chromium:%7s | System:%7s @%.0f MHz | Temp:%s | Watts(%%PL1 %%PL2): %.2f W(%7s %7s)\n" \
+  "$(pct "$(avg cu)")" "$(pct "$(avg su)")" "$(avg_i cf)" "$(tmp "$(avg ct)")" "$(avg cw)" "$(pct "$(avg cwpct1)")" "$(pct "$(avg cwpct2)")"
 printf "MEM : Chromium:%.2f MB (%7s) | System:%.2f/%.2f MB (%7s)\n" \
   "$(avg_i cm)" "$(pct "$(avg cmp)")" "$(avg_i sm)" "$((MEM_TOTAL / 1024))" "$(pct "$(avg smp)")"
-printf "GPU : %7s @%.0f MHz | FPS:%s\n" \
-  "$(pct "$(avg gu)")" "$(avg_i gf)" "$(avg fps)"
+printf "GPU : %7s @%.0f MHz | Watts(%%PL1 %%PL2): %.2f W(%7s %7s) | FPS:%s\n" \
+  "$(pct "$(avg gu)")" "$(avg_i gf)" "$(avg gw)" "$(pct "$(avg gwpct1)")" "$(pct "$(avg gwpct2)")" "$(avg fps)"
 printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$(avg_i ju)" "$(avg_i jt)" "$(pct "$(avg jpct)")"
