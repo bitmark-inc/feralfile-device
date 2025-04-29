@@ -2,6 +2,7 @@
 
 # Usage: ./monitor_chromium.sh <URL> <GPU_DEVFREQ_SUFFIX> <SOC_ZONE> <GPU_ZONE> <DURATION_SEC>
 # Example: ./monitor_chromium.sh https://example.com ffa30000.gpu 0 5 60
+export LC_ALL=C
 
 URL=${1:-"https://example.com"}
 GPU_SUFFIX=${2:-"fb000000.gpu"}
