@@ -1,15 +1,22 @@
 #!/bin/bash
+# Usage: ./monitor_chromium.sh <GPU_DEVFREQ_SUFFIX> <SOC_ZONE> <GPU_ZONE> <DURATION_SEC> <DELAY_SEC> <URLs>
+# Example: ./monitor_chromium.sh ffa30000.gpu 0 5 19600 5 file://<file 1 path> file://<file 2 path>
 
-# Usage: ./monitor_chromium.sh <URL> <GPU_DEVFREQ_SUFFIX> <SOC_ZONE> <GPU_ZONE> <DURATION_SEC>
-# Example: ./monitor_chromium.sh https://example.com ffa30000.gpu 0 5 60
 export LC_ALL=C
 
-URL=${1:-"https://example.com"}
-GPU_SUFFIX=${2:-"fb000000.gpu"}
-SOC_ZONE=${3:-0}
-GPU_ZONE=${4:-5}
-DURATION=${5:-60}
-DELAY=${6:-5}
+GPU_SUFFIX=${1:-"fb000000.gpu"}
+SOC_ZONE=${2:-0}
+GPU_ZONE=${3:-5}
+DURATION=${4:-60}
+DELAY=${5:-5}
+shift 5
+APPS=("$@")
+if [ ${#APPS[@]} -eq 0 ]; then
+  echo "❌ No apps provided."
+  exit 1
+fi
+
+LOG_FILE="monitor_log.txt"
 
 GPU_NODE="/sys/class/devfreq/$GPU_SUFFIX"
 SOC_THERMAL="/sys/class/thermal/thermal_zone$SOC_ZONE"
@@ -239,21 +246,25 @@ js_heap() {
   printf "%.2f %.2f %.1f" "$t_mb" "$u_mb" "$pct"
 }
 
-sum_CU=0 sum_SU=0 sum_CF=0 sum_ST=0 \
-  sum_GU=0 sum_GF=0 sum_FPS=0 sum_GT=0 \
-  sum_CM=0 sum_CMP=0 sum_SU_M=0 sum_SP=0 \
-  sum_JU=0 sum_JT=0 sum_JPCT=0 
-count=0
+navigate_to_url() {
+  local target_url="$1"
+  command -v websocat &>/dev/null || return
+  local ws
+  ws=$(ws_url)
+  [[ -z "$ws" || "$ws" == "null" ]] && return
 
-START_TS=$(date +%s)
+  printf '{"id":100,"method":"Page.navigate","params":{"url":"%s"}}\n' "$target_url" |
+    websocat -n1 "$ws" >/dev/null 2>&1
+}
 
-chromium "$URL" \
+chromium "about:blank" \
   --remote-debugging-port=$DEBUG_PORT \
   --kiosk \
   --no-first-run \
   --disable-sync \
   --disable-translate \
   --disable-infobars \
+  --allow-file-access-from-files \
   --disable-features=TranslateUI \
   --disable-popup-blocking \
   --autoplay-policy=no-user-gesture-required \
@@ -261,99 +272,119 @@ chromium "$URL" \
 ROOT=$!
 C_PIDS=$(get_tree_pids "$ROOT")
 echo "Launched Chromium (PID: $ROOT)"
-sleep "$DELAY"
+# Wait for 2 seconds to ensure Chromium is ready
+sleep 2
 
-while kill -0 $ROOT 2>/dev/null; do
-  NOW_TS=$(date +%s)
-  ELAPSED=$((NOW_TS - START_TS))
-  if ((DURATION > 0 && ELAPSED >= DURATION)); then
-    echo "Exiting..."
-    break
+for APP in "${APPS[@]}"; do
+  echo "Navigating to: $APP"
+  navigate_to_url "$APP"
+  sleep "$DELAY"
+
+  # Reset sum values
+  sum_CU=0 sum_SU=0 sum_CF=0 sum_ST=0 \
+    sum_GU=0 sum_GF=0 sum_FPS=0 sum_GT=0 \
+    sum_CM=0 sum_CMP=0 sum_SU_M=0 sum_SP=0 \
+    sum_JU=0 sum_JT=0 sum_JPCT=0
+  count=0
+  START_TS=$(date +%s)
+
+  while kill -0 $ROOT 2>/dev/null; do
+    NOW_TS=$(date +%s)
+    ELAPSED=$((NOW_TS - START_TS))
+    if ((DURATION > 0 && ELAPSED >= DURATION)); then
+      echo "Switching to next app..."
+      break
+    fi
+
+    C_PIDS=$(get_tree_pids "$ROOT")
+
+    NOW=$(date "+%F %T")
+    read SYS_CPU CHR_CPU <<<$(get_cpu_usages)
+    read CHR_MEM CHR_MEM_PCT <<<$(get_chromium_mem_stats)
+    CPU_FREQ=$(get_cpu_avg_freq)
+    SOC_TEMP=$(awk '{printf "%.1f", $1/1000}' "$SOC_THERMAL/temp")
+    read G_USAGE G_FREQ <<<$(get_dev_info "$GPU_NODE")
+    GPU_TEMP=$(awk '{printf "%.1f", $1/1000}' "$GPU_THERMAL/temp")
+    read SYS_MEM_USED SYS_MEM_TOTAL <<<$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | awk 'NR==1{t=$2} NR==2{a=$2} END{printf "%d %d",(t-a)/1024,t/1024}')
+    SYS_MEM_PCT=$(awk "BEGIN{printf \"%.1f\", ($SYS_MEM_USED/$SYS_MEM_TOTAL)*100}")
+    FPS=$(get_fps)
+    [[ -z $FPS ]] && FPS=0
+
+    if ! read -r T_HEAP U_HEAP HEAP_PCT <<<"$(js_heap 2>/dev/null)"; then
+      T_HEAP=0
+      U_HEAP=0
+      HEAP_PCT=0
+    fi
+
+    echo "$NOW"
+    echo "============================================================="
+    printf "\n%(%F %T)T | PIDs: %s\n" -1 "$C_PIDS"
+    printf "CPU : Chromium: %5s | System: %5s @%4s MHz | Temp: %s\n" \
+      "$(color_usage $CHR_CPU)" "$(color_usage $SYS_CPU)" "$CPU_FREQ" "$(color_temp $SOC_TEMP)"
+    printf "MEM : Chromium: %5s MB (%5s) | Sys: %5s/%5s MB (%5s)\n" \
+      "$CHR_MEM" "$(color_usage $CHR_MEM_PCT)" "$SYS_MEM_USED" "$SYS_MEM_TOTAL" "$(color_usage $SYS_MEM_PCT)"
+    printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
+      "$(color_usage $G_USAGE)" "$G_FREQ" "$FPS" "$(color_temp $GPU_TEMP)"
+    printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$U_HEAP" "$T_HEAP" "$(color_usage $HEAP_PCT)"
+    echo "============================================================="
+
+    sum_CU=$(awk "BEGIN{print $sum_CU+$CHR_CPU}")
+    sum_SU=$(awk "BEGIN{print $sum_SU+$SYS_CPU}")
+    sum_CF=$(awk "BEGIN{print $sum_CF+$CPU_FREQ}")
+    sum_ST=$(awk "BEGIN{print $sum_ST+$SOC_TEMP}")
+    sum_GU=$(awk "BEGIN{print $sum_GU+$G_USAGE}")
+    sum_GF=$(awk "BEGIN{print $sum_GF+$G_FREQ}")
+    sum_FPS=$(awk "BEGIN{print $sum_FPS+$FPS}")
+    sum_GT=$(awk "BEGIN{print $sum_GT+$GPU_TEMP}")
+    sum_CM=$(awk "BEGIN{print $sum_CM+$CHR_MEM}")
+    sum_CMP=$(awk "BEGIN{print $sum_CMP+$CHR_MEM_PCT}")
+    sum_SU_M=$(awk "BEGIN{print $sum_SU_M+$SYS_MEM_USED}")
+    sum_SP=$(awk "BEGIN{print $sum_SP+$SYS_MEM_PCT}")
+    sum_JU=$(awk "BEGIN{print $sum_JU+$U_HEAP}")
+    sum_JT=$(awk "BEGIN{print $sum_JT+$T_HEAP}")
+    sum_JPCT=$(awk "BEGIN{print $sum_JPCT+$HEAP_PCT}")
+    ((count++))
+
+    sleep 1
+  done
+
+  if ((count > 0)); then
+    AVG_CU=$(awk "BEGIN{printf \"%.1f\", $sum_CU/$count}")
+    AVG_SU=$(awk "BEGIN{printf \"%.1f\", $sum_SU/$count}")
+    AVG_CF=$(awk "BEGIN{printf \"%d\",   $sum_CF/$count}")
+    AVG_ST=$(awk "BEGIN{printf \"%.1f\", $sum_ST/$count}")
+    AVG_GU=$(awk "BEGIN{printf \"%.1f\", $sum_GU/$count}")
+    AVG_GF=$(awk "BEGIN{printf \"%d\",   $sum_GF/$count}")
+    AVG_FPS=$(awk "BEGIN{printf \"%d\",   $sum_FPS/$count}")
+    AVG_GT=$(awk "BEGIN{printf \"%.1f\", $sum_GT/$count}")
+    AVG_CM=$(awk "BEGIN{printf \"%d\",   $sum_CM/$count}")
+    AVG_CMP=$(awk "BEGIN{printf \"%.1f\", $sum_CMP/$count}")
+    AVG_SU_M=$(awk "BEGIN{printf \"%d\",   $sum_SU_M/$count}")
+    AVG_SP=$(awk "BEGIN{printf \"%.1f\", $sum_SP/$count}")
+    AVG_JU=$(awk "BEGIN{printf \"%.2f\", $sum_JU/$count}")
+    AVG_JT=$(awk "BEGIN{printf \"%.2f\", $sum_JT/$count}")
+    AVG_JPCT=$(awk "BEGIN{printf \"%.1f\", $sum_JPCT/$count}")
+  else
+    echo "No average data for $APP."
+    continue
   fi
-  C_PIDS=$(get_tree_pids "$ROOT")
 
-  NOW=$(date "+%F %T")
-  read SYS_CPU CHR_CPU <<<$(get_cpu_usages)
-  read CHR_MEM CHR_MEM_PCT <<<$(get_chromium_mem_stats)
-  CPU_FREQ=$(get_cpu_avg_freq)
-  SOC_TEMP=$(awk '{printf "%.1f", $1/1000}' "$SOC_THERMAL/temp")
-  read G_USAGE G_FREQ <<<$(get_dev_info "$GPU_NODE")
-  GPU_TEMP=$(awk '{printf "%.1f", $1/1000}' "$GPU_THERMAL/temp")
-  read SYS_MEM_USED SYS_MEM_TOTAL <<<$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | awk 'NR==1{t=$2} NR==2{a=$2} END{printf "%d %d",(t-a)/1024,t/1024}')
-  SYS_MEM_PCT=$(awk "BEGIN{printf \"%.1f\", ($SYS_MEM_USED/$SYS_MEM_TOTAL)*100}")
-  FPS=$(get_fps)
-  [[ -z $FPS ]] && FPS=0
+  # Write average report to log file
+  {
+    echo "Average Report for $APP"
+    echo "============================================================="
+    printf "CPU : Chromium: %5s | System: %5s @%4s MHz | Temp: %s\n" \
+      "$AVG_CU" "$AVG_SU" "$AVG_CF" "$AVG_ST"
+    printf "MEM : Chromium: %5s MB (%5s) | Sys: %5s MB\n" \
+      "$AVG_CM" "$AVG_CMP" "$AVG_SU_M"
+    printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
+      "$AVG_GU" "$AVG_GF" "$AVG_FPS" "$AVG_GT"
+    printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$AVG_JU" "$AVG_JT" "$AVG_JPCT"
+    echo "============================================================="
+    echo
+  } >> "$LOG_FILE"
 
-  # JS heap stats
-  if ! read -r T_HEAP U_HEAP HEAP_PCT <<<"$(js_heap 2>/dev/null)"; then
-    T_HEAP=0
-    U_HEAP=0
-    HEAP_PCT=0
-  fi
-
-  echo "$NOW"
-  echo "============================================================="
-  printf "\n%(%F %T)T | PIDs: %s\n" -1 "$C_PIDS"
-  printf "CPU : Chromium: %5s | System: %5s @%4s MHz | Temp: %s\n" \
-    "$(color_usage $CHR_CPU)" "$(color_usage $SYS_CPU)" "$CPU_FREQ" "$(color_temp $SOC_TEMP)"
-  printf "MEM : Chromium: %5s MB (%5s) | Sys: %5s/%5s MB (%5s)\n" \
-    "$CHR_MEM" "$(color_usage $CHR_MEM_PCT)" "$SYS_MEM_USED" "$SYS_MEM_TOTAL" "$(color_usage $SYS_MEM_PCT)"
-  printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
-    "$(color_usage $G_USAGE)" "$G_FREQ" "$FPS" "$(color_temp $GPU_TEMP)"
-  printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$U_HEAP" "$T_HEAP" "$(color_usage $HEAP_PCT)"
-  echo "============================================================="
-
-  sum_CU=$(awk "BEGIN{print $sum_CU+$CHR_CPU}")
-  sum_SU=$(awk "BEGIN{print $sum_SU+$SYS_CPU}")
-  sum_CF=$(awk "BEGIN{print $sum_CF+$CPU_FREQ}")
-  sum_ST=$(awk "BEGIN{print $sum_ST+$SOC_TEMP}")
-  sum_GU=$(awk "BEGIN{print $sum_GU+$G_USAGE}")
-  sum_GF=$(awk "BEGIN{print $sum_GF+$G_FREQ}")
-  sum_FPS=$(awk "BEGIN{print $sum_FPS+$FPS}")
-  sum_GT=$(awk "BEGIN{print $sum_GT+$GPU_TEMP}")
-  sum_CM=$(awk "BEGIN{print $sum_CM+$CHR_MEM}")
-  sum_CMP=$(awk "BEGIN{print $sum_CMP+$CHR_MEM_PCT}")
-  sum_SU_M=$(awk "BEGIN{print $sum_SU_M+$SYS_MEM_USED}")
-  sum_SP=$(awk "BEGIN{print $sum_SP+$SYS_MEM_PCT}")
-  sum_JU=$(awk "BEGIN{print $sum_JU+$U_HEAP}")
-  sum_JT=$(awk "BEGIN{print $sum_JT+$T_HEAP}")
-  sum_JPCT=$(awk "BEGIN{print $sum_JPCT+$HEAP_PCT}")
-  ((count++))
 done
 
 kill $ROOT 2>/dev/null || true
 echo "Chromium closed."
-
-if ((count > 0)); then
-  AVG_CU=$(awk "BEGIN{printf \"%.1f\", $sum_CU/$count}")
-  AVG_SU=$(awk "BEGIN{printf \"%.1f\", $sum_SU/$count}")
-  AVG_CF=$(awk "BEGIN{printf \"%d\",   $sum_CF/$count}")
-  AVG_ST=$(awk "BEGIN{printf \"%.1f\", $sum_ST/$count}")
-  AVG_GU=$(awk "BEGIN{printf \"%.1f\", $sum_GU/$count}")
-  AVG_GF=$(awk "BEGIN{printf \"%d\",   $sum_GF/$count}")
-  AVG_FPS=$(awk "BEGIN{printf \"%d\",   $sum_FPS/$count}")
-  AVG_GT=$(awk "BEGIN{printf \"%.1f\", $sum_GT/$count}")
-  AVG_CM=$(awk "BEGIN{printf \"%d\",   $sum_CM/$count}")
-  AVG_CMP=$(awk "BEGIN{printf \"%.1f\", $sum_CMP/$count}")
-  AVG_SU_M=$(awk "BEGIN{printf \"%d\",   $sum_SU_M/$count}")
-  AVG_SP=$(awk "BEGIN{printf \"%.1f\", $sum_SP/$count}")
-  AVG_JU=$(awk "BEGIN{printf \"%.2f\", $sum_JU/$count}")
-  AVG_JT=$(awk "BEGIN{printf \"%.2f\", $sum_JT/$count}")
-  AVG_JPCT=$(awk "BEGIN{printf \"%.1f\", $sum_JPCT/$count}")
-else
-  echo "No average data."
-  exit 1
-fi
-
-read SYS_MEM_USED SYS_MEM_TOTAL <<<$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | awk 'NR==1{t=$2} NR==2{a=$2} END{printf "%d %d",(t-a)/1024,t/1024}')
-
-echo "Average Report"
-echo "============================================================="
-printf "CPU : Chromium: %5s | System: %5s @%4s MHz | Temp: %s\n" \
-  "$(color_usage $AVG_CU)" "$(color_usage $AVG_SU)" "$AVG_CF" "$(color_temp $AVG_ST)"
-printf "MEM : Chromium: %5s MB (%5s) | Sys: %5s/%5s MB (%5s)\n" \
-  "$AVG_CM" "$(color_usage $AVG_CMP)" "$AVG_SU_M" "$SYS_MEM_TOTAL" "$(color_usage $AVG_SP)"
-printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
-  "$(color_usage $AVG_GU)" "$AVG_GF" "$AVG_FPS" "$(color_temp $AVG_GT)"
-printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$AVG_JU" "$AVG_JT" "$(color_usage $AVG_JPCT)"
-echo "============================================================="
