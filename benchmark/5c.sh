@@ -23,6 +23,7 @@ SOC_THERMAL="/sys/class/thermal/thermal_zone$SOC_ZONE"
 GPU_THERMAL="/sys/class/thermal/thermal_zone$GPU_ZONE"
 
 NUM_CORES=$(nproc)
+FPS_LIST=()
 
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -208,6 +209,45 @@ get_fps() {
   echo 0 # couldn’t measure
 }
 
+calc_1pct_low_fps() {
+  local n=${#FPS_LIST[@]}
+  if (( n == 0 )); then
+    echo "0.0"
+    return
+  fi
+  local sorted=($(printf "%s\n" "${FPS_LIST[@]}" | sort -n))
+
+  local n_low=$(( (n + 99) / 100 ))
+  (( n_low < 1 )) && n_low=1
+
+  local sum=0
+  for (( i=0; i<n_low; i++ )); do
+    sum=$(( sum + sorted[i] ))
+  done
+
+  awk -v s="$sum" -v k="$n_low" 'BEGIN {
+    if (k > 0) printf "%.1f", s / k;
+    else           print "0.0";
+  }'
+}
+
+get_drop_pct() {
+  local ws js payload drop_pct
+  command -v websocat &>/dev/null || return
+  ws=$(ws_url)
+  [[ -z $ws || $ws == null ]] && { echo "0"; return; }
+
+  js='(async()=>{let count=0,expected=0;const start=performance.now(),ts0=start;function f(ts){count++;expected+=Math.floor((ts-ts0)/16.666);ts0=ts;if(performance.now()-start<1000)requestAnimationFrame(f);}requestAnimationFrame(f);await new Promise(r=>setTimeout(r,1100));const dropped=expected-count;return dropped>0?Math.round(dropped*100/(expected||1)):0;})()'
+
+  payload=$(printf '{"id":10,"method":"Runtime.evaluate","params":{"expression":"%s","awaitPromise":true,"returnByValue":true}}' "$js")
+
+  drop_pct=$(printf '%s' "$payload" \
+             | websocat -n1 "$ws" 2>/dev/null \
+             | jq -r '.result.result.value // 0')
+
+  echo "$drop_pct"
+}
+
 js_heap() {
   # Check for required tools
   command -v websocat &>/dev/null || return 1
@@ -276,6 +316,7 @@ echo "Launched Chromium (PID: $ROOT)"
 sleep 2
 
 for APP in "${APPS[@]}"; do
+  FPS_LIST=()
   echo "Navigating to: $APP"
   navigate_to_url "$APP"
   sleep "$DELAY"
@@ -284,7 +325,7 @@ for APP in "${APPS[@]}"; do
   sum_CU=0 sum_SU=0 sum_CF=0 sum_ST=0 \
     sum_GU=0 sum_GF=0 sum_FPS=0 sum_GT=0 \
     sum_CM=0 sum_CMP=0 sum_SU_M=0 sum_SP=0 \
-    sum_JU=0 sum_JT=0 sum_JPCT=0
+    sum_JU=0 sum_JT=0 sum_JPCT=0 sum_DP=0
   count=0
   START_TS=$(date +%s)
 
@@ -309,6 +350,9 @@ for APP in "${APPS[@]}"; do
     SYS_MEM_PCT=$(awk "BEGIN{printf \"%.1f\", ($SYS_MEM_USED/$SYS_MEM_TOTAL)*100}")
     FPS=$(get_fps)
     [[ -z $FPS ]] && FPS=0
+    FPS_LIST+=("$FPS")
+
+    DROP_PCT=$(get_drop_pct)
 
     if ! read -r T_HEAP U_HEAP HEAP_PCT <<<"$(js_heap 2>/dev/null)"; then
       T_HEAP=0
@@ -323,8 +367,8 @@ for APP in "${APPS[@]}"; do
       "$(color_usage $CHR_CPU)" "$(color_usage $SYS_CPU)" "$CPU_FREQ" "$(color_temp $SOC_TEMP)"
     printf "MEM : Chromium: %5s MB (%5s) | Sys: %5s/%5s MB (%5s)\n" \
       "$CHR_MEM" "$(color_usage $CHR_MEM_PCT)" "$SYS_MEM_USED" "$SYS_MEM_TOTAL" "$(color_usage $SYS_MEM_PCT)"
-    printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
-      "$(color_usage $G_USAGE)" "$G_FREQ" "$FPS" "$(color_temp $GPU_TEMP)"
+    printf "GPU : %5s @%4s MHz | FPS:%4s | Drop Frame: %4s | Temp: %s\n" \
+      "$(color_usage $G_USAGE)" "$G_FREQ" "$FPS" "$(color_usage $DROP_PCT)" "$(color_temp $GPU_TEMP)"
     printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$U_HEAP" "$T_HEAP" "$(color_usage $HEAP_PCT)"
     echo "============================================================="
 
@@ -343,6 +387,7 @@ for APP in "${APPS[@]}"; do
     sum_JU=$(awk "BEGIN{print $sum_JU+$U_HEAP}")
     sum_JT=$(awk "BEGIN{print $sum_JT+$T_HEAP}")
     sum_JPCT=$(awk "BEGIN{print $sum_JPCT+$HEAP_PCT}")
+    sum_DP=$(awk "BEGIN{print $sum_DP+$DROP_PCT}")
     ((count++))
 
     sleep 1
@@ -364,6 +409,9 @@ for APP in "${APPS[@]}"; do
     AVG_JU=$(awk "BEGIN{printf \"%.2f\", $sum_JU/$count}")
     AVG_JT=$(awk "BEGIN{printf \"%.2f\", $sum_JT/$count}")
     AVG_JPCT=$(awk "BEGIN{printf \"%.1f\", $sum_JPCT/$count}")
+    AVG_DP=$(awk "BEGIN{printf \"%.1f\", $sum_DP/$count}")
+
+    ONE_PCT_LOW_FPS=$(calc_1pct_low_fps)
   else
     echo "No average data for $APP."
     continue
@@ -377,8 +425,8 @@ for APP in "${APPS[@]}"; do
       "$AVG_CU" "$AVG_SU" "$AVG_CF" "$AVG_ST"
     printf "MEM : Chromium: %5s MB (%5s) | Sys: %5s MB\n" \
       "$AVG_CM" "$AVG_CMP" "$AVG_SU_M"
-    printf "GPU : %5s @%4s MHz | FPS:%4s | Temp: %s\n" \
-      "$AVG_GU" "$AVG_GF" "$AVG_FPS" "$AVG_GT"
+    printf "GPU : %5s @%4s MHz | FPS:%4s | 1%% Low FPS:%4s | Drop Frame: %5s | Temp: %s\n" \
+      "$AVG_GU" "$AVG_GF" "$AVG_FPS" "$ONE_PCT_LOW_FPS" "$(color_usage $AVG_DP)" "$AVG_GT"
     printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$AVG_JU" "$AVG_JT" "$AVG_JPCT"
     echo "============================================================="
     echo
