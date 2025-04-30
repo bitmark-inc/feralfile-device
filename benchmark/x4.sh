@@ -25,6 +25,7 @@ tmp() {
 }
 
 NUM_CORES=$(nproc)
+FPS_LIST=()
 
 # ─── CPU helpers ─────────────────────────────────────────────────────────────
 get_cpu_usages() {
@@ -278,6 +279,45 @@ get_fps() {
   echo 0 # couldn’t measure
 }
 
+calc_1pct_low_fps() {
+  local n=${#FPS_LIST[@]}
+  if (( n == 0 )); then
+    echo "0.0"
+    return
+  fi
+  local sorted=($(printf "%s\n" "${FPS_LIST[@]}" | sort -n))
+
+  local n_low=$(( (n + 99) / 100 ))
+  (( n_low < 1 )) && n_low=1
+
+  local sum=0
+  for (( i=0; i<n_low; i++ )); do
+    sum=$(( sum + sorted[i] ))
+  done
+
+  awk -v s="$sum" -v k="$n_low" 'BEGIN {
+    if (k > 0) printf "%.1f", s / k;
+    else           print "0.0";
+  }'
+}
+
+get_drop_pct() {
+  local ws js payload drop_pct
+  command -v websocat &>/dev/null || return
+  ws=$(ws_url)
+  [[ -z $ws || $ws == null ]] && { echo "0"; return; }
+
+  js='(async()=>{let count=0,expected=0;const start=performance.now(),ts0=start;function f(ts){count++;expected+=Math.floor((ts-ts0)/16.666);ts0=ts;if(performance.now()-start<1000)requestAnimationFrame(f);}requestAnimationFrame(f);await new Promise(r=>setTimeout(r,1100));const dropped=expected-count;return dropped>0?Math.round(dropped*100/(expected||1)):0;})()'
+
+  payload=$(printf '{"id":10,"method":"Runtime.evaluate","params":{"expression":"%s","awaitPromise":true,"returnByValue":true}}' "$js")
+
+  drop_pct=$(printf '%s' "$payload" \
+             | websocat -n1 "$ws" 2>/dev/null \
+             | jq -r '.result.result.value // 0')
+
+  echo "$drop_pct"
+}
+
 js_heap() {
   # Check for required tools
   command -v websocat &>/dev/null || return 1
@@ -336,7 +376,7 @@ MEM_TOTAL=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
 
 # ─── accumulators ───────────────────────────────────────────────────────────
 declare -A sum
-for k in cu su cf ct gu gf gt cm cmp sm smp fps ju jt jpct cw gw cwpct1 cwpct2 gwpct1 gwpct2; do sum[$k]=0; done
+for k in cu su cf ct gu gf gt cm cmp sm smp fps ju jt jpct cw gw cwpct1 cwpct2 gwpct1 gwpct2 df; do sum[$k]=0; done
 cnt=0 start=$(date +%s)
 
 # ─── main loop ──────────────────────────────────────────────────────────────
@@ -356,6 +396,8 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sys_pct=$(printf "%.1f" "$(bc -l <<<"$sys_used*100/$sys_tot")")
   fps=$(get_fps)
   [[ -z $fps ]] && fps=0
+  FPS_LIST+=("$FPS")
+  drop_pct=$(get_drop_pct)
   # JS heap stats
   if ! read -r t_heap u_heap heap_pct <<<"$(js_heap 2>/dev/null)"; then
     t_heap=0
@@ -370,7 +412,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
     "$(pct "$ch_cpu")" "$(pct "$sys_cpu")" "$cpu_freq" "$(tmp "$cpu_temp")" "$cw" "$(pct "$cwpct1")" "$(pct "$cwpct2")"
   printf "MEM : Chromium:%4d MB (%7s) | System:%4d/%4d MB (%7s)\n" \
     "$ch_mem" "$(pct "$ch_pct")" "$sys_used" "$sys_tot" "$(pct "$sys_pct")"
-  printf "GPU : %7s @%4d MHz | Temp: %s | Watts(%%PL1 %%PL2): %.2f W(%7s %7s) | FPS:%s\n" "$(pct "$gpu_busy")" "$gpu_freq" "$(tmp "$cpu_temp")" "$gw" "$(pct "$gwpct1")" "$(pct "$gwpct2")" "$fps"
+  printf "GPU : %7s @%4d MHz | Temp: %s | Watts(%%PL1 %%PL2): %.2f W(%7s %7s) | FPS:%s | Drop Frame: %s\n" "$(pct "$gpu_busy")" "$gpu_freq" "$(tmp "$cpu_temp")" "$gw" "$(pct "$gwpct1")" "$(pct "$gwpct2")" "$fps" "$(pct "$drop_pct")"
   printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$u_heap" "$t_heap" "$(pct $heap_pct)"
 
   # accum
@@ -395,6 +437,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sum[gw]=$(bc -l <<<"${sum[gw]}+$gw")
   sum[gwpct1]=$(bc -l <<<"${sum[gwpct1]}+$gwpct1")
   sum[gwpct2]=$(bc -l <<<"${sum[gwpct2]}+$gwpct2")
+  sum[df]=$(bc -l <<<"${sum[df]}+$drop_pct")
 
   ((cnt++))
 done
@@ -408,11 +451,13 @@ kill "$ROOT" 2>/dev/null || true
 avg() { printf "%.1f" "$(bc -l <<<"${sum[$1]}/$cnt")"; }
 avg_i() { echo "$(bc -l <<<"scale=2; ${sum[$1]}/$cnt")"; }
 
+one_pct_low_fps=$(calc_1pct_low_fps)
+
 echo -e "\nAverage over $cnt samples"
 printf "CPU : Chromium:%7s | System:%7s @%.0f MHz | Temp:%s | Watts(%%PL1 %%PL2): %.2f W(%7s %7s)\n" \
   "$(pct "$(avg cu)")" "$(pct "$(avg su)")" "$(avg_i cf)" "$(tmp "$(avg ct)")" "$(avg cw)" "$(pct "$(avg cwpct1)")" "$(pct "$(avg cwpct2)")"
 printf "MEM : Chromium:%.2f MB (%7s) | System:%.2f/%.2f MB (%7s)\n" \
   "$(avg_i cm)" "$(pct "$(avg cmp)")" "$(avg_i sm)" "$((MEM_TOTAL / 1024))" "$(pct "$(avg smp)")"
-printf "GPU : %7s @%.0f MHz | Watts(%%PL1 %%PL2): %.2f W(%7s %7s) | FPS:%s\n" \
-  "$(pct "$(avg gu)")" "$(avg_i gf)" "$(avg gw)" "$(pct "$(avg gwpct1)")" "$(pct "$(avg gwpct2)")" "$(avg fps)"
+printf "GPU : %7s @%.0f MHz | Watts(%%PL1 %%PL2): %.2f W(%7s %7s) | FPS:%s | 1%% Low FPS: %s | Drop Frame: %s \n" \
+  "$(pct "$(avg gu)")" "$(avg_i gf)" "$(avg gw)" "$(pct "$(avg gwpct1)")" "$(pct "$(avg gwpct2)")" "$(avg fps)" "$one_pct_low_fps" "$(pct "$(avg df)")"
 printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$(avg_i ju)" "$(avg_i jt)" "$(pct "$(avg jpct)")"
