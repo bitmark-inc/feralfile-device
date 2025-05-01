@@ -367,6 +367,7 @@ chromium-browser "$URL" \
   --disable-features=TranslateUI \
   --disable-popup-blocking \
   --autoplay-policy=no-user-gesture-required \
+  --enable-features=AcceleratedVideoDecodeLinuxGL \
   2>/dev/null &
 ROOT=$!
 sleep "$DELAY" # allow renderer + CDP
@@ -396,7 +397,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sys_pct=$(printf "%.1f" "$(bc -l <<<"$sys_used*100/$sys_tot")")
   fps=$(get_fps)
   [[ -z $fps ]] && fps=0
-  FPS_LIST+=("$FPS")
+  FPS_LIST+=("$fps")
   drop_pct=$(get_drop_pct)
   # JS heap stats
   if ! read -r t_heap u_heap heap_pct <<<"$(js_heap 2>/dev/null)"; then
