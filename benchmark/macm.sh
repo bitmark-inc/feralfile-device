@@ -53,6 +53,7 @@ tmp() {
 }
 
 NUM_CORES=$(sysctl -n hw.logicalcpu)
+FPS_LIST=()
 
 macmon_sample() {
     # Use set +e locally to prevent exit on failure
@@ -193,6 +194,9 @@ collect_data() {
     fi
 
     fps=$(get_fps 2>/dev/null || echo "0.0")
+    FPS_LIST+=("$fps")
+
+    drop_pct=$(get_drop_pct)
 
     # Display the metrics
     printf "\n%(%F %T)T | PIDs: %s\n" -1 "$C_PIDS"
@@ -200,8 +204,8 @@ collect_data() {
         "$(pct $ch_cpu)" "$(pct $sys_cpu)" "$cpu_freq" "$(tmp $cpu_temp)"
     printf "MEM : Chromium:%4d MB (%7s) | System:%4d/%4d MB (%7s)\n" \
         "$ch_mem" "$(pct $ch_pct)" "$sys_used" "$sys_tot" "$(pct $sys_pct)"
-    printf "GPU : %7s @%4d MHz | Temp:%s | FPS:%s\n" \
-        "$(pct $gpu_busy)" "$gpu_freq" "$(tmp $gpu_temp)" "$fps"
+    printf "GPU : %7s @%4d MHz | Temp:%s | FPS:%s | Drop Frame: %s\n" \
+        "$(pct $gpu_busy)" "$gpu_freq" "$(tmp $gpu_temp)" "$fps" "$(pct $drop_pct)"
     printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$u_heap" "$t_heap" "$(pct $heap_pct)"
 
     # Accumulate the metrics for later averaging
@@ -220,6 +224,7 @@ collect_data() {
     sum[ju]=$(bc -l <<<"${sum[ju]}+$u_heap" 2>/dev/null || echo "${sum[ju]}")
     sum[jt]=$(bc -l <<<"${sum[jt]}+$t_heap" 2>/dev/null || echo "${sum[jt]}")
     sum[jpct]=$(bc -l <<<"${sum[jpct]}+$heap_pct" 2>/dev/null || echo "${sum[jpct]}")
+    sum[df]=$(bc -l <<<"${sum[df]}+$drop_pct")
 
     return 0
 }
@@ -271,6 +276,45 @@ get_fps() {
     else
         echo "0.0"
     fi
+}
+
+calc_1pct_low_fps() {
+  local n=${#FPS_LIST[@]}
+  if (( n == 0 )); then
+    echo "0.0"
+    return
+  fi
+
+  local sorted=($(printf "%s\n" "${FPS_LIST[@]}" | sort -n))
+  local n_low=$(( (n + 99) / 100 ))
+  (( n_low < 1 )) && n_low=1
+
+  local sum=0.0
+  for (( i=0; i<n_low; i++ )); do
+    sum=$(awk -v s="$sum" -v v="${sorted[i]}" 'BEGIN { printf "%.10f", s + v }')
+  done
+
+  awk -v s="$sum" -v k="$n_low" 'BEGIN {
+    if (k > 0) printf "%.1f", s / k;
+    else           print "0.0";
+  }'
+}
+
+get_drop_pct() {
+  local ws js payload drop_pct
+  command -v websocat &>/dev/null || return
+  ws=$(ws_url)
+  [[ -z $ws || $ws == null ]] && { echo "0"; return; }
+
+  js='(async()=>{let count=0,expected=0;const start=performance.now(),ts0=start;function f(ts){count++;expected+=Math.floor((ts-ts0)/16.666);ts0=ts;if(performance.now()-start<1000)requestAnimationFrame(f);}requestAnimationFrame(f);await new Promise(r=>setTimeout(r,1100));const dropped=expected-count;return dropped>0?Math.round(dropped*100/(expected||1)):0;})()'
+
+  payload=$(printf '{"id":10,"method":"Runtime.evaluate","params":{"expression":"%s","awaitPromise":true,"returnByValue":true}}' "$js")
+
+  drop_pct=$(printf '%s' "$payload" \
+             | websocat -n1 "$ws" 2>/dev/null \
+             | jq -r '.result.result.value // 0')
+
+  echo "$drop_pct"
 }
 
 js_heap() {
@@ -338,7 +382,7 @@ sleep "$DELAY"
 C_PIDS=$(get_tree_pids "$ROOT" 2>/dev/null || echo "$ROOT")
 
 declare -A sum
-for k in cu su cf ct gu gf gt cm cmp sm smp fps ju jt jpct; do sum[$k]=0; done
+for k in cu su cf ct gu gf gt cm cmp sm smp fps ju jt jpct df; do sum[$k]=0; done
 cnt=0
 start=$(date +%s)
 
@@ -371,14 +415,15 @@ avg_i() { echo "$(bc -l <<<"scale=2; ${sum[$1]}/$cnt")"; }
 
 avg_cpu_freq=$(echo "scale=0; ${sum[cf]}/$cnt" | bc)
 avg_gpu_freq=$(echo "scale=0; ${sum[gf]}/$cnt" | bc)
+one_pct_low_fps=$(calc_1pct_low_fps)
 
 echo -e "\nAverage over $cnt samples"
 printf "CPU : Chromium:%7s | System:%7s @%4d MHz | Temp:%s\n" \
     "$(pct "$(avg cu)")" "$(pct "$(avg su)")" "$avg_cpu_freq" "$(tmp "$(avg ct)")"
 printf "MEM : Chromium:%.2f MB (%7s) | System:%.2f/%.2f MB (%7s)\n" \
     "$(avg_i cm)" "$(pct "$(avg cmp)")" "$(avg_i sm)" "$sys_tot" "$(pct "$(avg smp)")"
-printf "GPU : %7s @%4d MHz | Temp:%s | FPS:%s\n" \
-    "$(pct "$(avg gu)")" "$avg_gpu_freq" "$(tmp "$(avg gt)")" "$(avg fps)"
+printf "GPU : %7s @%4d MHz | Temp:%s | FPS:%s | 1%% Low FPS: %s | Drop Frame: %s\n" \
+    "$(pct "$(avg gu)")" "$avg_gpu_freq" "$(tmp "$(avg gt)")" "$(avg fps)" "$one_pct_low_fps" "$(pct "$(avg df)")"
 printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$(avg_i ju)" "$(avg_i jt)" "$(pct "$(avg jpct)")"
 
 trap - EXIT
