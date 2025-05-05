@@ -91,7 +91,7 @@ jobs:
           cd /build/work/debtap
           
           # Install debtap and dependencies
-          pacman -Sy --noconfirm fakeroot binutils
+          pacman -Sy --noconfirm fakeroot binutils pkgfile
           git clone https://github.com/helixarch/debtap.git
           
           # Copy the actual debtap script to /usr/local/bin
@@ -99,7 +99,8 @@ jobs:
           chmod +x /usr/local/bin/debtap
           export TERM=xterm
           
-          # Update debtap database
+          # Initialize pkgfile and update debtap database
+          pkgfile --update
           debtap -u
           
           # Convert the .deb to Arch package
