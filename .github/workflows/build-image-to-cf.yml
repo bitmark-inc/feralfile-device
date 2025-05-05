@@ -90,17 +90,19 @@ jobs:
           mkdir -p /build/work/debtap
           cd /build/work/debtap
           
-          # Install debtap and dependencies (using pacman instead of apt-get)
+          # Install debtap and dependencies
           pacman -Sy --noconfirm fakeroot binutils
           git clone https://github.com/helixarch/debtap.git
-          cp debtap/debtap /usr/local/bin/
+          
+          # Copy the actual debtap script to /usr/local/bin
+          cp -v debtap/debtap /usr/local/bin/debtap
           chmod +x /usr/local/bin/debtap
           export TERM=xterm
           
           # Convert the .deb to Arch package
           cd /build/work/local_repo
           DEB_FILE=$(ls *.deb | head -n 1)
-          /build/work/debtap/debtap "$DEB_FILE" -q
+          debtap -q "$DEB_FILE"
           
           # Create local repository
           repo-add custom.db.tar.zst *.pkg.tar.zst
