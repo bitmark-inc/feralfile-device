@@ -109,6 +109,21 @@ jobs:
           # Add the repository to pacman.conf
           echo -e "\n[custom]\nSigLevel = Optional TrustAll\nServer = file:///build/work/local_repo" >> /build/archiso-radxa-x4/pacman.conf
 
+      - name: Install extraction tools
+        run: |
+          sudo pacman -Sy --noconfirm binutils
+          
+      - name: Extract launcher .deb package
+        run: |
+          mkdir -p /tmp/launcher-extract
+          cd /tmp/launcher-extract
+          ar x /path/to/feralfile-launcher_0.4.6_amd64.deb
+          mkdir -p $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/bin
+          mkdir -p $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/share
+          tar xf data.tar.xz
+          cp -r usr/bin/* $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/bin/
+          cp -r usr/share/* $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/share/
+
       - name: Build ISO Image
         run: |
           cd /build
