@@ -99,6 +99,9 @@ jobs:
           chmod +x /usr/local/bin/debtap
           export TERM=xterm
           
+          # Update debtap database
+          debtap -u
+          
           # Convert the .deb to Arch package
           cd /build/work/local_repo
           DEB_FILE=$(ls *.deb | head -n 1)
