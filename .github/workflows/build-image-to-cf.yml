@@ -67,6 +67,29 @@ jobs:
           no_check_bucket = true
           EOF
 
+      - name: Download launcher app
+        run: |
+          # Create downloads directory
+          mkdir -p downloads
+          
+          # Download the launcher app from R2
+          APP_VERSION="${{ github.event.inputs.existing_app_version || github.event.inputs.version }}"
+          rclone copy "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile-launcher_${APP_VERSION}_arm64.deb" \
+            downloads/ \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=7 \
+            --verbose \
+            --stats=1s
+          
+          # Check if download was successful
+          if [ ! -f downloads/feralfile-launcher_${APP_VERSION}_arm64.deb ]; then
+            echo "Error: Failed to download feralfile-launcher_${APP_VERSION}_arm64.deb from R2"
+            exit 1
+          fi
+          
+          echo "Successfully downloaded feralfile-launcher_${APP_VERSION}_arm64.deb"
+
       - name: Prepare Build Environment
         run: |
           # Copy the archiso-radxa-x4 profile from repository to build directory
@@ -113,14 +136,6 @@ jobs:
           
           # Add the repository to pacman.conf
           echo -e "\n[custom]\nSigLevel = Optional TrustAll\nServer = file:///build/work/local_repo" >> /build/archiso-radxa-x4/pacman.conf
-
-      - name: Download launcher app
-        uses: robinraju/release-downloader@v1.7
-        with:
-          repository: "your-org/launcher-app-repo"
-          latest: true
-          fileName: "feralfile-launcher_*_amd64.deb"
-          out-file-path: "downloads"
 
       - name: Install extraction tools
         run: |
