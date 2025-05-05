@@ -77,25 +77,24 @@ jobs:
           mkdir -p /build/work/local_repo
           
           # Download the launcher app
-          # APP_VERSION="${{ github.event.inputs.existing_app_version || github.event.inputs.version }}"
-          # rclone copy "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile-launcher_${APP_VERSION}_amd64.deb" \
-          #   /build/work/local_repo/ \
-          #   --s3-upload-cutoff=100M \
-          #   --s3-chunk-size=100M \
-          #   --transfers=7 \
-          #   --verbose \
-          #   --stats=1s
+          APP_VERSION="${{ github.event.inputs.existing_app_version || github.event.inputs.version }}"
+          rclone copy "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile-launcher_${APP_VERSION}_amd64.deb" \
+            /build/work/local_repo/ \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=7 \
+            --verbose \
+            --stats=1s
           
           # Set up a temporary directory for conversion
           mkdir -p /build/work/debtap
           cd /build/work/debtap
           
-          # Install debtap and dependencies
-          sudo apt-get update
-          sudo apt-get install -y fakeroot binutils
+          # Install debtap and dependencies (using pacman instead of apt-get)
+          pacman -Sy --noconfirm fakeroot binutils
           git clone https://github.com/helixarch/debtap.git
-          sudo cp debtap/debtap /usr/local/bin/
-          sudo chmod +x /usr/local/bin/debtap
+          cp debtap/debtap /usr/local/bin/
+          chmod +x /usr/local/bin/debtap
           export TERM=xterm
           
           # Convert the .deb to Arch package
