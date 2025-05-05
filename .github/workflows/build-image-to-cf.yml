@@ -109,20 +109,58 @@ jobs:
           # Add the repository to pacman.conf
           echo -e "\n[custom]\nSigLevel = Optional TrustAll\nServer = file:///build/work/local_repo" >> /build/archiso-radxa-x4/pacman.conf
 
+      - name: Download launcher app
+        uses: robinraju/release-downloader@v1.7
+        with:
+          repository: "your-org/launcher-app-repo"
+          latest: true
+          fileName: "feralfile-launcher_*_amd64.deb"
+          out-file-path: "downloads"
+
       - name: Install extraction tools
         run: |
           sudo pacman -Sy --noconfirm binutils
-          
-      - name: Extract launcher .deb package
+
+      - name: Extract and integrate launcher .deb package
         run: |
+          # Create temporary directories
           mkdir -p /tmp/launcher-extract
+          
+          # Extract the .deb package
           cd /tmp/launcher-extract
-          ar x /path/to/feralfile-launcher_0.4.6_amd64.deb
+          ar x $GITHUB_WORKSPACE/downloads/feralfile-launcher_*.deb
+          
+          # Extract the data archive (might be .tar.xz or .tar.zst)
+          if [ -f "data.tar.xz" ]; then
+            tar xf data.tar.xz
+          elif [ -f "data.tar.zst" ]; then
+            tar xf data.tar.zst
+          else
+            echo "Unknown data archive format in .deb package"
+            ls -la
+            exit 1
+          fi
+          
+          # Create target directories
           mkdir -p $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/bin
           mkdir -p $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/share
-          tar xf data.tar.xz
-          cp -r usr/bin/* $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/bin/
-          cp -r usr/share/* $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/share/
+          
+          # Copy application files to archiso profile
+          if [ -d "usr/bin" ]; then
+            cp -rv usr/bin/* $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/bin/
+          fi
+          
+          if [ -d "usr/share" ]; then
+            cp -rv usr/share/* $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/share/
+          fi
+          
+          # Extract dependencies info for reference
+          if [ -f "control.tar.xz" ]; then
+            mkdir -p /tmp/control
+            tar xf control.tar.xz -C /tmp/control
+            echo "Dependencies from Debian package:"
+            cat /tmp/control/control | grep Depends
+          fi
 
       - name: Build ISO Image
         run: |
