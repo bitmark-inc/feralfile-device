@@ -207,6 +207,7 @@ jobs:
       - name: Build Flutter app for Linux
         run: |
           export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/lib/pkgconfig:/usr/share/pkgconfig
+          export FLUTTER_LINUX_USE_WAYLAND=1
           flutter config --enable-linux-desktop
           flutter build linux --release --target-platform=linux-x64
 
