@@ -1,0 +1,49 @@
+# Base packages
+base
+linux
+linux-firmware
+mkinitcpio
+
+# Boot and firmware
+intel-ucode
+grub
+efibootmgr
+
+# System utilities
+sudo
+git
+vim
+nano
+wget
+curl
+networkmanager
+wpa_supplicant
+openssh
+dhcpcd
+dialog
+reflector
+
+# Wayland & Cage (Kiosk mode)
+wayland
+cage
+wlroots
+xorg-xwayland
+xdg-utils
+
+# Fonts and themes
+ttf-dejavu
+ttf-liberation
+adwaita-icon-theme
+
+# Radxa X4 specific packages
+mesa
+intel-media-driver
+vulkan-intel
+libva-intel-driver
+bluez
+bluez-utils
+pulseaudio
+pulseaudio-bluetooth
+
+# Our application
+feralfile-launcher

@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=FeralFile Launcher
+Exec=/usr/bin/feralfile-launcher
+Terminal=false
+X-GNOME-Autostart-enabled=true
