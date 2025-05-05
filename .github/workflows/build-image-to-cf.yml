@@ -90,9 +90,13 @@ jobs:
           mkdir -p /build/work/debtap
           cd /build/work/debtap
           
-          # Clone and set up debtap
-          git clone https://github.com/helixarch/debtap.git .
-          ./debtap -u
+          # Install debtap and dependencies
+          sudo apt-get update
+          sudo apt-get install -y fakeroot binutils
+          git clone https://github.com/helixarch/debtap.git
+          sudo cp debtap/debtap /usr/local/bin/
+          sudo chmod +x /usr/local/bin/debtap
+          export TERM=xterm
           
           # Convert the .deb to Arch package
           cd /build/work/local_repo
