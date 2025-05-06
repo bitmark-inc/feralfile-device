@@ -189,32 +189,39 @@ jobs:
 
       - name: Setup pacman
         run: |
-          # Create mirrorlist
-          mkdir -p /etc/pacman.d
-          echo "Server = https://america.mirror.pkgbuild.com/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist
-          echo "Server = https://mirrors.edge.kernel.org/archlinux/\$repo/os/\$arch" >> /etc/pacman.d/mirrorlist
+          # Download official mirrorlist
+          curl -o /etc/pacman.d/mirrorlist "https://archlinux.org/mirrorlist/?country=US&protocol=https&ip_version=4&use_mirror_status=on"
+          
+          # Uncomment all mirrors
+          sed -i 's/^#Server/Server/' /etc/pacman.d/mirrorlist
+          
+          # Show current mirrorlist
+          cat /etc/pacman.d/mirrorlist
+          
+          # Test direct access to a few mirrors
+          echo "Testing mirror access..."
+          curl -I "https://mirrors.mit.edu/archlinux/core/os/x86_64/core.db"
+          curl -I "https://mirrors.ocf.berkeley.edu/archlinux/core/os/x86_64/core.db"
           
           # Initialize keyring
           rm -rf /etc/pacman.d/gnupg
           pacman-key --init
           pacman-key --populate archlinux
           
-          # Update databases with verbose output
-          pacman -Syy --noconfirm --verbose
-          
-          # Test mirror access
-          curl -I https://america.mirror.pkgbuild.com/community/os/x86_64/community.db
-          
-          # Create required directories for permissions
-          mkdir -p /build/work/x86_64/airootfs/etc
-          touch /build/work/x86_64/airootfs/etc/shadow
-          touch /build/work/x86_64/airootfs/etc/gshadow
-          chmod 0400 /build/work/x86_64/airootfs/etc/shadow
-          chmod 0400 /build/work/x86_64/airootfs/etc/gshadow
+          # Update databases with debug output
+          pacman -Syy --debug
 
       - name: Build ISO Image
         run: |
           cd /build
+          
+          # Show environment info
+          echo "Current directory: $(pwd)"
+          echo "Network status:"
+          ip addr
+          ping -c 1 archlinux.org || true
+          
+          # Build with verbose output
           mkarchiso -v -w /build/work -o /build/out /build/archiso-radxa-x4
           
           # Rename the ISO
