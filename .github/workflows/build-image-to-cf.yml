@@ -187,6 +187,20 @@ jobs:
           cp -r archiso-radxa-x4 /build/
           cp -r /usr/share/archiso/configs/releng/syslinux/* archiso-radxa-x4/syslinux/
 
+      - name: Setup pacman
+        run: |
+          # Create mirrorlist
+          mkdir -p /etc/pacman.d
+          echo 'Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch' > /etc/pacman.d/mirrorlist
+          echo 'Server = https://mirrors.kernel.org/archlinux/$repo/os/$arch' >> /etc/pacman.d/mirrorlist
+          
+          # Initialize pacman keyring
+          pacman-key --init
+          pacman-key --populate archlinux
+          
+          # Update package databases
+          pacman -Sy
+
       - name: Build ISO Image
         run: |
           cd /build
