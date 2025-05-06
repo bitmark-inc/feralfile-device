@@ -185,6 +185,7 @@ jobs:
       - name: Copy archiso profile
         run: |
           cp -r archiso-radxa-x4 /build/
+          cp -r /usr/share/archiso/configs/releng/syslinux/* archiso-radxa-x4/syslinux/
 
       - name: Build ISO Image
         run: |
