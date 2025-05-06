@@ -368,6 +368,7 @@ chromium "$URL" \
   --disable-features=TranslateUI \
   --disable-popup-blocking \
   --autoplay-policy=no-user-gesture-required \
+  --allow-file-access-from-files \
   --enable-features=AcceleratedVideoDecodeLinuxGL \
   2>/dev/null &
 ROOT=$!
