@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+get_cmdline() {
+    local param
+    for param in $(< /proc/cmdline); do
+        case "${param}" in
+            $1=*) echo "${param##*=}" ; return 0 ;;
+            $1) return 0 ;;
+        esac
+    done
+    return 1
+}
+
+mirror_list_selector() {
+    local mirrors=$1
+    local selector=$2
+    if [[ -n "${selector}" && -r "${selector}" ]]; then
+        selector_path="${selector}"
+    else
+        selector_path="/etc/pacman.d/mirrorlist.pacnew"
+    fi
+    # Check if pacnew file exists since it may not be created if list didn't change
+    if [[ -f "${selector_path}" ]]; then
+        cp "${selector_path}" /etc/pacman.d/mirrorlist
+        if [[ -n "${mirrors}" ]]; then
+            /usr/bin/reflector --verbose --protocol "${mirrors%,*}" -a 5 --score 5 --save /etc/pacman.d/mirrorlist
+        fi
+    elif [[ -f /etc/pacman.d/mirrorlist.pacorig ]]; then
+        cp /etc/pacman.d/mirrorlist.pacorig /etc/pacman.d/mirrorlist
+    fi
+}
+
+mirror_list_pacnew="${MIRROR_PACNEW:-}"
+mirror_list_mirror_protocols="${MIRROR_PROTOCOLS:-}"
+
+if get_cmdline mirror; then
+    mirror_list_pacnew=$(get_cmdline mirror_pacnew)
+    mirror_list_mirror_protocols=$(get_cmdline mirror_protocols)
+fi
+
+mirror_list_selector "${mirror_list_mirror_protocols}" "${mirror_list_pacnew}"
