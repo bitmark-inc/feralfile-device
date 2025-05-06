@@ -189,28 +189,32 @@ jobs:
 
       - name: Setup pacman
         run: |
-          # Create mirrorlist with correct URLs
+          # Create mirrorlist
           mkdir -p /etc/pacman.d
-          cat > /etc/pacman.d/mirrorlist << 'EOF'
-          # Arch Linux mirrorlist
-          Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
-          Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch
-          Server = https://mirrors.kernel.org/archlinux/$repo/os/$arch
-          Server = https://archive.archlinux.org/repos/last/$repo/os/$arch
-          EOF
+          echo "Server = https://america.mirror.pkgbuild.com/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist
+          echo "Server = https://mirrors.edge.kernel.org/archlinux/\$repo/os/\$arch" >> /etc/pacman.d/mirrorlist
           
-          # Initialize pacman keyring
+          # Initialize keyring
+          rm -rf /etc/pacman.d/gnupg
           pacman-key --init
           pacman-key --populate archlinux
           
-          # Force refresh package databases
-          pacman -Syy
+          # Update databases with verbose output
+          pacman -Syy --noconfirm --verbose
+          
+          # Test mirror access
+          curl -I https://america.mirror.pkgbuild.com/community/os/x86_64/community.db
+          
+          # Create required directories for permissions
+          mkdir -p /build/work/x86_64/airootfs/etc
+          touch /build/work/x86_64/airootfs/etc/shadow
+          touch /build/work/x86_64/airootfs/etc/gshadow
+          chmod 0400 /build/work/x86_64/airootfs/etc/shadow
+          chmod 0400 /build/work/x86_64/airootfs/etc/gshadow
 
       - name: Build ISO Image
         run: |
           cd /build
-          
-          # Build the ISO
           mkarchiso -v -w /build/work -o /build/out /build/archiso-radxa-x4
           
           # Rename the ISO
