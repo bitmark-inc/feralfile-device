@@ -182,6 +182,10 @@ jobs:
             cat /tmp/control/control | grep Depends
           fi
 
+      - name: Copy archiso profile
+        run: |
+          cp -r archiso-radxa-x4 /build/
+
       - name: Build ISO Image
         run: |
           cd /build

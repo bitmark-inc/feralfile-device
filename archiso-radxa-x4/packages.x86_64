@@ -47,3 +47,16 @@ pulseaudio-bluetooth
 
 # Our application
 feralfile-launcher
+
+# Bootloaders
+syslinux
+
+# Kiosk packages
+chromium
+wlr-randr
+seatd
+iwd
+
+# Additional packages
+intel-gpu-tools
+lm_sensors
