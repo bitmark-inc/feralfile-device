@@ -26,6 +26,7 @@ tmp() {
 
 NUM_CORES=$(nproc)
 FPS_LIST=()
+MAX_POWER=30
 
 # ─── CPU helpers ─────────────────────────────────────────────────────────────
 get_cpu_usages() {
@@ -180,7 +181,7 @@ gpu_stats() {
 # ─── FPS helper  (CDP → fallback 0) ──────────────────────────────────────────
 DEBUG_PORT=9222
 
-ws_url() { # first “page” target’s WS URL
+ws_url() { # first "page" target's WS URL
   curl -s http://127.0.0.1:$DEBUG_PORT/json |
     jq -r '[ .[] | select(.type=="page") ][0].webSocketDebuggerUrl'
 }
@@ -276,7 +277,7 @@ get_fps() {
     return
   fi
 
-  echo 0 # couldn’t measure
+  echo 0 # couldn't measure
 }
 
 calc_1pct_low_fps() {
@@ -356,6 +357,36 @@ js_heap() {
   printf "%.2f %.2f %.1f" "$t_mb" "$u_mb" "$pct"
 }
 
+# ─── Power meter helpers ────────────────────────────────────────────
+get_power_meter_readings() {
+  local output
+  output=$(sigrok-cli -d rdtech-tc:conn=/dev/ttyACM0 --frames 1 2>/dev/null)
+  
+  # Extract voltage and current using grep and awk
+  local voltage current_ma
+  voltage=$(echo "$output" | grep -o "V: [0-9.]* V" | awk '{print $2}')
+  current_ma=$(echo "$output" | grep -o "I: [0-9.]* mA" | awk '{print $2}')
+  
+  # If values were not found, return zeros
+  [[ -z "$voltage" ]] && voltage=0
+  [[ -z "$current_ma" ]] && current_ma=0
+  
+  # Convert current from mA to A
+  local current
+  current=$(awk "BEGIN {printf \"%.3f\", $current_ma/1000}")
+  
+  # Calculate power in watts (voltage * current)
+  local power
+  power=$(awk "BEGIN {printf \"%.2f\", $voltage * $current}")
+  
+  # Calculate power usage percentage (30W max)
+  local power_pct
+  power_pct=$(awk "BEGIN {printf \"%.1f\", $power * 100 / $MAX_POWER}")
+  
+  # Return space-separated voltage, current, power, and power percentage
+  echo "$voltage $current $power $power_pct"
+}
+
 # ─── launch Chromium ────────────────────────────────────────────────────────
 chromium "$URL" \
   --remote-debugging-port=$DEBUG_PORT \
@@ -379,7 +410,7 @@ MEM_TOTAL=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
 
 # ─── accumulators ───────────────────────────────────────────────────────────
 declare -A sum
-for k in cu su cf ct gu gf gt cm cmp sm smp fps ju jt jpct cw gw cwpct1 cwpct2 gwpct1 gwpct2 df; do sum[$k]=0; done
+for k in cu su cf ct gu gf gt cm cmp sm smp fps ju jt jpct cw gw cwpct1 cwpct2 gwpct1 gwpct2 df v i w wpct; do sum[$k]=0; done
 cnt=0 start=$(date +%s)
 
 # ─── main loop ──────────────────────────────────────────────────────────────
@@ -408,6 +439,9 @@ while kill -0 "$ROOT" 2>/dev/null; do
     heap_pct=0
   fi
   read cw cwpct1 cwpct2 gw gwpct1 gwpct2 <<<"$(get_watts)"
+  
+  # Power meter readings
+  read -r voltage current power power_pct <<<"$(get_power_meter_readings)"
 
   # ─── live output ─────────────────────────────────────────────────────────
   printf "\n%(%F %T)T | PIDs: %s\n" -1 "$C_PIDS"
@@ -417,6 +451,7 @@ while kill -0 "$ROOT" 2>/dev/null; do
     "$ch_mem" "$(pct "$ch_pct")" "$sys_used" "$sys_tot" "$(pct "$sys_pct")"
   printf "GPU : %7s @%4d MHz | Temp: %s | Watts(%%PL1 %%PL2): %.2f W(%7s %7s) | FPS:%s | Drop Frame: %s\n" "$(pct "$gpu_busy")" "$gpu_freq" "$(tmp "$cpu_temp")" "$gw" "$(pct "$gwpct1")" "$(pct "$gwpct2")" "$fps" "$(pct "$drop_pct")"
   printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$u_heap" "$t_heap" "$(pct $heap_pct)"
+  printf "Power Meter: %.2f V | %.3f A | %.2f W (%7s)\n" "$voltage" "$current" "$power" "$(pct "$power_pct")"
 
   # accum
   sum[cu]=$(bc -l <<<"${sum[cu]}+$ch_cpu")
@@ -441,6 +476,10 @@ while kill -0 "$ROOT" 2>/dev/null; do
   sum[gwpct1]=$(bc -l <<<"${sum[gwpct1]}+$gwpct1")
   sum[gwpct2]=$(bc -l <<<"${sum[gwpct2]}+$gwpct2")
   sum[df]=$(bc -l <<<"${sum[df]}+$drop_pct")
+  sum[v]=$(bc -l <<<"${sum[v]}+$voltage")
+  sum[i]=$(bc -l <<<"${sum[i]}+$current")
+  sum[w]=$(bc -l <<<"${sum[w]}+$power")
+  sum[wpct]=$(bc -l <<<"${sum[wpct]}+$power_pct")
 
   ((cnt++))
 done
@@ -464,3 +503,4 @@ printf "MEM : Chromium:%.2f MB (%7s) | System:%.2f/%.2f MB (%7s)\n" \
 printf "GPU : %7s @%.0f MHz | Watts(%%PL1 %%PL2): %.2f W(%7s %7s) | FPS:%s | 1%% Low FPS: %s | Drop Frame: %s \n" \
   "$(pct "$(avg gu)")" "$(avg_i gf)" "$(avg gw)" "$(pct "$(avg gwpct1)")" "$(pct "$(avg gwpct2)")" "$(avg fps)" "$one_pct_low_fps" "$(pct "$(avg df)")"
 printf "JS Heap : %.2f/%.2f MB (%7s)\n" "$(avg_i ju)" "$(avg_i jt)" "$(pct "$(avg jpct)")"
+printf "Power Meter: %.2f V | %.3f A | %.2f W (%7s)\n" "$(avg_i v)" "$(avg_i i)" "$(avg_i w)" "$(pct "$(avg wpct)")"

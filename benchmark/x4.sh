@@ -26,7 +26,7 @@ tmp() {
 
 NUM_CORES=$(nproc)
 FPS_LIST=()
-
+MAX_POWER=30
 # ─── CPU helpers ─────────────────────────────────────────────────────────────
 get_cpu_usages() {
   # ----- Function: get total system time -----
@@ -380,7 +380,7 @@ get_power_meter_readings() {
   
   # Calculate power usage percentage (30W max)
   local power_pct
-  power_pct=$(awk "BEGIN {printf \"%.1f\", $power * 100 / 30}")
+  power_pct=$(awk "BEGIN {printf \"%.1f\", $power * 100 / $MAX_POWER}")
   
   # Return space-separated voltage, current, power, and power percentage
   echo "$voltage $current $power $power_pct"
