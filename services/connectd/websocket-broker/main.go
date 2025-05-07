@@ -13,13 +13,14 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const wsURL = "wss://tv-cast-coordination.bitmark-development.workers.dev/api/connection"
-
 // Configuration for CDP connection
 type Config struct {
 	sync.RWMutex
 	CDPHost string
 	CDPPort int
+
+	WsURL    string
+	WsAPIKey string
 
 	LocationID string
 	TopicID    string
@@ -27,11 +28,14 @@ type Config struct {
 
 // Environment variable names
 const (
-	ENV_CDP_PORT = "CDP_PORT"
+	ENV_CDP_PORT   = "CDP_PORT"
+	ENV_WS_API_KEY = "WS_API_KEY"
+	ENV_WS_URL     = "WS_URL"
 
 	// Default values
 	CDP_HOST         = "localhost"
 	DEFAULT_CDP_PORT = 9222
+	DEFAULT_WS_URL   = "wss://tv-cast-coordination.bitmark-development.workers.dev/api/connection"
 )
 
 var (
@@ -54,9 +58,21 @@ func init() {
 		}
 	}
 
+	wsApiKey := os.Getenv(ENV_WS_API_KEY)
+	if wsApiKey == "" {
+		log.Fatalf("Missing %s environment variable", ENV_WS_API_KEY)
+	}
+
+	wsURL := os.Getenv(ENV_WS_URL)
+	if wsURL == "" {
+		wsURL = DEFAULT_WS_URL
+	}
+
 	config = &Config{
-		CDPHost: CDP_HOST,
-		CDPPort: cdpPort,
+		CDPHost:  CDP_HOST,
+		CDPPort:  cdpPort,
+		WsAPIKey: wsApiKey,
+		WsURL:    wsURL,
 	}
 
 	log.Printf("CDP configuration: %s:%d", config.CDPHost, config.CDPPort)
@@ -98,15 +114,21 @@ func startWatchdog() {
 
 func connectAndListen() error {
 	// Create URL with locationID and topicID if available
-	connectURL := wsURL
+	connectURL := config.WsURL
 
 	config.RLock()
+	if config.WsAPIKey != "" {
+		connectURL += fmt.Sprintf("/api/connection?apiKey=%s", config.WsAPIKey)
+	}
+
 	if config.LocationID != "" {
 		connectURL += fmt.Sprintf("&locationID=%s", config.LocationID)
 	}
+
 	if config.TopicID != "" {
 		connectURL += fmt.Sprintf("&topicID=%s", config.TopicID)
 	}
+
 	config.RUnlock()
 
 	log.Printf("Connecting to WebSocket: %s", connectURL)
