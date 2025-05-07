@@ -34,7 +34,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm
           pacman -S --noconfirm archiso arch-install-scripts dosfstools libisoburn squashfs-tools \
-            git curl wget base-devel jq zip unzip fakeroot binutils
+            git curl rclone wget base-devel jq zip unzip fakeroot binutils
 
       - name: Copy archiso profile
         run: |
