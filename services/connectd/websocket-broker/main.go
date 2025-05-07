@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"sync"
@@ -33,13 +35,22 @@ const (
 	ENV_WS_URL     = "WS_URL"
 
 	// Default values
-	CDP_HOST         = "localhost"
+	CDP_HOST         = "http://127.0.0.1"
 	DEFAULT_CDP_PORT = 9222
 	DEFAULT_WS_URL   = "wss://tv-cast-coordination.bitmark-development.workers.dev/api/connection"
+
+	// CDP Methods
+	NavigateMethod  = "Page.navigate"
+	EvaluateMethod  = "Runtime.evaluate"
 )
 
 var (
 	config *Config
+)
+
+var (
+	cdpConn *websocket.Conn
+	reqID   = 0
 )
 
 // Retry config
@@ -82,6 +93,30 @@ func main() {
 	// Start watchdog in a goroutine
 	go startWatchdog()
 
+	// Connect to Chromium CDP
+	err := initCDP()
+	if err != nil {
+		log.Fatalf("CDP init failed: %v", err)
+	}
+	defer cdpConn.Close()
+
+	// Test send CDP request
+	// Navigate to YouTube
+	err = sendCDPRequest(NavigateMethod, map[string]interface{}{
+		"url": "https://www.youtube.com",
+	})
+	if err != nil {
+		log.Printf("Failed to navigate to YouTube: %v", err)
+	}
+
+	// Evaluate JavaScript: console.log Hello World
+	err = sendCDPRequest(EvaluateMethod, map[string]interface{}{
+		"expression": "console.log('Hello World')",
+	})
+	if err != nil {
+		log.Printf("Failed to evaluate JavaScript: %v", err)
+	}
+
 	retries := 0
 
 	for {
@@ -100,6 +135,85 @@ func main() {
 			retries = 0
 		}
 	}
+}
+
+// initCDP fetches WS endpoint and dials Chromium
+func initCDP() error {
+	// Fetch JSON with websocket debugger URL
+	resp, err := http.Get(config.CDPHost + ":" + strconv.Itoa(config.CDPPort) + "/json")
+	if err != nil {
+		return fmt.Errorf("failed to fetch debug targets: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read targets: %w", err)
+	}
+
+	var targets []struct {
+		Type                  string `json:"type"`
+		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	}
+	if err := json.Unmarshal(body, &targets); err != nil {
+		return fmt.Errorf("invalid targets format: %w", err)
+	}
+
+	// Connect to CDP websocket
+	for _, t := range targets {
+		if t.Type == "page" {
+			cdpConn, _, err = websocket.DefaultDialer.Dial(t.WebSocketDebuggerURL, nil)
+			if err != nil {
+				return fmt.Errorf("cdp dial error: %w", err)
+			}
+			log.Println("Connected to Chromium CDP page target:", t.WebSocketDebuggerURL)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no page target found in Chromium instance")
+}
+
+// sendCDPRequest sends a raw CDP JSON-RPC message and waits for response
+func sendCDPRequest(method string, params map[string]interface{}) error {
+	if cdpConn == nil {
+		return fmt.Errorf("CDP connection is not initialized")
+	}
+
+	reqID++
+	msg := map[string]interface{}{
+		"id":     reqID,
+		"method": method,
+		"params": params,
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("CDP marshal error: %w", err)
+	}
+
+	if err := cdpConn.WriteMessage(websocket.TextMessage, data); err != nil {
+		return fmt.Errorf("CDP write error: %w", err)
+	}
+
+	// Wait for response
+	_, response, err := cdpConn.ReadMessage()
+	if err != nil {
+		return fmt.Errorf("failed to read CDP response: %w", err)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(response, &resp); err != nil {
+		return fmt.Errorf("failed to parse CDP response: %w", err)
+	}
+
+	// Check for error in response
+	if err, ok := resp["error"].(map[string]interface{}); ok {
+		return fmt.Errorf("CDP error: %v", err)
+	}
+
+	log.Printf("CDP response: %s", response)
+	return nil
 }
 
 func startWatchdog() {
