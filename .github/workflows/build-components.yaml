@@ -58,7 +58,7 @@ jobs:
         id: set-version
         run: |
           if [ -z "${{ inputs.version }}" ]; then
-            VERSION=$(git rev-parse --short HEAD)
+            VERSION="{{ github.sha }}"
           else
             VERSION="${{ inputs.version }}"
           fi
