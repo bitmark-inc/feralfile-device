@@ -1,4 +1,5 @@
-# System utilities
+# System
+base
 sudo
 git
 vim
@@ -8,6 +9,18 @@ curl
 openssh
 dialog
 reflector
+linux
+linux-firmware
+mkinitcpio
+mkinitcpio-archiso
+arch-install-scripts
+
+# Boot support
+intel-ucode
+efibootmgr
+
+# Networking core
+networkmanager
 
 # Wayland & Kiosk mode
 wayland
@@ -28,7 +41,6 @@ adwaita-icon-theme
 mesa
 intel-media-driver
 vulkan-intel
-libva-intel-driver
 
 # Audio and Bluetooth
 bluez

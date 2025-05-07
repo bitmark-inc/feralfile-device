@@ -7,10 +7,6 @@ on:
         description: 'Image version'
         required: true
         default: '0.0.1'
-      existing_app_version:
-        description: 'Existing app version (leave empty to build new app)'
-        required: false
-        type: string
       environment:
         description: "Environment to build"
         required: false
@@ -21,24 +17,11 @@ on:
           - Production
 
 jobs:
-  # --- STEP 1: Build or use existing launcher app ---
-  build-app:
-    name: Build Launcher App for x86_64
-    if: ${{ github.event.inputs.existing_app_version == '' }}
-    uses: ./.github/workflows/build-app-x86.yml
-    with:
-      version: ${{ github.event.inputs.version }}
-      environment: ${{ github.event.inputs.environment }}
-    secrets: inherit
-
-  # --- STEP 2: Build Arch Linux Image for Radxa X4 ---
   build-image:
     name: Generate Arch Linux Image for Radxa X4
     runs-on: ubuntu-latest
-    needs: [build-app]
-    if: ${{ always() && (needs.build-app.result == 'success' || needs.build-app.result == 'skipped') }}
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
-    
+
     container:
       image: archlinux:latest
       options: --privileged
@@ -51,7 +34,34 @@ jobs:
         run: |
           pacman -Syu --noconfirm
           pacman -S --noconfirm archiso arch-install-scripts dosfstools libisoburn squashfs-tools \
-            git curl wget base-devel jq rclone zip unzip fakeroot binutils
+            git curl wget base-devel jq zip unzip fakeroot binutils
+
+      - name: Copy archiso profile
+        run: |
+          mkdir -p /build
+          cp -r archiso-radxa-x4 /build/
+
+      - name: Setup pacman
+        run: |
+          curl -o /etc/pacman.d/mirrorlist "https://archlinux.org/mirrorlist/?country=US&protocol=https&ip_version=4&use_mirror_status=on"
+          sed -i 's/^#Server/Server/' /etc/pacman.d/mirrorlist
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Syy --debug
+
+      - name: Build ISO Image
+        run: |
+          cd /build
+          mkarchiso -v -w /build/work -o /build/out /build/archiso-radxa-x4
+          ISO_FILE=$(find /build/out -name "*.iso" | head -n 1)
+          if [ -f "$ISO_FILE" ]; then
+            NEW_NAME="radxa-x4-arch-${{ github.event.inputs.version }}.iso"
+            mv "$ISO_FILE" "/build/out/$NEW_NAME"
+            echo "ISO created: /build/out/$NEW_NAME"
+          else
+            echo "Error: ISO file not found"
+            exit 1
+          fi
 
       - name: Configure rclone
         run: |
@@ -67,183 +77,11 @@ jobs:
           no_check_bucket = true
           EOF
 
-      - name: Download launcher app
-        run: |
-          # Create downloads directory
-          mkdir -p downloads
-          
-          # Download the launcher app from R2
-          APP_VERSION="${{ github.event.inputs.existing_app_version || github.event.inputs.version }}"
-          rclone copy "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile-launcher_${APP_VERSION}_amd64.deb" \
-            downloads/ \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=7 \
-            --verbose \
-            --stats=1s
-          
-          # Check if download was successful
-          if [ ! -f downloads/feralfile-launcher_${APP_VERSION}_amd64.deb ]; then
-            echo "Error: Failed to download feralfile-launcher_${APP_VERSION}_amd64.deb from R2"
-            exit 1
-          fi
-          
-          echo "Successfully downloaded feralfile-launcher_${APP_VERSION}_amd64.deb"
-
-      - name: Prepare Build Environment
-        run: |
-          # Copy the archiso-radxa-x4 profile from repository to build directory
-          mkdir -p /build
-          cp -r $GITHUB_WORKSPACE/archiso-radxa-x4 /build/
-          
-          # Create a working directory for package conversion
-          mkdir -p /build/work/local_repo
-          
-          # Download the launcher app
-          APP_VERSION="${{ github.event.inputs.existing_app_version || github.event.inputs.version }}"
-          rclone copy "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile-launcher_${APP_VERSION}_amd64.deb" \
-            /build/work/local_repo/ \
-            --s3-upload-cutoff=100M \
-            --s3-chunk-size=100M \
-            --transfers=7 \
-            --verbose \
-            --stats=1s
-          
-          # Set up a temporary directory for conversion
-          mkdir -p /build/work/debtap
-          cd /build/work/debtap
-          
-          # Install debtap and dependencies
-          pacman -Sy --noconfirm fakeroot binutils pkgfile
-          git clone https://github.com/helixarch/debtap.git
-          
-          # Copy the actual debtap script to /usr/local/bin
-          cp -v debtap/debtap /usr/local/bin/debtap
-          chmod +x /usr/local/bin/debtap
-          export TERM=xterm
-          
-          # Initialize pkgfile and update debtap database
-          pkgfile --update
-          debtap -u
-          
-          # Convert the .deb to Arch package
-          cd /build/work/local_repo
-          DEB_FILE=$(ls *.deb | head -n 1)
-          debtap -q "$DEB_FILE"
-          
-          # Create local repository
-          repo-add custom.db.tar.zst *.pkg.tar.zst
-          
-          # Add the repository to pacman.conf
-          echo -e "\n[custom]\nSigLevel = Optional TrustAll\nServer = file:///build/work/local_repo" >> /build/archiso-radxa-x4/pacman.conf
-
-      - name: Install extraction tools
-        run: |
-          sudo pacman -Sy --noconfirm binutils
-
-      - name: Extract and integrate launcher .deb package
-        run: |
-          # Create temporary directories
-          mkdir -p /tmp/launcher-extract
-          
-          # Extract the .deb package
-          cd /tmp/launcher-extract
-          ar x $GITHUB_WORKSPACE/downloads/feralfile-launcher_*.deb
-          
-          # Extract the data archive (might be .tar.xz or .tar.zst)
-          if [ -f "data.tar.xz" ]; then
-            tar xf data.tar.xz
-          elif [ -f "data.tar.zst" ]; then
-            tar xf data.tar.zst
-          else
-            echo "Unknown data archive format in .deb package"
-            ls -la
-            exit 1
-          fi
-          
-          # Create target directories
-          mkdir -p $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/bin
-          mkdir -p $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/share
-          
-          # Copy application files to archiso profile
-          if [ -d "usr/bin" ]; then
-            cp -rv usr/bin/* $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/bin/
-          fi
-          
-          if [ -d "usr/share" ]; then
-            cp -rv usr/share/* $GITHUB_WORKSPACE/archiso-radxa-x4/airootfs/usr/share/
-          fi
-          
-          # Extract dependencies info for reference
-          if [ -f "control.tar.xz" ]; then
-            mkdir -p /tmp/control
-            tar xf control.tar.xz -C /tmp/control
-            echo "Dependencies from Debian package:"
-            cat /tmp/control/control | grep Depends
-          fi
-
-      - name: Copy archiso profile
-        run: |
-          cp -r archiso-radxa-x4 /build/
-          cp -r /usr/share/archiso/configs/releng/syslinux/* archiso-radxa-x4/syslinux/
-
-      - name: Setup pacman
-        run: |
-          # Download official mirrorlist
-          curl -o /etc/pacman.d/mirrorlist "https://archlinux.org/mirrorlist/?country=US&protocol=https&ip_version=4&use_mirror_status=on"
-          
-          # Uncomment all mirrors
-          sed -i 's/^#Server/Server/' /etc/pacman.d/mirrorlist
-          
-          # Show current mirrorlist
-          cat /etc/pacman.d/mirrorlist
-          
-          # Test direct access to a few mirrors
-          echo "Testing mirror access..."
-          curl -I "https://mirrors.mit.edu/archlinux/core/os/x86_64/core.db"
-          curl -I "https://mirrors.ocf.berkeley.edu/archlinux/core/os/x86_64/core.db"
-          
-          # Initialize keyring
-          rm -rf /etc/pacman.d/gnupg
-          pacman-key --init
-          pacman-key --populate archlinux
-          
-          # Update databases with debug output
-          pacman -Syy --debug
-
-      - name: Build ISO Image
-        run: |
-          cd /build
-          
-          # Show environment info
-          echo "Current directory: $(pwd)"
-          echo "Network status:"
-          ip addr
-          ping -c 1 archlinux.org || true
-          
-          # Build with verbose output
-          mkarchiso -v -w /build/work -o /build/out /build/archiso-radxa-x4
-          
-          # Rename the ISO
-          ISO_FILE=$(find /build/out -name "*.iso" | head -n 1)
-          if [ -f "$ISO_FILE" ]; then
-            NEW_NAME="radxa-x4-arch-${{ github.event.inputs.version }}.iso"
-            mv "$ISO_FILE" "/build/out/$NEW_NAME"
-            echo "ISO created: /build/out/$NEW_NAME"
-          else
-            echo "Error: ISO file not found"
-            exit 1
-          fi
-
       - name: Compress and Upload Image
         run: |
           cd /build/out
-          
-          # Compress the ISO
           ISO_FILE="radxa-x4-arch-${{ github.event.inputs.version }}.iso"
           zip -j "radxa-x4-arch-${{ github.event.inputs.version }}.zip" "$ISO_FILE"
-          
-          # Upload to Cloudflare R2
           rclone copyto "radxa-x4-arch-${{ github.event.inputs.version }}.zip" \
             "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/radxa-x4-arch-${{ github.event.inputs.version }}.zip" \
             --s3-upload-cutoff=100M \
@@ -251,7 +89,6 @@ jobs:
             --transfers=7 \
             --verbose \
             --stats=1s
-          
           echo "Image successfully uploaded to R2"
 
       - name: Cleanup

@@ -1,12 +1,2 @@
-# Base system
+arch-install-scripts
 base
-linux
-linux-firmware
-mkinitcpio
-
-# Boot support
-intel-ucode
-efibootmgr
-
-# Networking core
-networkmanager
