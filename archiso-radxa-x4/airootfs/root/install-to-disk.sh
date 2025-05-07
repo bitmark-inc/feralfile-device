@@ -13,6 +13,7 @@ cleanup() {
     echo "Unmounting /live-efi..."
     umount -l /live-efi || true
   fi
+  echo "You may now reboot and remove the USB stick."
 }
 trap cleanup EXIT
 
@@ -138,4 +139,3 @@ EOF
 # ─── Post-install cleanup and prompt ───────────────────────────────────
 echo
 echo "Done! Arch Linux has been installed to $TARGET_DISK"
-echo "You may now reboot and remove the USB stick."
