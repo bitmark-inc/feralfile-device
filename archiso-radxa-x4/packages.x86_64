@@ -46,7 +46,7 @@ pulseaudio
 pulseaudio-bluetooth
 
 # Our application
-feralfile-launcher
+# feralfile-launcher
 
 # Bootloaders
 syslinux
