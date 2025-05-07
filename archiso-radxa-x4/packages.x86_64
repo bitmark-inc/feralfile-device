@@ -1,14 +1,3 @@
-# Base packages
-base
-linux
-linux-firmware
-mkinitcpio
-
-# Boot and firmware
-intel-ucode
-grub
-efibootmgr
-
 # System utilities
 sudo
 git
@@ -16,47 +5,37 @@ vim
 nano
 wget
 curl
-networkmanager
-wpa_supplicant
 openssh
-dhcpcd
 dialog
 reflector
 
-# Wayland & Cage (Kiosk mode)
+# Wayland & Kiosk mode
 wayland
 cage
 wlroots
 xorg-xwayland
 xdg-utils
+chromium
+wlr-randr
+seatd
 
 # Fonts and themes
 ttf-dejavu
 ttf-liberation
 adwaita-icon-theme
 
-# Radxa X4 specific packages
+# Radxa X4 / Intel N100 support
 mesa
 intel-media-driver
 vulkan-intel
 libva-intel-driver
+
+# Audio and Bluetooth
 bluez
 bluez-utils
 pulseaudio
 pulseaudio-bluetooth
 
-# Our application
-# feralfile-launcher
-
-# Bootloaders
-syslinux
-
-# Kiosk packages
-chromium
-wlr-randr
-seatd
-iwd
-
-# Additional packages
+# Debug / Monitoring
 intel-gpu-tools
 lm_sensors
