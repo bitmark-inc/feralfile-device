@@ -1,29 +1,27 @@
 #!/usr/bin/env bash
 
-script_cmdline ()
-{
-    local param
+script_cmdline () {
     for param in $(< /proc/cmdline); do
-        case "${param}" in
+        case "$param" in
             script=*) echo "${param#*=}" ; return 0 ;;
         esac
     done
 }
 
-automated_script ()
-{
-    local script rt
+automated_script () {
+    local script
     script="$(script_cmdline)"
-    if [[ -n "${script}" && -f "/usr/local/bin/${script}" ]]; then
-        /usr/local/bin/"${script}"
-        rt=$?
-        echo
-        echo "automated script completed"
-        echo
-        return "${rt}"
+    if [[ -n "$script" && -x "/usr/local/bin/$script" ]]; then
+        echo "Running automated script: $script"
+        /usr/local/bin/"$script"
+        echo "Automated script finished."
+    else
+        echo "No valid script=... found in cmdline or script not executable"
     fi
 }
 
-if [[ $(tty) == "/dev/tty1" ]]; then
-    automated_script
-fi
+echo "Hello from automated script!"
+
+automated_script
+
+echo "Automated script done!"

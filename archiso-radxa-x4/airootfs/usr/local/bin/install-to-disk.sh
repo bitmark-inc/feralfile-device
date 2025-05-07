@@ -1,14 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
+cleanup() {
+  echo
+  echo "⚠️  Cleaning up..."
+  if mountpoint -q /mnt; then
+    echo "Unmounting /mnt..."
+    fuser -km /mnt || true
+    umount -R /mnt || true
+  fi
+  if mountpoint -q /live-efi; then
+    echo "Unmounting /live-efi..."
+    umount -l /live-efi || true
+  fi
+}
+trap cleanup EXIT
+
 echo "=== Feral File Arch Installer ==="
 echo
 
-# ─── 1. Identify boot device ──────────────────────────────────────────────
-LIVE_DEV=$(findmnt -no SOURCE /)
-LIVE_DISK=$(lsblk -no PKNAME "$LIVE_DEV")
-
-# ─── 2. List available target disks ───────────────────────────────────────
+# ─── List available target disks ───────────────────────────────────────
 echo "Available disks:"
 echo
 
@@ -17,10 +28,10 @@ options=()
 
 while IFS= read -r line; do
     dev=$(awk '{print $1}' <<< "$line")
-    size=$(awk '{print $4}' <<< "$line")
+    size=$(awk '{print $2}' <<< "$line")
     model=$(lsblk -no MODEL "/dev/$dev")
     options+=("/dev/$dev ($size) $model")
-done < <(lsblk -dno NAME,SIZE | grep -v "^$LIVE_DISK")
+done < <(lsblk -dno NAME,SIZE,TYPE | awk '$3 == "disk"')
 
 select opt in "${options[@]}"; do
     if [[ -n "$opt" ]]; then
@@ -33,7 +44,7 @@ select opt in "${options[@]}"; do
     fi
 done
 
-# ─── 3. Partition and format ──────────────────────────────────────────────
+# ─── Partition and format ──────────────────────────────────────────────
 echo
 echo "Partitioning $TARGET_DISK..."
 
@@ -60,19 +71,19 @@ mkfs.fat -F32 "$BOOT_PART"
 echo "Formatting root partition: $ROOT_PART"
 mkfs.ext4 -F "$ROOT_PART"
 
-# ─── 4. Mount target system ───────────────────────────────────────────────
+# ─── Mount target system ───────────────────────────────────────────────
 echo
 echo "Mounting partitions..."
 mount "$ROOT_PART" /mnt
 mkdir -p /mnt/boot
 mount "$BOOT_PART" /mnt/boot
 
-# ─── 5. Copy root filesystem ──────────────────────────────────────────────
+# ─── Copy root filesystem ──────────────────────────────────────────────
 echo
 echo "Copying root filesystem..."
-rsync -aAX --info=progress2 --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found"} / /mnt
+rsync -aAX --info=progress2 --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/live-efi/*","/media/*","/lost+found"} / /mnt
 
-# ─── 6. Setup bootloader ──────────────────────────────────────────────────
+# ─── Setup bootloader ──────────────────────────────────────────────────
 echo
 echo "Copying systemd-boot..."
 
@@ -89,8 +100,8 @@ mount /dev/disk/by-label/ARCHISO_EFI /live-efi
 rsync -a /live-efi/arch/boot/x86_64/vmlinuz-linux /mnt/boot/vmlinuz-linux
 rsync -a /live-efi/arch/boot/x86_64/initramfs-linux.img /mnt/boot/initramfs-linux.img
 rsync -a /live-efi/arch/boot/intel-ucode.img /mnt/boot/intel-ucode.img
-rsync -a /live-efi/loader /mnt/boot/loader
-rsync -a /live-efi/EFI /mnt/boot/EFI
+rsync -a /live-efi/loader /mnt/boot
+rsync -a /live-efi/EFI /mnt/boot
 umount /live-efi
 
 PARTUUID=$(blkid -s PARTUUID -o value "$ROOT_PART")
@@ -109,9 +120,22 @@ initrd  /intel-ucode.img
 options root=PARTUUID=$PARTUUID rw
 EOF
 
-umount -R /mnt || true
+mount --bind /dev /mnt/dev
+mount --bind /proc /mnt/proc
+mount --bind /sys /mnt/sys
 
-# ─── 7. Post-install cleanup and prompt ───────────────────────────────────
+arch-chroot /mnt /bin/bash <<EOF
+echo "Overwriting mkinitcpio.conf HOOKS..."
+sed -i 's/^HOOKS=.*/HOOKS=(base udev modconf autodetect block filesystems)/' /etc/mkinitcpio.conf
+
+echo "Generating initramfs..."
+mkinitcpio -P
+
+echo "Installing systemd-boot to disk..."
+bootctl install
+EOF
+
+# ─── Post-install cleanup and prompt ───────────────────────────────────
 echo
 echo "Done! Arch Linux has been installed to $TARGET_DISK"
 echo "You may now reboot and remove the USB stick."

@@ -6,6 +6,9 @@ vim
 nano
 wget
 curl
+parted
+dosfstools
+rsync
 openssh
 dialog
 reflector
