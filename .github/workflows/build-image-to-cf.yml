@@ -94,4 +94,4 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          rm -rf /build/work
+          rm -rf /build
