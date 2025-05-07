@@ -1,0 +1,11 @@
+[Unit]
+Description=Feral File Display Device State Manager
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/feral-state
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target 
