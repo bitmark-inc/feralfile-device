@@ -52,7 +52,8 @@ jobs:
       - name: Install Dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm go git base-devel
+          # pull in go, base-devel, git, plus shadow for useradd/su
+          pacman -S --noconfirm go git base-devel shadow
 
       - name: Set Version
         id: set-version
@@ -97,8 +98,10 @@ jobs:
       - name: Build Pacman Package
         working-directory: components/${{ inputs.component }}
         run: |
-          # skip integrity checks since we set sha256sums=('SKIP')
-          makepkg -f --skipinteg
+          # create a non-root builder user, chown all files, and invoke makepkg as builder
+          useradd -m builder
+          chown -R builder:builder .
+          su builder -c "makepkg -f --skipinteg"
 
       - name: Upload Pacman Package
         uses: actions/upload-artifact@v4
