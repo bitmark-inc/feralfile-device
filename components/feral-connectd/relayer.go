@@ -23,7 +23,7 @@ type RelayerConfig struct {
 	TopicID    string
 }
 
-// RelayerClient handles WebSocket connection to relay server
+// RelayerClient handles Relayer connection to relay server
 type RelayerClient struct {
 	config *RelayerConfig
 	cdp    *CDPClient
@@ -33,7 +33,7 @@ type RelayerClient struct {
 	logger *zap.Logger
 }
 
-// NewRelayerClient creates a new WebSocket client
+// NewRelayerClient creates a new Relayer client
 func NewRelayerClient(config *RelayerConfig, cdp *CDPClient, logger *zap.Logger) *RelayerClient {
 	return &RelayerClient{
 		config: config,
@@ -43,7 +43,7 @@ func NewRelayerClient(config *RelayerConfig, cdp *CDPClient, logger *zap.Logger)
 	}
 }
 
-// ConnectAndListen connects to the WebSocket server and listens for messages
+// ConnectAndListen connects to the Relayer server and listens for messages
 func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 	// Create URL with locationID and topicID if available
 	connectURL := r.config.URL
@@ -194,7 +194,7 @@ func (r *RelayerClient) startPing() {
 	r.conn.SetReadDeadline(time.Now().Add(pongWait))
 }
 
-// Close closes the WebSocket connection
+// Close closes the Relayer connection
 func (r *RelayerClient) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -210,6 +210,6 @@ func (r *RelayerClient) Close() {
 	if r.conn != nil {
 		r.conn.Close()
 		r.conn = nil
-		r.logger.Info("WebSocket connection closed")
+		r.logger.Info("Relayer connection closed")
 	}
 }
