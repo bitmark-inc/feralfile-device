@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -92,12 +91,14 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("cdp dial error: %w", err)
 	}
-	log.Println("Connected to Chromium CDP page target:", target.WebSocketDebuggerURL)
+
+	c.logger.Info("Connected to Chromium CDP page target",
+		zap.String("url", target.WebSocketDebuggerURL))
 
 	// Start goroutine to handle context cancellation
 	go func() {
 		<-ctx.Done()
-		log.Println("Closing CDP connection due to context cancellation")
+		c.logger.Info("Closing CDP connection due to context cancellation")
 		c.Close()
 	}()
 
