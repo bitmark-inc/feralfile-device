@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -65,70 +65,48 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build Go Program
-        working-directory: components/${{ inputs.component }}
-        run: |
-          # Print Go environment information
-          go env
-          # Build with verbose output and error checking
-          go build -v || { echo "Go build failed"; exit 1; }
-          # Verify the binary exists
-          ls -la
-          # Check if the binary is executable
-          if [ -f "${{ inputs.component }}" ]; then
-            echo "Binary ${{ inputs.component }} built successfully"
-          else
-            echo "Binary ${{ inputs.component }} not found after build"
-            exit 1
-          fi
-
       - name: Create PKGBUILD
         working-directory: components/${{ inputs.component }}
         run: |
-          # Find the binary name (may differ from component name)
-          BINARY_NAME=$(find . -type f -executable -not -path "*/\.*" | head -1)
-          if [ -z "$BINARY_NAME" ]; then
-            # Fallback to component name
-            BINARY_NAME="./${{ inputs.component }}"
-          fi
-          echo "Using binary: $BINARY_NAME"
-          
-          cat > PKGBUILD << EOF
-          # Maintainer: Feral File Device Team <support@feralfile.com>
-          
+          cat > PKGBUILD <<-'EOF'
+          # Maintainer: ${{ inputs.maintainer }}
           pkgname=${{ inputs.component }}
           pkgver=${{ env.VERSION }}
           pkgrel=1
-          pkgdesc=""
+          pkgdesc="${{ inputs.description }}"
           arch=('x86_64' 'aarch64')
           url="https://github.com/${{ github.repository }}"
           license=('MIT')
           depends=()
-          makedepends=()
+          makedepends=('go')
           options=(!strip)
-          
+
+          source=('./')
+          sha256sums=('SKIP')
+
+          build() {
+            cd "$srcdir"
+            go build -v -o "$pkgname"
+          }
+
           package() {
-            install -Dm755 "$BINARY_NAME" "\$pkgdir/usr/bin/${{ inputs.component }}"
+            install -Dm755 "$pkgname" "$pkgdir/usr/bin/$pkgname"
           }
           EOF
 
       - name: Build Pacman Package
         working-directory: components/${{ inputs.component }}
         run: |
-          # Create a non-root user for building packages
-          useradd -m builder
-          chown -R builder:builder .
-          # Run makepkg as the non-root user
-          su -c "makepkg -f" builder
+          # skip integrity checks since we set sha256sums=('SKIP')
+          makepkg -f --skipinteg
 
       - name: Upload Pacman Package
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.component }}
-          path: components/${{ inputs.component }}/${{ inputs.component }}-${{ env.VERSION }}-*.pkg.tar.zst
+          path: components/${{ inputs.component }}/*.pkg.tar.zst
           retention-days: 7
 
       - name: Package Info
         run: |
-          echo "Component ${{ inputs.component }} version ${{ env.VERSION }} has been built successfully"
-          echo "Artifact has been uploaded with name: ${{ inputs.component }}"
+          echo "Component ${{ inputs.component }} version ${{ env.VERSION }} built successfully"
