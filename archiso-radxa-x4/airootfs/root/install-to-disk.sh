@@ -7,15 +7,28 @@ sleep 5
 cleanup() {
   echo
   echo "⚠️  Cleaning up..."
-  if mountpoint -q /mnt; then
-    echo "Unmounting /mnt..."
-    fuser -km /mnt || true
-    umount -R /mnt || true
-  fi
-  if mountpoint -q /live-efi; then
-    echo "Unmounting /live-efi..."
-    umount -l /live-efi || true
-  fi
+
+  # Function to wait until umount succeeds or timeout
+  try_umount() {
+    local target="$1"
+    local timeout=10
+    local elapsed=0
+    while mountpoint -q "$target"; do
+      echo "Trying to unmount $target..."
+      umount -R "$target" 2>/dev/null || true
+      sleep 1
+      ((elapsed++))
+      if ((elapsed >= timeout)); then
+        echo "⚠️  Failed to unmount $target after $timeout seconds, please unmount it manually."
+        return 1
+      fi
+    done
+    echo "✅ Unmounted $target"
+  }
+
+  try_umount /mnt
+  try_umount /live-efi
+
   echo "You may now reboot and remove the USB stick."
 }
 trap cleanup EXIT
@@ -140,5 +153,7 @@ bootctl install
 EOF
 
 # ─── Post-install cleanup and prompt ───────────────────────────────────
+sleep 10
+
 echo
 echo "Done! Arch Linux has been installed to $TARGET_DISK"
