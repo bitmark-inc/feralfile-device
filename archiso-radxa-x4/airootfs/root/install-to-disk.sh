@@ -8,30 +8,11 @@ cleanup() {
   echo
   echo "⚠️  Cleaning up..."
 
-  # Function to wait until umount succeeds or timeout
-  try_umount() {
-    local target="$1"
-    local timeout=10
-    local elapsed=0
-    while mountpoint -q "$target"; do
-      echo "Trying to unmount $target..."
-      umount -R "$target" 2>/dev/null || true
-      sleep 1
-      ((elapsed++))
-      if ((elapsed >= timeout)); then
-        echo "⚠️  Failed to unmount $target after $timeout seconds, please unmount it manually."
-        return 1
-      fi
-    done
-    echo "✅ Unmounted $target"
-  }
-
-  if mountpoint -q /mnt/sys; then try_umount /mnt/sys; fi
-  if mountpoint -q /mnt/proc; then try_umount /mnt/proc; fi
-  if mountpoint -q /mnt/dev; then try_umount /mnt/dev; fi
-
-  try_umount /mnt
-  try_umount /live-efi
+  umount /mnt/dev
+  umount /mnt/proc
+  umount /mnt/sys
+  umount /mnt/boot
+  umount /mnt
 
   echo "You may now reboot and remove the USB stick."
 }
@@ -160,4 +141,4 @@ EOF
 sleep 10
 
 echo
-echo "Done! Arch Linux has been installed to $TARGET_DISK"
+echo "Arch Linux has been installed to $TARGET_DISK"
