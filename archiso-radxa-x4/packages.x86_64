@@ -1,0 +1,56 @@
+# System
+base
+sudo
+git
+vim
+nano
+wget
+curl
+parted
+dosfstools
+rsync
+openssh
+dialog
+reflector
+linux
+linux-firmware
+mkinitcpio
+mkinitcpio-archiso
+arch-install-scripts
+
+# Boot support
+intel-ucode
+efibootmgr
+
+# Networking core
+networkmanager
+
+# Wayland & Kiosk mode
+wayland
+cage
+wlroots
+xorg-xwayland
+xdg-utils
+chromium
+wlr-randr
+seatd
+
+# Fonts and themes
+ttf-dejavu
+ttf-liberation
+adwaita-icon-theme
+
+# Radxa X4 / Intel N100 support
+mesa
+intel-media-driver
+vulkan-intel
+
+# Audio and Bluetooth
+bluez
+bluez-utils
+pulseaudio
+pulseaudio-bluetooth
+
+# Debug / Monitoring
+intel-gpu-tools
+lm_sensors

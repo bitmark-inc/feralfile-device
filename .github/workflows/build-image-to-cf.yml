@@ -1,4 +1,4 @@
-name: Build Feral File Device Image
+name: Build Arch Linux Image for Radxa X4
 
 on:
   workflow_dispatch:
@@ -7,11 +7,6 @@ on:
         description: 'Image version'
         required: true
         default: '0.0.1'
-      existing_app_version:
-        description: 'Existing app version (leave empty to build new app)'
-        required: false
-        type: string
-
       environment:
         description: "Environment to build"
         required: false
@@ -22,46 +17,51 @@ on:
           - Production
 
 jobs:
-  # --- STEP 1: Reuse Build App Job ---
-  build-app:
-    name: Build Feral File Launcher App
-    if: ${{ github.event.inputs.existing_app_version == '' }}
-    uses: ./.github/workflows/build-app-arm64.yml
-    with:
-      version: ${{ github.event.inputs.version }}
-      environment: ${{ github.event.inputs.environment }}
-    secrets:
-      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
-      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      SUPPORT_URL: ${{ secrets.SUPPORT_URL }}
-      SUPPORT_API_KEY: ${{ secrets.SUPPORT_API_KEY }}
-      METRICS_URL: ${{ secrets.METRICS_URL }}
-      METRICS_API_KEY: ${{ secrets.METRICS_API_KEY }}
-      APT_GPG_SIGN_KEY_PASSPHRASE: ${{ secrets.APT_GPG_SIGN_KEY_PASSPHRASE }}
-      APT_GPG_SIGN_KEY_ID: ${{ secrets.APT_GPG_SIGN_KEY_ID }}
-      SENTRY_DSN_BLUETOOTH_LIB: ${{ secrets.SENTRY_DSN_BLUETOOTH_LIB }}
-      SENTRY_DSN_APP: ${{ secrets.SENTRY_DSN_APP }}
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-  # --- STEP 2: Build Raspberry Pi Image ---
   build-image:
-    name: Generate Raspberry Pi OS Image
-    runs-on: ['self-hosted', 'ARM64']
-    needs: [build-app]
-    if: ${{ always() && (needs.build-app.result == 'success' || needs.build-app.result == 'skipped') }}
+    name: Generate Arch Linux Image for Radxa X4
+    runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
+
+    container:
+      image: archlinux:latest
+      options: --privileged
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install rclone
+      - name: Install Build Dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y rclone
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm archiso arch-install-scripts dosfstools libisoburn squashfs-tools \
+            git curl rclone wget base-devel jq zip unzip fakeroot binutils
+
+      - name: Copy archiso profile
+        run: |
+          mkdir -p /build
+          cp -r archiso-radxa-x4 /build/
+
+      - name: Setup pacman
+        run: |
+          curl -o /etc/pacman.d/mirrorlist "https://archlinux.org/mirrorlist/?country=US&protocol=https&ip_version=4&use_mirror_status=on"
+          sed -i 's/^#Server/Server/' /etc/pacman.d/mirrorlist
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Syy --debug
+
+      - name: Build ISO Image
+        run: |
+          cd /build
+          mkarchiso -v -w /build/work -o /build/out /build/archiso-radxa-x4
+          ISO_FILE=$(find /build/out -name "*.iso" | head -n 1)
+          if [ -f "$ISO_FILE" ]; then
+            NEW_NAME="radxa-x4-arch-${{ github.event.inputs.version }}.iso"
+            mv "$ISO_FILE" "/build/out/$NEW_NAME"
+            echo "ISO created: /build/out/$NEW_NAME"
+          else
+            echo "Error: ISO file not found"
+            exit 1
+          fi
 
       - name: Configure rclone
         run: |
@@ -77,50 +77,21 @@ jobs:
           no_check_bucket = true
           EOF
 
-      - name: Set settings to device
+      - name: Compress and Upload Image
         run: |
-          cat > custom-stage/01-install-app/feralfile-launcher.conf << EOF
-          app_branch = ${{ github.ref_name }}
-          commit_hash = ${{ github.sha }}
-          distribution_auth_user = ${{ secrets.DISTRIBUTION_AUTH_USER }}
-          distribution_auth_password = ${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}
-          sentry_dsn = ${{ secrets.SENTRY_DSN_APP }}
-          EOF
-
-      - name: Build Pi OS Image with pi-gen-action
-        uses: usimd/pi-gen-action@v1
-        with:
-          image-name: feralfile-device-${{ github.event.inputs.version }}
-          stage-list: stage0 stage1 stage2 ./custom-stage
-          compression: zip
-          compression-level: 6
-          username: feralfile
-          password: feralfile
-          pi-gen-version: arm64
-          hostname: FeralFileDevice
-          locale: en_US.UTF-8
-          keyboard-keymap: us
-          keyboard-layout: English (US)
-          release: bookworm
-          enable-ssh: 0
-          disable-first-boot-user-rename: 1
-          export-last-stage-only: true
-          wpa-country: 'US'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          verbose-output: true
-
-      - name: Upload to Cloudflare R2
-        run: |
-          # Get the first zip file from the deploy directory
-          IMAGE_FILE=$(ls pi-gen/deploy/*.zip | head -n 1)
-          # Upload with rclone using multiple threads and verbose logging
-          rclone copyto "$IMAGE_FILE" "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/feralfile_device_${{ github.event.inputs.version }}.zip" \
+          cd /build/out
+          ISO_FILE="radxa-x4-arch-${{ github.event.inputs.version }}.iso"
+          zip -j "radxa-x4-arch-${{ github.event.inputs.version }}.zip" "$ISO_FILE"
+          rclone copyto "radxa-x4-arch-${{ github.event.inputs.version }}.zip" \
+            "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/radxa-x4-arch-${{ github.event.inputs.version }}.zip" \
             --s3-upload-cutoff=100M \
             --s3-chunk-size=100M \
             --transfers=7 \
             --verbose \
             --stats=1s
+          echo "Image successfully uploaded to R2"
 
-      - name: Cleanup Docker Containers
+      - name: Cleanup
         if: always()
-        run: sudo docker rm -v pigen_work || true
+        run: |
+          rm -rf /build
