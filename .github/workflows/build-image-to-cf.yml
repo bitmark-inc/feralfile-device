@@ -45,6 +45,7 @@ jobs:
         run: |
           mkdir -p /build/archiso-radxa-x4/airootfs/opt/feral/ui/launcher
           cp -r components/launcher-ui/* /build/archiso-radxa-x4/airootfs/opt/feral/ui/launcher/
+          mkdir -p /build/archiso-radxa-x4/airootfs/opt/feral/ui/player
           cp -r components/player-wrapper-ui/* /build/archiso-radxa-x4/airootfs/opt/feral/ui/player/
 
       - name: Setup pacman
