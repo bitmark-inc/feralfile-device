@@ -52,7 +52,6 @@ jobs:
       - name: Install Dependencies
         run: |
           pacman -Syu --noconfirm
-          # pull in go, base-devel, git, plus shadow for useradd/su
           pacman -S --noconfirm go git base-devel shadow
 
       - name: Set Version
@@ -66,13 +65,21 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Create PKGBUILD
+      - name: Prepare source tarball & PKGBUILD
         working-directory: components/${{ inputs.component }}
         run: |
-          cat > PKGBUILD <<-'EOF'
+          set -e
+          COMP=${{ inputs.component }}
+          VER=${VERSION}
+
+          # 1) Package everything as a .tar.gz so makepkg can see it
+          tar czf "${COMP}-${VER}.tar.gz" .
+
+          # 2) Emit a clean PKGBUILD
+          cat <<EOF > PKGBUILD
           # Maintainer: ${{ inputs.maintainer }}
-          pkgname=${{ inputs.component }}
-          pkgver=${{ env.VERSION }}
+          pkgname=${COMP}
+          pkgver=${VER}
           pkgrel=1
           pkgdesc="${{ inputs.description }}"
           arch=('x86_64' 'aarch64')
@@ -82,23 +89,24 @@ jobs:
           makedepends=('go')
           options=(!strip)
 
-          source=('./')
+          # point at our local tarball and skip checksum verification
+          source=("${COMP}-${VER}.tar.gz")
           sha256sums=('SKIP')
 
           build() {
-            cd "$srcdir"
-            go build -v -o "$pkgname"
+            cd "\$srcdir"
+            go build -v -o "\$pkgname"
           }
 
           package() {
-            install -Dm755 "$pkgname" "$pkgdir/usr/bin/$pkgname"
+            install -Dm755 "\$srcdir/\$pkgname" "\$pkgdir/usr/bin/\$pkgname"
           }
           EOF
 
       - name: Build Pacman Package
         working-directory: components/${{ inputs.component }}
         run: |
-          # create a non-root builder user, chown all files, and invoke makepkg as builder
+          # run makepkg as non-root
           useradd -m builder
           chown -R builder:builder .
           su builder -c "makepkg -f --skipinteg"
