@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -53,6 +54,7 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 
 	var targets []struct {
 		Type                 string `json:"type"`
+		Title                string `json:"title"`
 		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
 	}
 	if err := json.Unmarshal(body, &targets); err != nil {
@@ -61,7 +63,7 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 
 	// Connect to CDP websocket
 	for _, t := range targets {
-		if t.Type == "page" {
+		if t.Type == "page" && strings.Contains(t.Title, "Feral File") {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 
