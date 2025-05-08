@@ -1,8 +1,0 @@
-xserver-xorg xinit xdotool
-unclutter
-mousepad
-eom
-lxde
-zenity xdg-utils
-lightdm
-git

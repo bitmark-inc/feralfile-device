@@ -55,7 +55,8 @@ export default {
       const object = await env.BUCKET.get(key);
       
       if (!object) {
-        return new Response('File not found', { status: 404 });
+        console.error(`File not found for key: ${key}`);
+        return new Response(`File not found: ${url.pathname}`, { status: 404 });
       }
 
       return new Response(object.body, {
@@ -91,11 +92,14 @@ export default {
       });
     }
 
-    // Handle apt request
     if (url.pathname.startsWith('/dists/')) {
-      const key = url.pathname.replace('/dists/', '');
-      if (key.endsWith('/Release') || key.endsWith('/InRelease')) {
+      const path = url.pathname.replace('/dists/', '');
+
+      // Release / InRelease 
+      // URL: /dists/<dist(branch)>/{Release|InRelease}
+      if (path.endsWith('/Release') || path.endsWith('/InRelease')) {
         // Serve the Release file
+        const key = path
         const object = await env.BUCKET.get(key);
         if (!object) {
           return new Response(`${key} not found`, { status: 404 });
@@ -109,43 +113,59 @@ export default {
           },
         });
       }
+    
+      // Packages(.gz)
+      // URL: /dists/<dist(branch)>/<component>/binary-{amd64|arm64}/{Packages|Packages.gz}
+      if (path.endsWith('Packages') || path.endsWith('Packages.gz')) {
+        const parts = path.split('/');
+        const len = parts.length;
 
-      if (key.endsWith('main/binary-arm64/Packages')) {
-        const branch = key.replace('main/binary-arm64/Packages', '');
-        // Serve the Packages file
-        const object = await env.BUCKET.get(branch+'Packages');
-        if (!object) {
-          return new Response(`${branch+'Packages'} not found`, { status: 404 });
-        }
+        const filename      = parts[len - 1];  // 'Packages' or 'Packages.gz'
+        const archComponent = parts[len - 2];  // 'binary-arm64' or 'binary-amd64'
+        const component     = parts[len - 3];  // e.g. 'main'
+        const branch = parts.slice(0, len - 3).join('/'); // e.g. 'features/any-feature'
     
-        return new Response(object.body, {
-          headers: {
-            'Content-Type': 'text/plain',
-            'Content-Length': object.size.toString(),
-            'Cache-Control': 'max-age=3600, public',
-          },
-        });
+        const allowedComponents = ['main'];
+        if (!allowedComponents.includes(component)) {
+          console.error(`Unknown component: ${component}`);
+          return new Response('Invalid component', { status: 400 });
+        }
+
+        // check arch
+        const m = archComponent.match(/^binary-(amd64|arm64)$/);
+        if (!m) {
+          console.error(`Invalid arch path: ${archComponent}`);
+          return new Response('Invalid arch', { status: 400 });
+        }
+        const arch = m[1]; // "amd64" or "arm64"
+        const key = `${branch}/${arch}/${filename}`;
+    
+        console.log(`Fetching APT index from key: ${key}`);
+        let object = await env.BUCKET.get(key);
+        // FIXME: fallback to old release file to support old version, 
+        // remove this once main branch build the next version 0.4.3
+        if (!object && arch === 'arm64') {
+          const fallbackKey = `${branch}/${filename}`;
+          console.log(`Fetching old version APT index from key: ${key}`);
+          object = await env.BUCKET.get(fallbackKey);
+        }
+        if (!object) {
+          console.error(`Not found: ${key}`);
+          return new Response(`${key} not found`, { status: 404 });
+        }
+
+        const isGz = filename === 'Packages.gz';
+        const headers: HeadersInit = {
+          'Content-Type': isGz ? 'application/gzip' : 'text/plain',
+          'Content-Length': object.size.toString(),
+          'Cache-Control': 'public, max-age=3600',
+        };
+        if (isGz) headers['Content-Encoding'] = 'gzip';
+    
+        return new Response(object.body, { headers });
       }
     
-      if (key.endsWith('main/binary-arm64/Packages.gz')) {
-        const branch = key.replace('main/binary-arm64/Packages.gz', '');
-        // Serve the Packages file
-        const object = await env.BUCKET.get(branch+'Packages.gz');
-        if (!object) {
-          return new Response(`${branch+'Packages.gz'} not found`, { status: 404 });
-        }
-    
-        return new Response(object.body, {
-          headers: {
-            'Content-Type': 'application/gzip',
-            'Content-Encoding': 'gzip',
-            'Content-Length': object.size.toString(),
-            'Cache-Control': 'max-age=3600, public',
-          },
-        });
-      }
-    
-      return new Response('Path not found', { status: 404 });
+      return new Response('Invalid APT repository path structure', { status: 400 });
     }
 
     // List files and generate HTML
