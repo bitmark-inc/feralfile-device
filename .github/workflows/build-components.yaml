@@ -72,8 +72,8 @@ jobs:
           COMP=${{ inputs.component }}
           VER=${VERSION}
 
-          # 1) Package everything as a .tar.gz so makepkg can see it
-          tar czf "${COMP}-${VER}.tar.gz" .
+          # 1) Package everything as a .tar.gz, but exclude the archive file itself
+          tar czf "${COMP}-${VER}.tar.gz" --exclude="${COMP}-${VER}.tar.gz" .
 
           # 2) Emit a clean PKGBUILD
           cat <<EOF > PKGBUILD
@@ -89,7 +89,6 @@ jobs:
           makedepends=('go')
           options=(!strip)
 
-          # point at our local tarball and skip checksum verification
           source=("${COMP}-${VER}.tar.gz")
           sha256sums=('SKIP')
 
@@ -99,7 +98,7 @@ jobs:
           }
 
           package() {
-            install -Dm755 "\$srcdir/\$pkgname" "\$pkgdir/usr/bin/\$pkgname"
+            install -Dm755 "\$srcsrc/\$pkgname" "\$pkgdir/usr/bin/\$pkgname"
           }
           EOF
 
