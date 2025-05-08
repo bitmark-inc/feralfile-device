@@ -82,8 +82,8 @@ mount "$BOOT_PART" /mnt/boot
 # ─── Copy root filesystem ──────────────────────────────────────────────
 echo
 echo "Copying root filesystem..."
-rsync -aAX --info=progress2 --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/live-efi/*","/media/*","/lost+found"} / /mnt
-
+rsync -aAX --info=progress2 --exclude={"/dev/*","/proc/*","/root/*","/sys/*","/tmp/*","/run/*","/mnt/*","/live-efi/*","/media/*","/lost+found"} / /mnt
+rm -rf /mnt/etc/systemd/system/getty@tty1.service.d/
 # ─── Setup bootloader ──────────────────────────────────────────────────
 echo
 echo "Copying systemd-boot..."
