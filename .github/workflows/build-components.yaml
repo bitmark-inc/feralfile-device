@@ -69,6 +69,8 @@ jobs:
         working-directory: components/${{ inputs.component }}
         run: |
           go build -v -o ${{ inputs.component }}
+          # Make sure the binary is in the right location for makepkg
+          cp ${{ inputs.component }} ./
 
       - name: Create PKGBUILD
         working-directory: components/${{ inputs.component }}
@@ -85,6 +87,7 @@ jobs:
           license=('MIT')
           depends=()
           makedepends=()
+          options=(!strip)
           
           package() {
             install -Dm755 "${{ inputs.component }}" "\$pkgdir/usr/bin/${{ inputs.component }}"
