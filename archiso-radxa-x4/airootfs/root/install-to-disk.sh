@@ -26,6 +26,10 @@ cleanup() {
     echo "✅ Unmounted $target"
   }
 
+  if mountpoint -q /mnt/sys; then try_umount /mnt/sys; fi
+  if mountpoint -q /mnt/proc; then try_umount /mnt/proc; fi
+  if mountpoint -q /mnt/dev; then try_umount /mnt/dev; fi
+
   try_umount /mnt
   try_umount /live-efi
 
