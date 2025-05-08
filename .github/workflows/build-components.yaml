@@ -68,13 +68,31 @@ jobs:
       - name: Build Go Program
         working-directory: components/${{ inputs.component }}
         run: |
-          go build -v -o ${{ inputs.component }}
-          # Make sure the binary is in the right location for makepkg
-          cp ${{ inputs.component }} ./
+          # Print Go environment information
+          go env
+          # Build with verbose output and error checking
+          go build -v || { echo "Go build failed"; exit 1; }
+          # Verify the binary exists
+          ls -la
+          # Check if the binary is executable
+          if [ -f "${{ inputs.component }}" ]; then
+            echo "Binary ${{ inputs.component }} built successfully"
+          else
+            echo "Binary ${{ inputs.component }} not found after build"
+            exit 1
+          fi
 
       - name: Create PKGBUILD
         working-directory: components/${{ inputs.component }}
         run: |
+          # Find the binary name (may differ from component name)
+          BINARY_NAME=$(find . -type f -executable -not -path "*/\.*" | head -1)
+          if [ -z "$BINARY_NAME" ]; then
+            # Fallback to component name
+            BINARY_NAME="./${{ inputs.component }}"
+          fi
+          echo "Using binary: $BINARY_NAME"
+          
           cat > PKGBUILD << EOF
           # Maintainer: Feral File Device Team <support@feralfile.com>
           
@@ -90,7 +108,7 @@ jobs:
           options=(!strip)
           
           package() {
-            install -Dm755 "${{ inputs.component }}" "\$pkgdir/usr/bin/${{ inputs.component }}"
+            install -Dm755 "$BINARY_NAME" "\$pkgdir/usr/bin/${{ inputs.component }}"
           }
           EOF
 
