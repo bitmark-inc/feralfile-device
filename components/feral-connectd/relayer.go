@@ -110,6 +110,7 @@ func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 			}
 
 			_, msg, err := r.conn.ReadMessage()
+			r.logger.Debug(">>>>>>Received message", zap.ByteString("message", msg))
 			r.mu.Unlock()
 
 			if err != nil {

@@ -1,0 +1,16 @@
+[Unit]
+Description=Feral File Connection Daemon
+After=network.target
+Requires=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/feral-connectd
+User=feralfile
+Group=feral
+Restart=always
+RestartSec=3s
+WatchdogSec=30s
+
+[Install]
+WantedBy=multi-user.target
