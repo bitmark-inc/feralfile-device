@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	pingInterval = 5 * time.Second
+	pingInterval = 15 * time.Second
 	pongWait     = 10 * time.Second
 )
 
@@ -44,7 +44,7 @@ func NewRelayerClient(config *RelayerConfig, cdp *CDPClient, logger *zap.Logger)
 }
 
 // ConnectAndListen connects to the WebSocket server and listens for messages
-func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
+func (r *RelayerClient) ConnectAndListen(ctx context.Context, isConnectSuccess chan bool) error {
 	// Create URL with locationID and topicID if available
 	connectURL := r.config.URL
 
@@ -68,11 +68,14 @@ func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 
 	if err != nil {
 		r.mu.Unlock()
+		isConnectSuccess <- false
 		return err
 	}
 
 	r.conn = conn
 	r.mu.Unlock()
+
+	isConnectSuccess <- true
 
 	conn.SetPongHandler(func(appData string) error {
 		r.logger.Debug("Received pong")
@@ -106,90 +109,82 @@ func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 		}
 	}()
 
-	// Read message from relay server
+	// Read message from relay server - no select needed as context is handled above
 	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-r.done:
-			return nil
-		default:
-			r.mu.Lock()
-			if r.conn == nil {
-				r.mu.Unlock()
-				return nil
-			}
-
-			conn := r.conn
+		r.mu.Lock()
+		if r.conn == nil {
 			r.mu.Unlock()
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				r.logger.Error("Failed to read message", zap.Error(err))
-				return err
-			}
+			return nil
+		}
 
-			// Check JSON
-			var data map[string]interface{}
-			if err := json.Unmarshal(msg, &data); err != nil {
-				r.logger.Error("Invalid JSON received", zap.ByteString("message", msg))
-				continue
-			}
+		conn := r.conn
+		r.mu.Unlock()
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			r.logger.Error("Failed to read message", zap.Error(err))
+			r.Close()
+			return err
+		}
 
-			// Get message ID for logging
-			messageID, _ := data["messageID"].(string)
+		conn.SetReadDeadline(time.Time{})
+		// Check JSON
+		var data map[string]interface{}
+		if err := json.Unmarshal(msg, &data); err != nil {
+			r.logger.Error("Invalid JSON received", zap.ByteString("message", msg))
+			continue
+		}
 
-			// Handle system message to get locationID and topicID
-			if messageID == "system" {
-				if message, ok := data["message"].(map[string]interface{}); ok {
-					if locationID, ok := message["locationID"].(string); ok {
-						r.config.LocationID = locationID
-						length, err := ConvertToUint64Varint(len(locationID))
-						if err != nil {
-							r.logger.Error("Failed to convert locationID to varint",
-								zap.Error(err), zap.String("locationID", locationID))
-						}
+		// Get message ID for logging
+		messageID, _ := data["messageID"].(string)
 
-						fmt.Printf("%d %s\n", length, locationID)
+		// Handle system message to get locationID and topicID
+		if messageID == "system" {
+			if message, ok := data["message"].(map[string]interface{}); ok {
+				if locationID, ok := message["locationID"].(string); ok {
+					r.config.LocationID = locationID
+					length, err := ConvertToUint64Varint(len(locationID))
+					if err != nil {
+						r.logger.Error("Failed to convert locationID to varint",
+							zap.Error(err), zap.String("locationID", locationID))
 					}
 
-					if topicID, ok := message["topicID"].(string); ok {
-						r.config.TopicID = topicID
-						length, err := ConvertToUint64Varint(len(topicID))
-						if err != nil {
-							r.logger.Error("Failed to convert topicID to varint",
-								zap.Error(err), zap.String("topicID", topicID))
-						}
+					fmt.Printf("%d %s\n", length, locationID)
+				}
 
-						fmt.Printf("%d %s\n", length, topicID)
+				if topicID, ok := message["topicID"].(string); ok {
+					r.config.TopicID = topicID
+					length, err := ConvertToUint64Varint(len(topicID))
+					if err != nil {
+						r.logger.Error("Failed to convert topicID to varint",
+							zap.Error(err), zap.String("topicID", topicID))
 					}
+
+					fmt.Printf("%d %s\n", length, topicID)
 				}
 			}
-
-			r.logger.Debug("Received WebSocket message",
-				zap.String("messageID", messageID),
-				zap.Any("data", data))
-
-			// Forward message to Chrome via CDP
-			// TODO: Implement message forwarding
 		}
+
+		r.logger.Debug("Received WebSocket message",
+			zap.String("messageID", messageID),
+			zap.Any("data", data))
+
+		// Forward message to Chrome via CDP
+		// TODO: Implement message forwarding
+
 	}
 }
 
 // startPingPong sends periodic pings to keep the connection alive
 func (r *RelayerClient) startPing() {
-	r.mu.Lock()
 	if r.conn == nil {
-		r.mu.Unlock()
 		return
 	}
 
 	if err := r.conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
 		r.logger.Error("Failed to send ping", zap.Error(err))
-		r.mu.Unlock()
 		return
 	}
 
-	r.mu.Unlock()
 	r.logger.Debug("Sent ping")
 	r.conn.SetReadDeadline(time.Now().Add(pongWait))
 }

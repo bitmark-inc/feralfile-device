@@ -12,10 +12,10 @@ import (
 
 // Retry config
 const (
-	maxRetries       = 3
-	baseDelay        = 3 * time.Second
-	watchdogInterval = 15 * time.Second
-	shutdownTimeout  = 1 * time.Second
+	maxRetries                 = 4
+	baseRetryWebsocketInterval = 3 * time.Second
+	watchdogInterval           = 15 * time.Second
+	shutdownTimeout            = 1 * time.Second
 )
 
 func main() {
@@ -70,68 +70,36 @@ func main() {
 	}
 	wsClient := NewRelayerClient(wsConfig, cdpClient, logger)
 
-	// Main connection loop - keeps trying to reconnect indefinitely
+	retryCount := 1
+	isConnectSuccess := make(chan bool, 2)
 	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("Shutting down...")
-			return
-		default:
-			// Try to connect and listen with retry logic for each connection
-			if err := connectWithRetries(ctx, wsClient, logger); err != nil {
-				logger.Fatal("Max connection retries exceeded. Shutting down...", zap.Error(err))
-				return
-			}
-
-			logger.Info("Connection cycle completed, restarting connection process...")
-		}
-	}
-}
-
-// connectWithRetries handles the retry logic for a single connection attempt
-func connectWithRetries(ctx context.Context, wsClient *RelayerClient, logger *zap.Logger) error {
-	retriesLeft := maxRetries
-
-	for retriesLeft > 0 {
-		// Try to connect
-		err := wsClient.ConnectAndListen(ctx)
-
-		// If context canceled or no error, we're done
-		if ctx.Err() != nil {
-			return nil // Context canceled, return without error
+		if retryCount > maxRetries {
+			logger.Error("Max retries reached, exiting")
+			cancel()
+			time.Sleep(shutdownTimeout)
+			os.Exit(1)
 		}
 
-		if err == nil {
-			// Successful connection that ended cleanly
-			logger.Info("WebSocket connection ended normally, will reconnect")
-			return nil
-		}
-
-		// We got an error, retry
-		retriesLeft--
-		logger.Error("WebSocket connection failed",
-			zap.Error(err),
-			zap.Int("retriesLeft", retriesLeft))
-
-		if retriesLeft >= 0 {
-			// Calculate delay with backoff
-			delay := baseDelay * time.Duration(maxRetries-retriesLeft)
-			logger.Info("Retrying connection...",
-				zap.Duration("delay", delay),
-				zap.Int("retriesLeft", retriesLeft),
-				zap.Int("maxRetries", maxRetries))
-
-			// Wait for delay or context cancellation
+		logger.Info(">>>>>Connecting to WebSocket...", zap.Int("retry", retryCount))
+		go func() {
 			select {
-			case <-time.After(delay):
-				// Continue to retry
 			case <-ctx.Done():
-				return nil // Context canceled during wait
+				logger.Info("Closing connectSuccess listening due to context cancellation.")
+				return
+			case success := <-isConnectSuccess:
+				if success {
+					retryCount = 1
+				}
 			}
-		} else {
-			return err // Out of retries, return the last error
-		}
-	}
+		}()
 
-	return nil // Should never reach here
+		err = wsClient.ConnectAndListen(ctx, isConnectSuccess)
+		if err != nil {
+			logger.Error("Failed to connect to WebSocket", zap.Error(err))
+		}
+
+		retryCount++
+		time.Sleep(baseRetryWebsocketInterval * time.Duration(retryCount))
+
+	}
 }
