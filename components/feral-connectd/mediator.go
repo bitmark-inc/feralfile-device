@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -12,8 +11,6 @@ import (
 )
 
 type Mediator struct {
-	sync.Mutex
-
 	relayer *RelayerClient
 	dbus    *DBusClient
 	cdp     *CDPClient
