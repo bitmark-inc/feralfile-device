@@ -10,12 +10,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// Retry config
 const (
-	maxRetries       = 3
-	baseDelay        = 3 * time.Second
-	watchdogInterval = 15 * time.Second
-	shutdownTimeout  = 1 * time.Second
+	WATCHDOG_INTERVAL = 15 * time.Second
+	SHUTDOWN_TIMEOUT  = 1 * time.Second
 )
 
 func main() {
@@ -39,17 +36,20 @@ func main() {
 			zap.String("signal", sig.String()))
 		cancel()
 
-		time.Sleep(shutdownTimeout)
+		time.Sleep(SHUTDOWN_TIMEOUT)
 		logger.Error("Shutdown timed out, forcing exit...",
-			zap.Duration("timeout", shutdownTimeout))
+			zap.Duration("timeout", SHUTDOWN_TIMEOUT))
 		os.Exit(1)
 	}()
 
 	// Load configuration
-	config := LoadConfig(logger)
+	config, err := LoadConfig(logger)
+	if err != nil {
+		logger.Fatal("Failed to load configuration", zap.Error(err))
+	}
 
 	// Initialize CDP client
-	cdpClient := NewCDPClient(config.CDPEndpoint, logger)
+	cdpClient := NewCDPClient(config.CDPConfig, logger)
 	err = cdpClient.InitCDP(ctx)
 	if err != nil {
 		logger.Fatal("CDP init failed", zap.Error(err))
@@ -57,81 +57,26 @@ func main() {
 	defer cdpClient.Close()
 
 	// Start watchdog in a goroutine
-	watchdog := NewWatchdog(watchdogInterval, logger)
+	watchdog := NewWatchdog(WATCHDOG_INTERVAL, logger)
 	go watchdog.Start(ctx)
 	defer watchdog.Stop()
 
 	// Initialize Relayer client
-	wsConfig := &RelayerConfig{
-		URL:        config.WsURL,
-		APIKey:     config.WsAPIKey,
-		LocationID: config.LocationID,
-		TopicID:    config.TopicID,
+	relayerClient := NewRelayerClient(config.RelayerConfig, logger)
+	defer relayerClient.Close()
+
+	// Initialize DBus client
+	dbusClient := NewDBusClient(ctx, logger, relayerClient)
+	err = dbusClient.Start()
+	if err != nil {
+		logger.Fatal("DBus init failed", zap.Error(err))
 	}
-	wsClient := NewRelayerClient(wsConfig, cdpClient, logger)
+	defer dbusClient.Stop()
 
-	// Main connection loop - keeps trying to reconnect indefinitely
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("Shutting down...")
-			return
-		default:
-			// Try to connect and listen with retry logic for each connection
-			if err := connectWithRetries(ctx, wsClient, logger); err != nil {
-				logger.Fatal("Max connection retries exceeded. Shutting down...", zap.Error(err))
-				return
-			}
+	// Initialize Mediator
+	mediator := NewMediator(relayerClient, dbusClient, cdpClient, logger)
+	mediator.Start()
+	defer mediator.Stop()
 
-			logger.Info("Connection cycle completed, restarting connection process...")
-		}
-	}
-}
-
-// connectWithRetries handles the retry logic for a single connection attempt
-func connectWithRetries(ctx context.Context, wsClient *RelayerClient, logger *zap.Logger) error {
-	retriesLeft := maxRetries
-
-	for retriesLeft > 0 {
-		// Try to connect
-		err := wsClient.ConnectAndListen(ctx)
-
-		// If context canceled or no error, we're done
-		if ctx.Err() != nil {
-			return nil // Context canceled, return without error
-		}
-
-		if err == nil {
-			// Successful connection that ended cleanly
-			logger.Info("WebSocket connection ended normally, will reconnect")
-			return nil
-		}
-
-		// We got an error, retry
-		retriesLeft--
-		logger.Error("WebSocket connection failed",
-			zap.Error(err),
-			zap.Int("retriesLeft", retriesLeft))
-
-		if retriesLeft >= 0 {
-			// Calculate delay with backoff
-			delay := baseDelay * time.Duration(maxRetries-retriesLeft)
-			logger.Info("Retrying connection...",
-				zap.Duration("delay", delay),
-				zap.Int("retriesLeft", retriesLeft),
-				zap.Int("maxRetries", maxRetries))
-
-			// Wait for delay or context cancellation
-			select {
-			case <-time.After(delay):
-				// Continue to retry
-			case <-ctx.Done():
-				return nil // Context canceled during wait
-			}
-		} else {
-			return err // Out of retries, return the last error
-		}
-	}
-
-	return nil // Should never reach here
+	<-ctx.Done()
 }

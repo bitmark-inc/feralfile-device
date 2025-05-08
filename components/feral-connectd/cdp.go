@@ -15,9 +15,13 @@ import (
 
 // CDP Methods
 const (
-	NavigateMethod = "Page.navigate"
-	EvaluateMethod = "Runtime.evaluate"
+	CDP_METHOD_NAVIGATE = "Page.navigate"
+	CDP_METHOD_EVALUATE = "Runtime.evaluate"
 )
+
+type CDPConfig struct {
+	Endpoint string `json:"endpoint"`
+}
 
 type CDPClient struct {
 	mu       sync.Mutex
@@ -29,9 +33,9 @@ type CDPClient struct {
 }
 
 // NewCDPClient creates a new CDP client
-func NewCDPClient(endpoint string, logger *zap.Logger) *CDPClient {
+func NewCDPClient(config *CDPConfig, logger *zap.Logger) *CDPClient {
 	return &CDPClient{
-		endpoint: endpoint,
+		endpoint: config.Endpoint,
 		reqID:    0,
 		isClosed: false,
 		logger:   logger,

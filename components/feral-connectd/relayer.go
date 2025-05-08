@@ -17,36 +17,39 @@ const (
 )
 
 type RelayerConfig struct {
-	URL        string
-	APIKey     string
-	LocationID string
-	TopicID    string
+	Endpoint   string `json:"endpoint"`
+	APIKey     string `json:"apiKey"`
+	LocationID string `json:"locationId"`
+	TopicID    string `json:"topicId"`
 }
+
+type RelayerHandler func(ctx context.Context, data map[string]interface{}) error
 
 // RelayerClient handles Relayer connection to relay server
 type RelayerClient struct {
-	config *RelayerConfig
-	cdp    *CDPClient
-	conn   *websocket.Conn
-	mu     sync.Mutex
-	done   chan struct{}
-	logger *zap.Logger
+	sync.Mutex
+
+	config   *RelayerConfig
+	conn     *websocket.Conn
+	done     chan struct{}
+	logger   *zap.Logger
+	handlers []RelayerHandler
 }
 
 // NewRelayerClient creates a new Relayer client
-func NewRelayerClient(config *RelayerConfig, cdp *CDPClient, logger *zap.Logger) *RelayerClient {
+func NewRelayerClient(config *RelayerConfig, logger *zap.Logger) *RelayerClient {
 	return &RelayerClient{
-		config: config,
-		cdp:    cdp,
-		done:   make(chan struct{}),
-		logger: logger,
+		config:   config,
+		done:     make(chan struct{}),
+		logger:   logger,
+		handlers: []RelayerHandler{},
 	}
 }
 
-// ConnectAndListen connects to the Relayer server and listens for messages
-func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
+// Connect connects to the Relayer server and listens for messages
+func (r *RelayerClient) Connect(ctx context.Context) error {
 	// Create URL with locationID and topicID if available
-	connectURL := r.config.URL
+	connectURL := r.config.Endpoint
 
 	if r.config.APIKey != "" {
 		connectURL += fmt.Sprintf("/api/connection?apiKey=%s", r.config.APIKey)
@@ -63,16 +66,16 @@ func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 	r.logger.Info("Connecting to WebSocket", zap.String("url", connectURL))
 	dialer := websocket.DefaultDialer
 
-	r.mu.Lock()
+	r.Lock()
 	conn, _, err := dialer.Dial(connectURL, nil)
 
 	if err != nil {
-		r.mu.Unlock()
+		r.Unlock()
 		return err
 	}
 
 	r.conn = conn
-	r.mu.Unlock()
+	r.Unlock()
 
 	conn.SetPongHandler(func(appData string) error {
 		r.logger.Debug("Received pong")
@@ -84,120 +87,108 @@ func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 	r.startPing()
 
 	defer func() {
-		r.mu.Lock()
+		r.Lock()
 		if r.conn != nil {
 			r.conn.Close()
 			r.conn = nil
 		}
-		r.mu.Unlock()
+		r.Unlock()
 	}()
+
+	// Handle background tasks
+	r.background(ctx)
 
 	r.logger.Info("Connected to WebSocket")
 
-	// Handle context cancellation
-	go func() {
-		select {
-		case <-ctx.Done():
-			r.logger.Info("Closing WebSocket connection due to context cancellation")
-			r.Close()
-		case <-r.done:
-			// Exit if closed manually
-			r.logger.Info("Context handler exiting due to manual close")
-		}
-	}()
+	return nil
+}
 
-	// Read message from relay server
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-r.done:
-			return nil
-		default:
-			r.mu.Lock()
-			if r.conn == nil {
-				r.mu.Unlock()
-				return nil
-			}
+func (r *RelayerClient) OnRelayerMessage(f RelayerHandler) {
+	r.Lock()
+	defer r.Unlock()
+	r.handlers = append(r.handlers, f)
+}
 
-			conn := r.conn
-			r.mu.Unlock()
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				r.logger.Error("Failed to read message", zap.Error(err))
-				return err
-			}
+func (r *RelayerClient) RemoveRelayerMessage(f RelayerHandler) {
+	r.Lock()
+	defer r.Unlock()
 
-			// Check JSON
-			var data map[string]interface{}
-			if err := json.Unmarshal(msg, &data); err != nil {
-				r.logger.Error("Invalid JSON received", zap.ByteString("message", msg))
-				continue
-			}
-
-			// Get message ID for logging
-			messageID, _ := data["messageID"].(string)
-
-			// Handle system message to get locationID and topicID
-			if messageID == "system" {
-				if message, ok := data["message"].(map[string]interface{}); ok {
-					if locationID, ok := message["locationID"].(string); ok {
-						r.config.LocationID = locationID
-						length, err := ConvertToUint64Varint(len(locationID))
-						if err != nil {
-							r.logger.Error("Failed to convert locationID to varint",
-								zap.Error(err), zap.String("locationID", locationID))
-						}
-
-						fmt.Printf("%d %s\n", length, locationID)
-					}
-
-					if topicID, ok := message["topicID"].(string); ok {
-						r.config.TopicID = topicID
-						length, err := ConvertToUint64Varint(len(topicID))
-						if err != nil {
-							r.logger.Error("Failed to convert topicID to varint",
-								zap.Error(err), zap.String("topicID", topicID))
-						}
-
-						fmt.Printf("%d %s\n", length, topicID)
-					}
-				}
-			}
-
-			r.logger.Debug("Received WebSocket message",
-				zap.String("messageID", messageID),
-				zap.Any("data", data))
-
-			// Forward message to Chrome via CDP
-			// TODO: Implement message forwarding
+	for i, handler := range r.handlers {
+		if fmt.Sprintf("%p", handler) == fmt.Sprintf("%p", f) {
+			r.handlers = append(r.handlers[:i], r.handlers[i+1:]...)
+			break
 		}
 	}
 }
 
+func (r *RelayerClient) background(ctx context.Context) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				r.logger.Info("Closing WebSocket connection due to context cancellation")
+				r.Close()
+				return
+			case <-r.done:
+				// Exit if closed manually
+				r.logger.Info("Context handler exiting due to manual close")
+				return
+			default:
+				r.Lock()
+				if r.conn == nil {
+					r.Unlock()
+					return
+				}
+
+				conn := r.conn
+				r.Unlock()
+				_, msg, err := conn.ReadMessage()
+				if err != nil {
+					r.logger.Error("Failed to read message", zap.Error(err))
+					continue
+				}
+
+				// Check JSON
+				var data map[string]interface{}
+				if err := json.Unmarshal(msg, &data); err != nil {
+					r.logger.Error("Invalid JSON received", zap.ByteString("message", msg))
+					continue
+				}
+
+				// Forward message to handlers
+				for _, handler := range r.handlers {
+					if err := handler(ctx, data); err != nil {
+						r.logger.Error("Failed to handle message", zap.Error(err))
+					}
+				}
+			}
+		}
+	}()
+}
+
 // startPingPong sends periodic pings to keep the connection alive
 func (r *RelayerClient) startPing() {
-	r.mu.Lock()
+	r.Lock()
 	if r.conn == nil {
-		r.mu.Unlock()
+		r.Unlock()
 		return
 	}
 
 	if err := r.conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
 		r.logger.Error("Failed to send ping", zap.Error(err))
-		r.mu.Unlock()
+		r.Unlock()
 		return
 	}
 
-	r.mu.Unlock()
+	r.Unlock()
 	r.logger.Debug("Sent ping")
 	r.conn.SetReadDeadline(time.Now().Add(pongWait))
 }
 
 // Close closes the Relayer connection
 func (r *RelayerClient) Close() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.Lock()
+	defer r.Unlock()
 
 	select {
 	case <-r.done:
