@@ -85,8 +85,7 @@ func (w *WSClient) ConnectAndListen(ctx context.Context) error {
 			w.Close()
 		case <-w.done:
 			// Exit if closed manually
-			log.Println("Closing WebSocket connection due to manual close")
-			w.Close()
+			log.Println("Context handler exiting due to manual close")
 		}
 	}()
 
