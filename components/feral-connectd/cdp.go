@@ -71,21 +71,7 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 
 	for _, t := range targets {
 		if t.Type == "page" && strings.Contains(t.Title, "Feral File") {
-			c.conn, _, err = websocket.DefaultDialer.Dial(t.WebSocketDebuggerURL, nil)
-			if err != nil {
-				return fmt.Errorf("cdp dial error: %w", err)
-			}
-			c.logger.Info("Connected to Chromium CDP page target",
-				zap.String("url", t.WebSocketDebuggerURL))
-
-			// Start goroutine to handle context cancellation
-			go func() {
-				<-ctx.Done()
-				c.logger.Info("Closing CDP connection due to context cancellation")
-				c.Close()
-			}()
-
-			return nil
+			pageTargets = append(pageTargets, t)
 		}
 	}
 
