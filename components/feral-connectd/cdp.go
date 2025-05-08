@@ -44,7 +44,6 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch debug targets: %w", err)
 	}
-
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
@@ -61,34 +60,46 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 		return fmt.Errorf("invalid targets format: %w", err)
 	}
 
-	// Connect to CDP websocket
+	// Collect all page targets
+	var pageTargets []struct {
+		Type                 string `json:"type"`
+		Title                string `json:"title"`
+		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	}
+
 	for _, t := range targets {
 		if t.Type == "page" && strings.Contains(t.Title, "Feral File") {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-
-			c.conn, _, err = websocket.DefaultDialer.Dial(t.WebSocketDebuggerURL, nil)
-			if err != nil {
-				return fmt.Errorf("cdp dial error: %w", err)
-			}
-			log.Println("Connected to Chromium CDP page target:", t.WebSocketDebuggerURL)
-
-			// Start goroutine to handle context cancellation
-			go func() {
-				select {
-				case <-ctx.Done():
-					log.Println("Closing CDP connection due to context cancellation")
-					c.Close()
-				case <-c.done:
-					// Exit if closed manually
-				}
-			}()
-
-			return nil
+			pageTargets = append(pageTargets, t)
 		}
 	}
 
-	return fmt.Errorf("no page target found in Chromium instance")
+	if len(pageTargets) == 0 {
+		return fmt.Errorf("no page target found in Chromium instance")
+	}
+
+	// Connect to the single page target
+	target := pageTargets[0]
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.conn, _, err = websocket.DefaultDialer.Dial(target.WebSocketDebuggerURL, nil)
+	if err != nil {
+		return fmt.Errorf("cdp dial error: %w", err)
+	}
+	log.Println("Connected to Chromium CDP page target:", target.WebSocketDebuggerURL)
+
+	// Start goroutine to handle context cancellation
+	go func() {
+		select {
+		case <-ctx.Done():
+			log.Println("Closing CDP connection due to context cancellation")
+			c.Close()
+		case <-c.done:
+			// Exit if closed manually
+		}
+	}()
+
+	return nil
 }
 
 // SendCDPRequest sends a raw CDP JSON-RPC message and waits for response
