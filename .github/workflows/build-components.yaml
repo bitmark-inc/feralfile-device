@@ -21,7 +21,6 @@ on:
         required: false
         type: string
         default: 'GitHub Actions'
-  
   workflow_dispatch:
     inputs:
       component:
@@ -68,14 +67,18 @@ jobs:
       - name: Prepare source tarball & PKGBUILD
         working-directory: components/${{ inputs.component }}
         run: |
-          set -e
+          set -euo pipefail
           COMP=${{ inputs.component }}
           VER=${VERSION}
+          TARBALL="${COMP}-${VER}.tar.gz"
 
-          # 1) Package everything as a .tar.gz, but exclude the archive file itself
-          tar czf "${COMP}-${VER}.tar.gz" --exclude="${COMP}-${VER}.tar.gz" .
+          # 1) Create the tarball in /tmp to avoid it being seen mid–archive
+          tar czf "/tmp/${TARBALL}" --exclude="${TARBALL}" .
 
-          # 2) Emit a clean PKGBUILD
+          # 2) Move it back into the component directory
+          mv "/tmp/${TARBALL}" .
+
+          # 3) Emit a clean, un-indented PKGBUILD
           cat <<EOF > PKGBUILD
           # Maintainer: ${{ inputs.maintainer }}
           pkgname=${COMP}
@@ -89,23 +92,22 @@ jobs:
           makedepends=('go')
           options=(!strip)
 
-          source=("${COMP}-${VER}.tar.gz")
+          source=("${TARBALL}")
           sha256sums=('SKIP')
 
           build() {
             cd "\$srcdir"
-            go build -v -o "\$pkgname"
+            go build -v -o "${COMP}"
           }
 
           package() {
-            install -Dm755 "\$srcsrc/\$pkgname" "\$pkgdir/usr/bin/\$pkgname"
+            install -Dm755 "\$srcdir/${COMP}" "\$pkgdir/usr/bin/${COMP}"
           }
           EOF
 
       - name: Build Pacman Package
         working-directory: components/${{ inputs.component }}
         run: |
-          # run makepkg as non-root
           useradd -m builder
           chown -R builder:builder .
           su builder -c "makepkg -f --skipinteg"
