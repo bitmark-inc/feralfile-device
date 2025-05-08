@@ -17,6 +17,9 @@ linux-firmware
 mkinitcpio
 mkinitcpio-archiso
 arch-install-scripts
+vulkan-icd-loader
+vulkan-intel
+vulkan-tools
 
 # Boot support
 intel-ucode
