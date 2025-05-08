@@ -7,11 +7,67 @@
   html,body{margin:0;height:100%;background:#000;color:#fff;font-family:sans-serif}
   #stage{position:relative;width:100vw;height:100vh;overflow:hidden;background:#000}
   #stage>img, #stage>video, #stage>iframe{width:100%;height:100%;background:#000}
+
+  .loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    font-size: 32px;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #000000;
+    color: #ffffff;
+  }
+  .loadingContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .loader {
+    height: 4px;
+    width: 100%;
+    background:
+      no-repeat linear-gradient(#a0a0a0, #a0a0a0),
+      no-repeat linear-gradient(#a0a0a0, #a0a0a0),
+      #2e2e2e;
+    background-size: 60% 100%;
+    animation: l16 3s infinite;
+  }
+  @keyframes l16 {
+    0% {
+      background-position:
+        -150% 0,
+        -150% 0;
+    }
+    66% {
+      background-position:
+        250% 0,
+        -150% 0;
+    }
+    100% {
+      background-position:
+        250% 0,
+        250% 0;
+    }
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
 </head>
 <body>
 
+<div class="loading">
+  <div class="loadingContainer">
+    <div>
+      <p>Loading...</p>
+      <div class="loader"></div>
+    </div>
+  </div>
+</div>
 <div id="stage"></div>
 
 <script>
@@ -31,11 +87,13 @@ const FileUseIframePDF = ["pdf", "application/pdf"];
 
 /* ---------------------------------- VARIABLES ----------------------------------- */
 const stage  = document.getElementById('stage');
+const loading = document.querySelector('.loading');
+const CLIENT_BANDWIDTH_HINT = 16; // Default value for bandwidth hint on load stream video
 
 let mode = 'fit';                     // 'fit' | 'fill'
 let currentEl = null;                 // <img> or <video> or <audio> or <iframe>
 let isStreaming = false;
-const CLIENT_BANDWIDTH_HINT = 16; // Default value for bandwidth hint
+let isLoading = true;
 
 function applyMode(el){
   if(!el) return;
@@ -43,15 +101,24 @@ function applyMode(el){
   el.style.objectFit = mode === 'fill' ? 'cover' : 'contain';
 }
 
+function showLoading(){
+  loading.style.display = 'flex';
+}
+
+function hideLoading(){
+  loading.style.display = 'none';
+}
+
 function setSrc(url, mimeType){
   if(currentEl) stage.removeChild(currentEl);
-
+  showLoading();
   if (!url) return;
 
   const type = mimeType || url.split('.').pop().toLowerCase();
   const el = fileTypeToPlayerElement(type, url);
   el.onload = el.onloadeddata = () => {
     el.focus();
+    hideLoading();
   };
   applyMode(el);
   stage.appendChild(el);
@@ -120,6 +187,9 @@ function setStreamElement(url, el) {
         .catch((error) => {
           console.log("Error play video", error);
         })
+        .finally(() => {
+          hideLoading();
+        });
     });
 
     hls.on(Hls.Events.ERROR, function (event, data) {
@@ -186,8 +256,10 @@ function fileTypeToPlayerElement(type, url) {
     el.play().catch((error) => {
       console.log("[ArtworkPlayer] Error play video", JSON.stringify(error));
       retryToPlayVideo(el);
+    })
+    .finally(() => {
+      hideLoading();
     });
-
   } else if (FileUseAudio.includes(type) || type.match(MIMETypeAudio)) {
     el = setAudioElement(url);
   } else if (FileUseImage.includes(type) || type.match(MIMETypeImage)) {
@@ -202,7 +274,7 @@ function fileTypeToPlayerElement(type, url) {
 }
 
 /* ---------------------- expose to external scripts ---------------------------- */
-async function setArtwork({ url, mimeType, mode: newMode }){
+function setArtwork({ url, mimeType, mode: newMode }){
   if(newMode === 'fit' || newMode === 'fill'){
     mode = newMode;
     applyMode(currentEl);
@@ -210,7 +282,16 @@ async function setArtwork({ url, mimeType, mode: newMode }){
   if(url) setSrc(url, mimeType);
   return { ok:true };
 }
-window.setArtwork = setArtwork;       // <-- external API
+
+function handleCDPRequest({ command, params }) {
+  if(command === 'setArtwork'){
+    setArtwork(params);
+    return { ok:true };
+  } else {
+    return { ok:false, error: `Unknown command: ${command}` };
+  }
+}
+window.handleCDPRequest = handleCDPRequest;
 
 </script>
 </body>
