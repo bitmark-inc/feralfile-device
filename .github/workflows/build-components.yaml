@@ -94,7 +94,11 @@ jobs:
       - name: Build Pacman Package
         working-directory: components/${{ inputs.component }}
         run: |
-          makepkg -f
+          # Create a non-root user for building packages
+          useradd -m builder
+          chown -R builder:builder .
+          # Run makepkg as the non-root user
+          su -c "makepkg -f" builder
 
       - name: Upload Pacman Package
         uses: actions/upload-artifact@v4
