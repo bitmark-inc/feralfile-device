@@ -79,6 +79,10 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 		return fmt.Errorf("no page target found in Chromium instance")
 	}
 
+	if len(pageTargets) > 1 {
+		return fmt.Errorf("multiple page targets found in Chromium instance")
+	}
+
 	// Connect to the single page target
 	target := pageTargets[0]
 	c.mu.Lock()
