@@ -58,7 +58,7 @@ jobs:
         id: set-version
         run: |
           if [ -z "${{ inputs.version }}" ]; then
-            VERSION="{{ github.sha }}"
+            VERSION="${{ github.sha }}"
           else
             VERSION="${{ inputs.version }}"
           fi
