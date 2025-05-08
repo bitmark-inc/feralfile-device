@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+echo "Booting..."
+sleep 5
+
 cleanup() {
   echo
   echo "⚠️  Cleaning up..."
