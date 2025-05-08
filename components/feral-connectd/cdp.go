@@ -7,11 +7,11 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 )
 
 // CDP Methods
@@ -21,26 +21,28 @@ const (
 )
 
 type CDPClient struct {
-	conn   *websocket.Conn
-	reqID  int
-	config *Config
-	mu     sync.Mutex
-	done   chan struct{}
+	mu       sync.Mutex
+	conn     *websocket.Conn
+	reqID    int
+	endpoint string
+	isClosed bool
+	logger   *zap.Logger
 }
 
 // NewCDPClient creates a new CDP client
-func NewCDPClient(config *Config) *CDPClient {
+func NewCDPClient(endpoint string, logger *zap.Logger) *CDPClient {
 	return &CDPClient{
-		config: config,
-		reqID:  0,
-		done:   make(chan struct{}),
+		endpoint: endpoint,
+		reqID:    0,
+		isClosed: false,
+		logger:   logger,
 	}
 }
 
 // InitCDP fetches WS endpoint and dials Chromium
 func (c *CDPClient) InitCDP(ctx context.Context) error {
 	// Fetch JSON with websocket debugger URL
-	resp, err := http.Get(c.config.CDPHost + ":" + strconv.Itoa(c.config.CDPPort) + "/json")
+	resp, err := http.Get(c.endpoint + "/json")
 	if err != nil {
 		return fmt.Errorf("failed to fetch debug targets: %w", err)
 	}
@@ -69,7 +71,21 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 
 	for _, t := range targets {
 		if t.Type == "page" && strings.Contains(t.Title, "Feral File") {
-			pageTargets = append(pageTargets, t)
+			c.conn, _, err = websocket.DefaultDialer.Dial(t.WebSocketDebuggerURL, nil)
+			if err != nil {
+				return fmt.Errorf("cdp dial error: %w", err)
+			}
+			c.logger.Info("Connected to Chromium CDP page target",
+				zap.String("url", t.WebSocketDebuggerURL))
+
+			// Start goroutine to handle context cancellation
+			go func() {
+				<-ctx.Done()
+				c.logger.Info("Closing CDP connection due to context cancellation")
+				c.Close()
+			}()
+
+			return nil
 		}
 	}
 
@@ -90,13 +106,9 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 
 	// Start goroutine to handle context cancellation
 	go func() {
-		select {
-		case <-ctx.Done():
-			log.Println("Closing CDP connection due to context cancellation")
-			c.Close()
-		case <-c.done:
-			// Exit if closed manually
-		}
+		<-ctx.Done()
+		log.Println("Closing CDP connection due to context cancellation")
+		c.Close()
 	}()
 
 	return nil
@@ -107,8 +119,8 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.conn == nil {
-		return fmt.Errorf("CDP connection is not initialized")
+	if c.isClosed || c.conn == nil {
+		return fmt.Errorf("CDP connection is not initialized or already closed")
 	}
 
 	c.reqID++
@@ -143,7 +155,9 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 		return fmt.Errorf("CDP error: %v", err)
 	}
 
-	log.Printf("CDP response: %s", response)
+	c.logger.Debug("CDP response received",
+		zap.String("method", method),
+		zap.String("response", string(response)))
 	return nil
 }
 
@@ -152,13 +166,12 @@ func (c *CDPClient) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	select {
-	case <-c.done:
+	if c.isClosed {
 		// Already closed
 		return
-	default:
-		close(c.done)
 	}
+
+	c.isClosed = true
 
 	if c.conn != nil {
 		c.conn.Close()

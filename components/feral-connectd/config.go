@@ -1,17 +1,18 @@
 package main
 
 import (
-	"log"
+	"encoding/json"
+	"fmt"
 	"os"
-	"strconv"
 	"sync"
+
+	"go.uber.org/zap"
 )
 
-// Configuration for CDP connection
+// Configuration for all components
 type Config struct {
 	sync.RWMutex
-	CDPHost string
-	CDPPort int
+	CDPEndpoint string
 
 	WsURL    string
 	WsAPIKey string
@@ -20,47 +21,53 @@ type Config struct {
 	TopicID    string
 }
 
-// Environment variable names
-const (
-	ENV_CDP_PORT   = "CDP_PORT"
-	ENV_WS_API_KEY = "WS_API_KEY"
-	ENV_WS_URL     = "WS_URL"
+// CredentialsFile is the structure of the JSON credentials file
+type CredentialsFile struct {
+	Relayer struct {
+		Endpoint string `json:"endpoint"`
+		APIKey   string `json:"apiKey"`
+	} `json:"relayer"`
+	CDP struct {
+		Endpoint string `json:"endpoint"`
+	} `json:"cdp"`
+}
 
-	// Default values
-	CDP_HOST         = "http://127.0.0.1"
-	DEFAULT_CDP_PORT = 9222
-	DEFAULT_WS_URL   = "wss://tv-cast-coordination.bitmark-development.workers.dev"
+const (
+	CREDS_FILE_DIR = "/var/lib/feralfile/creds.json"
 )
 
-// LoadConfig reads environment variables and returns a config struct
-func LoadConfig() *Config {
-	cdpPort := DEFAULT_CDP_PORT
-	if portStr := os.Getenv(ENV_CDP_PORT); portStr != "" {
-		if port, err := strconv.Atoi(portStr); err == nil && port > 0 {
-			cdpPort = port
-		} else if err != nil {
-			log.Printf("Invalid %s value: %v, using default: %d", ENV_CDP_PORT, err, DEFAULT_CDP_PORT)
-		}
+// LoadCredentials loads credentials from a JSON file
+func LoadCredentials(logger *zap.Logger) (*CredentialsFile, error) {
+	data, err := os.ReadFile(CREDS_FILE_DIR)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read credentials file: %w", err)
 	}
 
-	wsApiKey := os.Getenv(ENV_WS_API_KEY)
-	if wsApiKey == "" {
-		log.Fatalf("Missing %s environment variable", ENV_WS_API_KEY)
+	var creds CredentialsFile
+	if err := json.Unmarshal(data, &creds); err != nil {
+		return nil, fmt.Errorf("failed to parse credentials file: %w", err)
 	}
 
-	wsURL := os.Getenv(ENV_WS_URL)
-	if wsURL == "" {
-		wsURL = DEFAULT_WS_URL
+	return &creds, nil
+}
+
+// LoadConfig reads the configuration from credentials file or environment variables
+func LoadConfig(logger *zap.Logger) *Config {
+	// Load credentials
+	creds, err := LoadCredentials(logger)
+	if err != nil {
+		logger.Fatal("Failed to load credentials", zap.Error(err))
 	}
 
 	config := &Config{
-		CDPHost:  CDP_HOST,
-		CDPPort:  cdpPort,
-		WsAPIKey: wsApiKey,
-		WsURL:    wsURL,
+		CDPEndpoint: creds.CDP.Endpoint,
+		WsAPIKey:    creds.Relayer.APIKey,
+		WsURL:       creds.Relayer.Endpoint,
 	}
 
-	log.Printf("CDP configuration: %s:%d", config.CDPHost, config.CDPPort)
+	logger.Info("CDP configuration loaded",
+		zap.String("endpoint", config.CDPEndpoint),
+		zap.String("ws_url", config.WsURL))
 
 	return config
 }
