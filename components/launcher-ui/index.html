@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Onboarding</title>
+    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+    <style>
+        .hidden {
+            display: none !important;
+        }
+
+        html,
+        body {
+            pointer-events: none;
+            user-select: none;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: black;
+            color: white;
+            font-family: sans-serif;
+            text-align: center;
+            font-size: clamp(28px, 1.5vw, 64px);
+        }
+        
+
+        #qrcode {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #qrcode img {
+            max-width: 50vh;
+            max-height: 50vh;
+            width: auto;
+            height: auto;
+        }
+        .logo {
+            max-width: 50vw;
+            max-height: 50vh;
+            width: auto;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+
+<body style="display: none;">
+    <!-- Screens -->
+    <div id="logoScreen" class="hidden">
+        <img src="portal.svg" alt="Logo" class="logo" />
+    </div>
+    <div id="initScreen" class="hidden">Initializing...</div>
+    <div id="qrScreen" class="hidden">
+        <div id="qrcode"></div>
+    </div>
+    <div id="welcomeScreen" class="hidden">
+        <p id="welcomeText"></p>
+    </div>
+    <div id="connectScreen" class="hidden">
+        <p id="connectText"></p>
+    </div>
+
+    <script>
+        const screens = {
+            logo: {
+                id: "logoScreen",
+                requiredParams: [],
+            },
+            init: {
+                id: "initScreen",
+                requiredParams: [],
+            },
+            qr: {
+                id: "qrScreen",
+                requiredParams: ["device_id"],
+                render: (params) => {
+                    const deviceId = params.get("device_id");
+                    const qrData = `https://link.feralfile.com/device_connect/${deviceId}`;                     
+                    // Calculate QR code size based on viewport
+                    const minEdge = Math.min(window.innerWidth, window.innerHeight);
+                    const qrSize = Math.floor(minEdge / 2);
+                    
+                    // Clear previous QR code if exists
+                    document.getElementById("qrcode").innerHTML = '';
+                    
+                    // Generate QR code using QRCode.js
+                    const qrCode = new QRCode(document.getElementById("qrcode"), {
+                        text: qrData,
+                        width: qrSize,
+                        height: qrSize,
+                        colorDark: "#ffffff",
+                        colorLight: "#000000",
+                        correctLevel: QRCode.CorrectLevel.L
+                    });
+                }
+            },
+            welcome: {
+                id: "welcomeScreen",
+                requiredParams: ["device_id"],
+                render: (params) => {
+                    document.getElementById("welcomeText").textContent = 
+                        `Welcome to the Portal ${params.get("device_id")} Alpha Pilot`;
+                },
+            },
+            connect: {
+                id: "connectScreen",
+                requiredParams: ["ssid"],
+                render: (params) => {
+                    document.getElementById("connectText").textContent = 
+                        `Connecting to ${params.get("ssid")}`;
+                },
+            },
+        };
+
+        function showScreen(step, params) {
+            const screen = screens[step];
+
+            if (!screen) {
+                document.body.innerHTML = `<h2 style="color:red;">Unknown step: "${step}"</h2>`;
+                return;
+            }
+
+            const missing = screen.requiredParams.filter(key => !params.get(key));
+            if (missing.length) {
+                document.body.innerHTML = `<h2 style="color:red;">Missing param(s): ${missing.join(', ')}</h2>`;
+                return;
+            }
+
+            Object.values(screens).forEach(({ id }) => {
+                document.getElementById(id)?.classList.add("hidden");
+            });
+
+            if (screen.render) screen.render(params);
+            document.getElementById(screen.id)?.classList.remove("hidden");
+        }
+
+        // Initialize
+        const params = new URLSearchParams(window.location.search);
+        const step = params.get("step") || "logo";
+
+        // Show body and initial screen after DOM is loaded
+        document.addEventListener("DOMContentLoaded", () => {
+            showScreen(step, params);
+            document.body.style.display = "";
+        });
+
+        // Handle window resize for QR code
+        window.addEventListener('resize', () => {
+            if (step === 'qr') {
+                showScreen('qr', params);
+            }
+        });
+    </script>
+</body>
+
+</html>
