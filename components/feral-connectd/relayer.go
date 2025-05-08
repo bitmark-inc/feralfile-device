@@ -11,6 +11,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	pingInterval = 5 * time.Second
+	pongWait     = 10 * time.Second
+)
+
 type RelayerConfig struct {
 	URL        string
 	APIKey     string
@@ -60,6 +65,7 @@ func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 
 	r.mu.Lock()
 	conn, _, err := dialer.Dial(connectURL, nil)
+
 	if err != nil {
 		r.mu.Unlock()
 		return err
@@ -67,6 +73,16 @@ func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 
 	r.conn = conn
 	r.mu.Unlock()
+
+	conn.SetPongHandler(func(appData string) error {
+		r.logger.Debug("Received pong")
+		conn.SetReadDeadline(time.Time{})
+		time.Sleep(pingInterval)
+		r.startPing()
+		return nil
+	})
+	r.startPing()
+
 	defer func() {
 		r.mu.Lock()
 		if r.conn != nil {
@@ -77,11 +93,6 @@ func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 	}()
 
 	r.logger.Info("Connected to WebSocket")
-
-	// WS ping/pong
-	stopPing := make(chan struct{})
-	go r.startPingPong(stopPing)
-	defer close(stopPing)
 
 	// Handle context cancellation
 	go func() {
@@ -109,20 +120,13 @@ func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 				return nil
 			}
 
-			_, msg, err := r.conn.ReadMessage()
-			r.logger.Debug(">>>>>>Received message", zap.ByteString("message", msg))
+			conn := r.conn
 			r.mu.Unlock()
-
+			_, msg, err := conn.ReadMessage()
 			if err != nil {
+				r.logger.Error("Failed to read message", zap.Error(err))
 				return err
 			}
-
-			// Reset deadline when receiving any message
-			r.mu.Lock()
-			if r.conn != nil {
-				_ = r.conn.SetReadDeadline(time.Time{})
-			}
-			r.mu.Unlock()
 
 			// Check JSON
 			var data map[string]interface{}
@@ -172,46 +176,22 @@ func (r *RelayerClient) ConnectAndListen(ctx context.Context) error {
 }
 
 // startPingPong sends periodic pings to keep the connection alive
-func (r *RelayerClient) startPingPong(stop chan struct{}) {
-	pingInterval := 5 * time.Minute
-	pongWait := 10 * time.Second
-
-	ticker := time.NewTicker(pingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			pingMsg := map[string]string{
-				"messageID": "ping",
-				"message":   "ping",
-			}
-			pingBytes, _ := json.Marshal(pingMsg)
-
-			r.mu.Lock()
-			if r.conn == nil {
-				r.mu.Unlock()
-				return
-			}
-
-			if err := r.conn.WriteMessage(websocket.TextMessage, pingBytes); err != nil {
-				r.logger.Error("Failed to send ping", zap.Error(err))
-				r.mu.Unlock()
-				return
-			}
-
-			_ = r.conn.SetReadDeadline(time.Now().Add(pongWait))
-			r.mu.Unlock()
-			r.logger.Debug("Sent ping")
-
-		case <-stop:
-			r.logger.Debug("Ping/pong loop stopped")
-			return
-		case <-r.done:
-			r.logger.Debug("Ping/pong loop stopped due to connection close")
-			return
-		}
+func (r *RelayerClient) startPing() {
+	r.mu.Lock()
+	if r.conn == nil {
+		r.mu.Unlock()
+		return
 	}
+
+	if err := r.conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
+		r.logger.Error("Failed to send ping", zap.Error(err))
+		r.mu.Unlock()
+		return
+	}
+
+	r.mu.Unlock()
+	r.logger.Debug("Sent ping")
+	r.conn.SetReadDeadline(time.Now().Add(pongWait))
 }
 
 // Close closes the WebSocket connection

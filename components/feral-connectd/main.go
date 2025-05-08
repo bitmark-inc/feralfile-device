@@ -70,37 +70,68 @@ func main() {
 	}
 	wsClient := NewRelayerClient(wsConfig, cdpClient, logger)
 
-	// Connection retry loop
-	retries := 0
-
+	// Main connection loop - keeps trying to reconnect indefinitely
 	for {
 		select {
 		case <-ctx.Done():
 			logger.Info("Shutting down...")
 			return
 		default:
-			err := wsClient.ConnectAndListen(ctx)
-			if err != nil {
-				logger.Error("Relayer error", zap.Error(err))
-				retries++
-				if retries > maxRetries {
-					logger.Fatal("Max retries exceeded. Shutting down...")
-				}
-
-				delay := baseDelay * time.Duration(retries)
-				logger.Info("Reconnecting...", zap.Duration("delay", delay))
-
-				select {
-				case <-time.After(delay):
-					// Continue retry loop
-				case <-ctx.Done():
-					logger.Info("Shutting down during reconnect...")
-					return
-				}
-			} else {
-				// Reset retries on successful connection that ended normally
-				retries = 0
+			// Try to connect and listen with retry logic for each connection
+			if err := connectWithRetries(ctx, wsClient, logger); err != nil {
+				logger.Fatal("Max connection retries exceeded. Shutting down...", zap.Error(err))
+				return
 			}
+
+			logger.Info("Connection cycle completed, restarting connection process...")
 		}
 	}
+}
+
+// connectWithRetries handles the retry logic for a single connection attempt
+func connectWithRetries(ctx context.Context, wsClient *RelayerClient, logger *zap.Logger) error {
+	retriesLeft := maxRetries
+
+	for retriesLeft > 0 {
+		// Try to connect
+		err := wsClient.ConnectAndListen(ctx)
+
+		// If context canceled or no error, we're done
+		if ctx.Err() != nil {
+			return nil // Context canceled, return without error
+		}
+
+		if err == nil {
+			// Successful connection that ended cleanly
+			logger.Info("WebSocket connection ended normally, will reconnect")
+			return nil
+		}
+
+		// We got an error, retry
+		retriesLeft--
+		logger.Error("WebSocket connection failed",
+			zap.Error(err),
+			zap.Int("retriesLeft", retriesLeft))
+
+		if retriesLeft >= 0 {
+			// Calculate delay with backoff
+			delay := baseDelay * time.Duration(maxRetries-retriesLeft)
+			logger.Info("Retrying connection...",
+				zap.Duration("delay", delay),
+				zap.Int("retriesLeft", retriesLeft),
+				zap.Int("maxRetries", maxRetries))
+
+			// Wait for delay or context cancellation
+			select {
+			case <-time.After(delay):
+				// Continue to retry
+			case <-ctx.Done():
+				return nil // Context canceled during wait
+			}
+		} else {
+			return err // Out of retries, return the last error
+		}
+	}
+
+	return nil // Should never reach here
 }
