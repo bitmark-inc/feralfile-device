@@ -1,0 +1,10 @@
+[Unit]
+Description=Feral File Connectd
+After=local-fs.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/connectd
+
+[Install]
+WantedBy=multi-user.target 
