@@ -1,1 +1,1 @@
-feralfile ALL=(ALL) ALL
+feralfile ALL=(ALL) ALL NOPASSWD: ALL
