@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var errRelayerAlreadyConnected = fmt.Errorf("relayer is already connected")
+
 const (
 	RELAYER_PING_INTERVAL = 15 * time.Second
 	RELAYER_PONG_WAIT     = 10 * time.Second
@@ -53,10 +55,16 @@ func (r *RelayerClient) RetriableConnect(ctx context.Context) error {
 	bo.Multiplier = 2
 	bo.MaxElapsedTime = 30 * time.Second
 
-	err := backoff.Retry(func() error {
-		return r.Connect(ctx)
-	}, bo)
+	var err error
+	ops := func() error {
+		err = r.Connect(ctx)
+		if err == errRelayerAlreadyConnected {
+			return nil
+		}
+		return err
+	}
 
+	_ = backoff.Retry(ops, bo)
 	return err
 }
 
@@ -66,7 +74,7 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 	r.Lock()
 	if r.conn != nil {
 		r.Unlock()
-		return fmt.Errorf("relayer is already connected")
+		return errRelayerAlreadyConnected
 	}
 	r.Unlock()
 
