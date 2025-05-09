@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 type Cmd string
@@ -22,8 +23,9 @@ var CmdOK = struct {
 }
 
 type Command struct {
-	dataHandler *DataHandler
-	cdp         *CDPClient
+	dataHandler    *DataHandler
+	cdp            *CDPClient
+	dailyScheduler *time.Timer
 }
 
 type CmdCastArtworkArgs struct {
@@ -63,7 +65,7 @@ func (c *Command) Execute(ctx context.Context, cmd Cmd, args map[string]interfac
 	case CMD_CAST_EXHIBITION:
 		return c.castExhibition(bytes)
 	case CMD_CAST_DAILY:
-		return c.castDaily()
+		return c.castDaily(ctx)
 	default:
 		return nil, fmt.Errorf("invalid command: %s", cmd)
 	}
@@ -74,6 +76,12 @@ func (c *Command) checkStatus() (interface{}, error) {
 }
 
 func (c *Command) castListArtwork(ctx context.Context, args []byte) (interface{}, error) {
+	// Cancel any scheduled daily task
+	if c.dailyScheduler != nil {
+		c.dailyScheduler.Stop()
+		c.dailyScheduler = nil
+	}
+
 	var cmdArgs CmdCastArtworkArgs
 	err := json.Unmarshal(args, &cmdArgs)
 	if err != nil {
@@ -92,48 +100,35 @@ func (c *Command) castListArtwork(ctx context.Context, args []byte) (interface{}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tokens: %s", err)
 	}
-
-	type CDPArgs struct {
-		URL      string
-		MIMEType string
-		Mode     string
-		Duration int
+	if len(tokens) == 0 {
+		return nil, fmt.Errorf("no tokens found")
 	}
-	var cdpArgs []CDPArgs
+
+	var cdpArgs []CdpPlayArtworkArgs
 	for _, token := range tokens {
-		cdpArgs = append(cdpArgs, CDPArgs{
+		cdpArgs = append(cdpArgs, CdpPlayArtworkArgs{
 			URL:      token.Asset.Metadata.Project.Latest.PreviewURL,
 			MIMEType: token.Asset.Metadata.Project.Latest.MIMEType,
 			Mode:     "fit",
-			Duration: indexIDDurationMap[token.IndexID],
 		})
 	}
 
 	// TODO: handle multiple artworks playing
-	err = c.cdp.SendCDPRequest(CDP_METHOD_EVALUATE,
-		map[string]interface{}{
-			"expression": fmt.Sprintf(
-				`window.handleCDPRequest({
-                            command: "setArtwork",
-                            params: {
-                                url: "%s",
-                                mimeType: "%s",
-                                mode: "%s",
-                            },
-                        });`,
-				cdpArgs[0].URL,
-				cdpArgs[0].MIMEType,
-				cdpArgs[0].Mode,
-			),
-		})
+	err = c.cdpPlayArtwork(cdpArgs[0])
 	if err != nil {
-		return nil, fmt.Errorf("failed to send CDP request: %s", err)
+		return nil, fmt.Errorf("failed to play artwork: %s", err)
 	}
 
 	return CmdOK, nil
 }
 
 func (c *Command) castExhibition(args []byte) (interface{}, error) {
+	// Cancel any scheduled daily task
+	if c.dailyScheduler != nil {
+		c.dailyScheduler.Stop()
+		c.dailyScheduler = nil
+	}
+
 	var cmdArgs CmdCastExhibitionArgs
 	err := json.Unmarshal(args, &cmdArgs)
 	if err != nil {
@@ -168,18 +163,89 @@ func (c *Command) castExhibition(args []byte) (interface{}, error) {
 	return CmdOK, nil
 }
 
-func (c *Command) castDaily() (interface{}, error) {
+func (c *Command) castDaily(ctx context.Context) (interface{}, error) {
+	// Cancel any existing scheduled task
+	if c.dailyScheduler != nil {
+		c.dailyScheduler.Stop()
+		c.dailyScheduler = nil
+	}
+
+	now := time.Now()
+	date := time.Date(now.Year(), now.Month(), now.Day(), 2, 0, 0, 0, now.Location())
+	nextDate := date.AddDate(0, 0, 1)
+
+	// Schedule for the next day at 2am
+	duration := nextDate.Sub(now)
+	c.dailyScheduler = time.AfterFunc(duration, func() {
+		_, _ = c.castDaily(ctx)
+	})
+
+	dailies, err := c.dataHandler.FF.GetDaily(ctx, date)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get daily: %s", err)
+	}
+
+	if len(dailies) == 0 {
+		return nil, fmt.Errorf("no daily found")
+	}
+
+	var indexIDs []string
+	for _, daily := range dailies {
+		indexIDs = append(indexIDs, daily.TokenID)
+	}
+
+	tokens, err := c.dataHandler.IC.getTokens(ctx, indexIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tokens: %s", err)
+	}
+	if len(tokens) == 0 {
+		return nil, fmt.Errorf("no tokens found")
+	}
+
+	var cdpArgs []CdpPlayArtworkArgs
+	for _, token := range tokens {
+		cdpArgs = append(cdpArgs, CdpPlayArtworkArgs{
+			URL:      token.Asset.Metadata.Project.Latest.PreviewURL,
+			MIMEType: token.Asset.Metadata.Project.Latest.MIMEType,
+			Mode:     "fit",
+		})
+	}
+
+	// TODO: handle multiple daily playing
+	err = c.cdpPlayArtwork(cdpArgs[0])
+	if err != nil {
+		return nil, fmt.Errorf("failed to play daily: %s", err)
+	}
+
+	return CmdOK, nil
+}
+
+type CdpPlayArtworkArgs struct {
+	URL      string
+	MIMEType string
+	Mode     string
+}
+
+func (c *Command) cdpPlayArtwork(args CdpPlayArtworkArgs) error {
 	err := c.cdp.SendCDPRequest(CDP_METHOD_EVALUATE,
 		map[string]interface{}{
 			"expression": fmt.Sprintf(
 				`window.handleCDPRequest({
-				command: "castDaily",
-			});`,
+					command: "setArtwork",
+					params: {
+						url: "%s",
+						mimeType: "%s",
+						mode: "%s",
+					},
+				});`,
+				args.URL,
+				args.MIMEType,
+				args.Mode,
 			),
 		})
 	if err != nil {
-		return nil, fmt.Errorf("failed to send CDP request: %s", err)
+		return fmt.Errorf("failed to send CDP request: %s", err)
 	}
 
-	return CmdOK, nil
+	return nil
 }

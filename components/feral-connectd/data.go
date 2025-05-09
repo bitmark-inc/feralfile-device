@@ -123,6 +123,13 @@ type Artwork struct {
 	SuccessfulSwap  *Swap            `json:"successfulSwap"`
 }
 
+type Daily struct {
+	ID              string `json:"id"`
+	Blockchain      string `json:"blockchain"`
+	ContractAddress string `json:"contractAddress"`
+	TokenID         string `json:"tokenID"`
+}
+
 func (a *Artwork) GetPreviewURL() string {
 	var previewURL string
 	if a.Metadata != nil {
@@ -172,10 +179,32 @@ func transformPreviewURL(url string) string {
 
 func (c *FeralFileClient) GetArtwork(ctx context.Context, id string) (*Artwork, error) {
 	var artwork Artwork
-	if err := c.request(ctx, "GET", fmt.Sprintf("/api/artworks/%s?includeSuccessfulSwap=true", id), nil, &artwork); err != nil {
+	if err := c.request(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("/api/artworks/%s?includeSuccessfulSwap=true",
+			id),
+		nil,
+		&artwork); err != nil {
 		return nil, err
 	}
 	return &artwork, nil
+}
+
+func (c *FeralFileClient) GetDaily(ctx context.Context, date time.Time) ([]Daily, error) {
+	var resp struct {
+		Dailies []Daily `json:"result"`
+	}
+	if err := c.request(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("/api/dailies/date/%s", date.Format("2006-01-02")),
+		nil,
+		&resp,
+	); err != nil {
+		return nil, err
+	}
+	return resp.Dailies, nil
 }
 
 type IndexerConfig struct {
