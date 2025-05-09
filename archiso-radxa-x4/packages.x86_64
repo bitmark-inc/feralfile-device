@@ -17,7 +17,6 @@ linux-firmware
 mkinitcpio
 mkinitcpio-archiso
 arch-install-scripts
-polkit
 
 # Boot support
 intel-ucode
