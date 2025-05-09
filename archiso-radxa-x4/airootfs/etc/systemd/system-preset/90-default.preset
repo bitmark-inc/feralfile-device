@@ -3,3 +3,4 @@ enable bluetooth.service
 enable NetworkManager.service
 enable chromium-kiosk.service
 enable feral-connectd.service
+enable feral-setupd.service

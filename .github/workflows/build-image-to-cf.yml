@@ -26,11 +26,21 @@ jobs:
       description: 'Feral File Connectd Service'
       maintainer: 'Feral File'
       build_pacman: false
+      
+  build-feral-setupd:
+    name: Build Feral Setupd
+    uses: ./.github/workflows/build-components.yaml
+    with:
+      component: feral-setupd
+      version: ${{ github.event.inputs.version }}
+      description: 'Feral File Setup Service'
+      maintainer: 'Feral File'
+      build_pacman: false
 
   build-image:
     name: Generate Arch Linux Image for Radxa X4
     runs-on: ubuntu-latest
-    needs: build-feral-connectd
+    needs: [build-feral-connectd, build-feral-setupd]
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
 
     container:
@@ -46,6 +56,12 @@ jobs:
         with:
           name: feral-connectd
           path: /tmp/feral-connectd
+
+      - name: Download feral-setupd Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: feral-setupd
+          path: /tmp/feral-setupd
 
       - name: Install Build Dependencies
         run: |
@@ -65,7 +81,7 @@ jobs:
           mkdir -p /build/archiso-radxa-x4/airootfs/opt/feral/ui/player
           cp -r components/player-wrapper-ui/* /build/archiso-radxa-x4/airootfs/opt/feral/ui/player/
 
-      - name: Add feral-connectd Binary and Service
+      - name: Add feral-connectd and feral-setupd Binaries and Services
         run: |
           # Create bin directory if it doesn't exist
           mkdir -p /build/archiso-radxa-x4/airootfs/usr/bin

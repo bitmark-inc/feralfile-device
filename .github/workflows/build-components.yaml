@@ -58,10 +58,35 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Determine Build Type
+        id: build-type
+        working-directory: components/${{ inputs.component }}
+        run: |
+          if [ -f "Cargo.toml" ]; then
+            echo "type=rust" >> $GITHUB_OUTPUT
+            # Get the binary name from Cargo.toml if possible
+            if [ -f "Cargo.toml" ]; then
+              BINARY_NAME=$(grep -m 1 'name\s*=' Cargo.toml | cut -d '"' -f 2 || echo "${{ inputs.component }}")
+              echo "binary_name=${BINARY_NAME}" >> $GITHUB_OUTPUT
+            else
+              echo "binary_name=${{ inputs.component }}" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "type=go" >> $GITHUB_OUTPUT
+            echo "binary_name=${{ inputs.component }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Go Dependencies
+        if: steps.build-type.outputs.type == 'go'
         run: |
           pacman -Syu --noconfirm
           pacman -S --noconfirm go git base-devel shadow
+
+      - name: Install Rust Dependencies
+        if: steps.build-type.outputs.type == 'rust'
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm rust cargo git base-devel shadow
 
       - name: Set Version
         id: set-version
@@ -74,10 +99,25 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build Binary
+      - name: Build Go Binary
+        if: steps.build-type.outputs.type == 'go'
         working-directory: components/${{ inputs.component }}
         run: |
           go build -v -o "${{ inputs.component }}"
+          # Copy any associated service files if they exist
+          mkdir -p /tmp/artifact
+          cp "${{ inputs.component }}" /tmp/artifact/
+          if [ -f "*.service" ]; then
+            cp *.service /tmp/artifact/
+          fi
+
+      - name: Build Rust Binary
+        if: steps.build-type.outputs.type == 'rust'
+        working-directory: components/${{ inputs.component }}
+        run: |
+          cargo build --release
+          # Copy from the target directory using the binary name from Cargo.toml
+          cp "target/release/${{ steps.build-type.outputs.binary_name }}" "./${{ inputs.component }}"
           # Copy any associated service files if they exist
           mkdir -p /tmp/artifact
           cp "${{ inputs.component }}" /tmp/artifact/
@@ -101,7 +141,36 @@ jobs:
           mv "/tmp/${TARBALL}" .
 
           # 3) Emit a clean, un-indented PKGBUILD
-          cat <<EOF > PKGBUILD
+          if [ "${{ steps.build-type.outputs.type }}" == "rust" ]; then
+            # PKGBUILD for Rust component
+            cat <<EOF > PKGBUILD
+          # Maintainer: ${{ inputs.maintainer }}
+          pkgname=${COMP}
+          pkgver=${VER}
+          pkgrel=1
+          pkgdesc="${{ inputs.description }}"
+          arch=('x86_64' 'aarch64')
+          url="https://github.com/${{ github.repository }}"
+          license=('MIT')
+          depends=()
+          makedepends=('rust' 'cargo')
+          options=(!strip)
+
+          source=("${TARBALL}")
+          sha256sums=('SKIP')
+
+          build() {
+            cd "\$srcdir"
+            cargo build --release
+          }
+
+          package() {
+            install -Dm755 "\$srcdir/target/release/${{ steps.build-type.outputs.binary_name }}" "\$pkgdir/usr/bin/${COMP}"
+          }
+          EOF
+          else
+            # PKGBUILD for Go component
+            cat <<EOF > PKGBUILD
           # Maintainer: ${{ inputs.maintainer }}
           pkgname=${COMP}
           pkgver=${VER}
@@ -126,6 +195,7 @@ jobs:
             install -Dm755 "\$srcdir/${COMP}" "\$pkgdir/usr/bin/${COMP}"
           }
           EOF
+          fi
 
           useradd -m builder
           chown -R builder:builder .
