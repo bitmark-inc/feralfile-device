@@ -124,10 +124,11 @@ type Artwork struct {
 }
 
 type Daily struct {
-	ID              string `json:"id"`
-	Blockchain      string `json:"blockchain"`
-	ContractAddress string `json:"contractAddress"`
-	TokenID         string `json:"tokenID"`
+	ID              string   `json:"id"`
+	Blockchain      string   `json:"blockchain"`
+	ContractAddress string   `json:"contractAddress"`
+	TokenID         string   `json:"tokenID"`
+	Artwork         *Artwork `json:"artwork"`
 }
 
 func (a *Artwork) GetPreviewURL() string {
@@ -200,7 +201,7 @@ func (c *FeralFileClient) GetDaily(ctx context.Context, date time.Time) ([]Daily
 	if err := c.request(
 		ctx,
 		http.MethodGet,
-		fmt.Sprintf("/api/dailies/date/%s", date.Format("2006-01-02")),
+		fmt.Sprintf("/api/dailies/date/%s?includeSuccessfulSwap=true", date.Format("2006-01-02")),
 		nil,
 		&resp,
 	); err != nil {
