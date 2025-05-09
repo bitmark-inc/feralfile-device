@@ -19,7 +19,7 @@ ExecStart=/usr/bin/cage -- /usr/bin/chromium \
 --autoplay-policy=no-user-gesture-required \
 file:///opt/feral/ui/launcher/index.html?device_id=ffx1&step=qr
 Restart=always
-RestartSec=1
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
