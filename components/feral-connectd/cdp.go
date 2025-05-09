@@ -109,6 +109,12 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 	return nil
 }
 
+func (c *CDPClient) Navigate(url string) error {
+	return c.SendCDPRequest(CDP_METHOD_NAVIGATE, map[string]interface{}{
+		"url": url,
+	})
+}
+
 // SendCDPRequest sends a raw CDP JSON-RPC message and waits for response
 func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{}) error {
 	c.mu.Lock()

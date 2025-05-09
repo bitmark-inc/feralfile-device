@@ -86,7 +86,7 @@ func main() {
 	cmd := NewCommand(dataHandler, cdpClient)
 
 	// Initialize Mediator
-	mediator := NewMediator(relayerClient, dbusClient, cmd, logger)
+	mediator := NewMediator(relayerClient, dbusClient, cdpClient, cmd, logger)
 	mediator.Start()
 	defer mediator.Stop()
 

@@ -11,6 +11,7 @@ import (
 type Mediator struct {
 	relayer *RelayerClient
 	dbus    *DBusClient
+	cdp     *CDPClient
 	cmd     *CommandHandler
 	logger  *zap.Logger
 }
@@ -18,11 +19,13 @@ type Mediator struct {
 func NewMediator(
 	relayer *RelayerClient,
 	dbus *DBusClient,
+	cdp *CDPClient,
 	cmd *CommandHandler,
 	logger *zap.Logger) *Mediator {
 	return &Mediator{
 		relayer: relayer,
 		dbus:    dbus,
+		cdp:     cdp,
 		cmd:     cmd,
 		logger:  logger,
 	}
@@ -54,11 +57,32 @@ func (m *Mediator) handleDBusSignal(
 
 	switch member {
 	case EVENT_SETUPD_WIFI_CONNECTED, EVENT_STATED_DEVICE_CONNECTED:
+		if m.relayer.conn != nil {
+			m.logger.Info("Relayer is connected, skipping connection")
+			return nil
+		}
+
 		err := m.relayer.RetriableConnect(ctx)
 		if err != nil {
 			m.logger.Error("Failed to connect to relayer", zap.Error(err))
 			return err
 		}
+
+		err = m.cdp.Navigate("/opt/feral/ui/player/index.html")
+		if err != nil {
+			m.logger.Error("Failed to navigate to web app", zap.Error(err))
+			return err
+		}
+
+		result, err := m.cmd.Execute(ctx, Command{
+			Command: CMD_CAST_DAILY,
+		})
+		if err != nil {
+			m.logger.Error("Failed to cast daily", zap.Error(err))
+			return err
+		}
+
+		m.logger.Info("Casting daily", zap.Any("result", result))
 	default:
 		return fmt.Errorf("unknown signal: %s", member)
 	}
