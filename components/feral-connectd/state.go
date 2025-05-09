@@ -35,25 +35,28 @@ func LoadState() (*State, error) {
 	// Ensure directory exists
 	stateDir := filepath.Dir(STATE_FILE)
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		return state, fmt.Errorf("failed to create state directory: %w", err)
+		return nil, fmt.Errorf("failed to create state directory: %w", err)
 	}
 
 	// Try to read the file
 	data, err := os.ReadFile(STATE_FILE)
 	if os.IsNotExist(err) {
 		// File doesn't exist, return empty state
-		return state, nil
+		return nil, nil
 	} else if err != nil {
-		return state, fmt.Errorf("failed to read state file: %w", err)
+		return nil, fmt.Errorf("failed to read state file: %w", err)
 	}
 
 	// Lock during unmarshaling to prevent concurrent access
 	stateLock.Lock()
 	defer stateLock.Unlock()
 
-	if err := json.Unmarshal(data, state); err != nil {
-		return state, fmt.Errorf("failed to unmarshal state file: %w", err)
+	var s State
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal state file: %w", err)
 	}
+
+	state = &s
 	return state, nil
 }
 

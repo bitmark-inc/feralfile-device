@@ -41,10 +41,12 @@ func LoadConfig(logger *zap.Logger) (*Config, error) {
 	configLock.Lock()
 	defer configLock.Unlock()
 
-	if err := json.Unmarshal(data, config); err != nil {
+	var c Config
+	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	config = &c
 	return config, nil
 }
 
