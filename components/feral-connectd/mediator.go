@@ -59,6 +59,20 @@ func (m *Mediator) handleDBusSignal(
 			m.logger.Error("Failed to connect to relayer", zap.Error(err))
 			return err
 		}
+
+		result, err := m.cmd.Execute(ctx,
+			Command{
+				Command: CMD_NAVIGATE,
+				Arguments: map[string]interface{}{
+					"url": "/opt/feral/ui/player/index.html",
+				},
+			})
+		if err != nil {
+			m.logger.Error("Failed to navigate chromium", zap.Error(err))
+			return err
+		}
+
+		m.logger.Info("Navigated to web app", zap.Any("result", result))
 	default:
 		return fmt.Errorf("unknown signal: %s", member)
 	}

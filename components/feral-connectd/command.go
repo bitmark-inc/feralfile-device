@@ -14,6 +14,7 @@ const (
 	CMD_CAST_LIST_ARTWORK Cmd = "castListArtwork"
 	CMD_CAST_EXHIBITION   Cmd = "castExhibition"
 	CMD_CAST_DAILY        Cmd = "castDaily"
+	CMD_NAVIGATE          Cmd = "navigate"
 )
 
 var CmdOK = struct {
@@ -81,6 +82,8 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 		result, err = c.castExhibition(ctx, bytes)
 	case CMD_CAST_DAILY:
 		result, err = c.castDaily(ctx)
+	case CMD_NAVIGATE:
+		result, err = c.navigate(cmd.Arguments)
 	default:
 		return nil, fmt.Errorf("invalid command: %s", cmd)
 	}
@@ -95,6 +98,20 @@ type CheckStatusResp struct {
 	} `json:"device"`
 	Command *Command               `json:"command"`
 	State   map[string]interface{} `json:"state"`
+}
+
+func (c *CommandHandler) navigate(args map[string]interface{}) (interface{}, error) {
+	url, ok := args["url"].(string)
+	if !ok {
+		return nil, fmt.Errorf("invalid arguments: %s", args)
+	}
+
+	err := c.cdp.Navigate(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to navigate: %s", err)
+	}
+
+	return CmdOK, nil
 }
 
 func (c *CommandHandler) checkStatus() (interface{}, error) {
