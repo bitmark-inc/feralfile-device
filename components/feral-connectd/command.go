@@ -325,6 +325,7 @@ type CdpPlayArtworkArgs struct {
 }
 
 func (c *CommandHandler) cdpPlayArtwork(args CdpPlayArtworkArgs) error {
+	c.logger.Debug("Playing artwork...", zap.Any("args", args))
 	err := c.cdp.SendCDPRequest(CDP_METHOD_EVALUATE,
 		map[string]interface{}{
 			"expression": fmt.Sprintf(

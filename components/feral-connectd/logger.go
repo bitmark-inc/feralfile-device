@@ -22,7 +22,6 @@ func New(debug bool) (*zap.Logger, error) {
 	config.EncoderConfig.CallerKey = "caller"
 	config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
 
-	// Create the log file
 	logFile, err := os.OpenFile("/home/feralfile/.logs/connectd.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
