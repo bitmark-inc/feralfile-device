@@ -280,21 +280,23 @@ func (c *CommandHandler) castDaily(ctx context.Context) (interface{}, error) {
 		return nil, fmt.Errorf("no tokens found")
 	}
 
+	artworkMap := make(map[string]Artwork)
+	for _, daily := range dailies {
+		if daily.Artwork != nil {
+			artworkMap[daily.TokenID] = *daily.Artwork
+		}
+	}
+
 	var cdpArgs []CdpPlayArtworkArgs
 	for _, token := range tokens {
-		var daily *Daily
-		for _, d := range dailies {
-			if d.TokenID == token.Id {
-				daily = &d
-				break
-			}
-		}
-
 		var previewUrl string
 		var mimeType string
-		if token.Source == "feralfile" && daily.Artwork != nil {
-			previewUrl = daily.Artwork.GetPreviewURL()
-			mimeType = *daily.Artwork.PreviewMIMEType
+		artwork, ok := artworkMap[token.Id]
+		if ok && token.Source == "feralfile" {
+			previewUrl = artwork.GetPreviewURL()
+			if artwork.PreviewMIMEType != nil {
+				mimeType = *artwork.PreviewMIMEType
+			}
 		} else {
 			previewUrl = token.Asset.Metadata.Project.Latest.PreviewURL
 			mimeType = token.Asset.Metadata.Project.Latest.MIMEType
