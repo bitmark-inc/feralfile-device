@@ -282,9 +282,27 @@ func (c *CommandHandler) castDaily(ctx context.Context) (interface{}, error) {
 
 	var cdpArgs []CdpPlayArtworkArgs
 	for _, token := range tokens {
+		var daily *Daily
+		for _, d := range dailies {
+			if d.TokenID == token.Id {
+				daily = &d
+				break
+			}
+		}
+
+		var previewUrl string
+		var mimeType string
+		if token.Source == "feralfile" && daily.Artwork != nil {
+			previewUrl = daily.Artwork.GetPreviewURL()
+			mimeType = *daily.Artwork.PreviewMIMEType
+		} else {
+			previewUrl = token.Asset.Metadata.Project.Latest.PreviewURL
+			mimeType = token.Asset.Metadata.Project.Latest.MIMEType
+		}
+
 		cdpArgs = append(cdpArgs, CdpPlayArtworkArgs{
-			URL:      token.Asset.Metadata.Project.Latest.PreviewURL,
-			MIMEType: token.Asset.Metadata.Project.Latest.MIMEType,
+			URL:      previewUrl,
+			MIMEType: mimeType,
 			Mode:     "fit",
 		})
 	}
