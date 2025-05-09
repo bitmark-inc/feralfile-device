@@ -17,9 +17,6 @@ linux-firmware
 mkinitcpio
 mkinitcpio-archiso
 arch-install-scripts
-vulkan-icd-loader
-vulkan-intel
-vulkan-tools
 
 # Boot support
 intel-ucode
@@ -46,7 +43,9 @@ adwaita-icon-theme
 # Radxa X4 / Intel N100 support
 mesa
 intel-media-driver
+vulkan-icd-loader
 vulkan-intel
+vulkan-tools
 
 # Audio and Bluetooth
 bluez
