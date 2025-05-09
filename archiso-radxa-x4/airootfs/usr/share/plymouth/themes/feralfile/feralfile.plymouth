@@ -1,0 +1,9 @@
+[Plymouth Theme]
+Name=FeralFile
+Description=FeralFile splash screen
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/feralfile
+ScriptFile=/usr/share/plymouth/themes/feralfile/feralfile.script
+

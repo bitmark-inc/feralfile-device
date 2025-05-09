@@ -1,0 +1,52 @@
+# Create a black background
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+# Load the splash image
+logo_image = Image("splash.png");
+
+# Get original image dimensions
+image_width = logo_image.GetWidth();
+image_height = logo_image.GetHeight();
+
+# Get screen dimensions
+screen_width = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+# Calculate position to center the image
+x = (screen_width - image_width) / 2;
+y = (screen_height - image_height) / 2;
+
+# Create sprite and position it
+logo_sprite = Sprite(logo_image);
+logo_sprite.SetX(x);
+logo_sprite.SetY(y);
+
+# Fade in
+logo_sprite.SetOpacity(0);
+for (i = 0; i < 100; i++) {
+    logo_sprite.SetOpacity(i / 100);
+    sleep(0.01);
+}
+
+# Shimmer effect function
+fun shimmer_effect() {
+    time = 0;
+    
+    while (1) {
+        # Create a subtle pulsing/shimmer effect
+        # Uses sine wave to create smooth brightness changes
+        pulse = Math.Sin(time) * 0.15 + 0.85;  # Oscillate between 0.7 and 1.0 brightness
+        logo_sprite.SetOpacity(pulse);
+        
+        # Change the shimmer speed here (lower = slower)
+        time += 0.1;
+        
+        # Small pause between frames
+        sleep(0.05);
+    }
+}
+
+# Start the shimmer effect
+shimmer_effect();
+

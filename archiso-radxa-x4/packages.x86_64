@@ -20,6 +20,8 @@ arch-install-scripts
 vulkan-icd-loader
 vulkan-intel
 vulkan-tools
+plymouth
+plymouth-theme-spinner
 
 # Boot support
 intel-ucode
