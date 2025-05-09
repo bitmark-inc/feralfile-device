@@ -1,4 +1,4 @@
-module websocket-broker
+module github.com/Feral-File/feralfile-device/components/feral-connectd
 
 go 1.21.6
 
