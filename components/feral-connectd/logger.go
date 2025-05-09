@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -16,11 +18,33 @@ func New(debug bool) (*zap.Logger, error) {
 	config.EncoderConfig.StacktraceKey = ""
 	config.EncoderConfig.TimeKey = ""
 
-	if logger, err := config.Build(); nil != err {
+	// Enable caller information
+	config.EncoderConfig.CallerKey = "caller"
+	config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
+
+	// Create the log file
+	logFile, err := os.OpenFile("./logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
 		return nil, err
-	} else {
-		return logger, nil
 	}
+
+	// Create console encoder with colors
+	consoleEncoder := zapcore.NewConsoleEncoder(config.EncoderConfig)
+
+	// Create file encoder without colors
+	fileEncoderConfig := config.EncoderConfig
+	fileEncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder // No colors for file output
+	fileEncoder := zapcore.NewConsoleEncoder(fileEncoderConfig)
+
+	// Create core with both console and file outputs
+	core := zapcore.NewTee(
+		zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), config.Level),
+		zapcore.NewCore(fileEncoder, zapcore.AddSync(logFile), config.Level),
+	)
+
+	// Create the logger with the custom core
+	logger := zap.New(core, zap.AddCaller())
+	return logger, nil
 }
 
 func NewDefault() (*zap.Logger, error) {
