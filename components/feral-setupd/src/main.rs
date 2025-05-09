@@ -27,9 +27,6 @@ use tokio::sync::Mutex;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // TODO: remove this later
-    let _ = get_replayer_info();
-
     // Initialize BlueZ session and power on adapter
     let session = Session::new().await?;
     let adapter = session.default_adapter().await?;
@@ -190,14 +187,29 @@ async fn handle_connect_wifi(
     // Attempt connection; just log on failure
     if let Err(e) = wifi_utils::connect(ssid, pass).await {
         eprintln!("Failed to connect to wifi \"{}\": {}", ssid, e);
-    } else if let Err(e) = get_replayer_info() {
-        eprintln!("Replay‑server confirmation failed: {}", e);
+        return Ok(());
     }
 
-    // Acknowledge the command
+    let relayer_info = match get_relayer_info() {
+        Ok(info) => info,
+        Err(e) => {
+            eprintln!("Replay‑server confirmation failed: {}", e);
+            return Ok(());
+        }
+    };
+    println!(
+        "Replay‑server topic: {}, port: {}",
+        relayer_info[0], relayer_info[1]
+    );
+
+    let payload = vec![
+        reply_id.clone(),
+        relayer_info[0].clone(),
+        relayer_info[1].clone(),
+    ];
     let mut guard = notifier_handle.lock().await;
     if let Some(notifier) = guard.as_mut() {
-        let payload = encoding::encode_payload(&vec![reply_id.clone()]);
+        let payload = encoding::encode_payload(&payload);
         match notifier.notify(payload).await {
             Ok(_) => (),
             Err(e) => {
@@ -211,7 +223,7 @@ async fn handle_connect_wifi(
     Ok(())
 }
 
-fn get_replayer_info() -> Result<(String, String), Box<dyn Error>> {
+fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error>> {
     println!("Sending wifi connected event");
     dbus_utils::send(
         constant::DBUS_SETUPD_OBJECT,
@@ -223,10 +235,10 @@ fn get_replayer_info() -> Result<(String, String), Box<dyn Error>> {
     let payload = dbus_utils::receive(
         constant::DBUS_CONNECTD_OBJECT,
         constant::DBUS_CONNECTD_INTERFACE,
-        constant::DBUS_EVENT_REPLAYER_CONFIGURED,
+        constant::DBUS_EVENT_RELAYER_CONFIGURED,
         constant::DBUS_CONNECTD_TIMEOUT,
     )?;
     println!("Received payload: {:?}", payload);
 
-    Ok(("".to_string(), "".to_string()))
+    Ok(payload)
 }

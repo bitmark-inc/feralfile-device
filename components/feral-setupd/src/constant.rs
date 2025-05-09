@@ -12,7 +12,7 @@ pub const DBUS_SETUPD_INTERFACE: &str = "com.feralfile.setupd.general";
 pub const DBUS_CONNECTD_INTERFACE: &str = "com.feralfile.connectd.general";
 
 pub const DBUS_EVENT_WIFI_CONNECTED: &str = "wifi_connected";
-pub const DBUS_EVENT_REPLAYER_CONFIGURED: &str = "relayer_configured";
+pub const DBUS_EVENT_RELAYER_CONFIGURED: &str = "relayer_configured";
 
 pub const DBUS_CONNECTD_TIMEOUT: u64 = 60 * 1000 * 1000; // 60 seconds
 pub const MAX_SSIDS: usize = 9;
