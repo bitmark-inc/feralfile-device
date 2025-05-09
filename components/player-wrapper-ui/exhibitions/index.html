@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Exhibitions</title>
+<link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="https://unpkg.com/swiper/swiper-bundle.min.css" />
+
+<script src="./components/exhibition-card.js" type="module" defer crossorigin="anonymous"></script>
+<script src="https://unpkg.com/swiper/swiper-bundle.min.js" defer></script>
+<script src="./components/posts-carousel.js" type="module" defer crossorigin="anonymous"></script>
+</head>
+<body>
+
+  <!-- <div class="loading">
+    <div class="loadingContainer">
+      <div>
+        <p>Loading...</p>
+        <div class="loader"></div>
+      </div>
+    </div>
+  </div> -->
+  <div id="stage">
+    <div id="exhCard" class="exh-card"></div>
+    <div id="exhPosts" class="swiper-container">
+      <div class="swiper-wrapper" id="carousel-wrapper"></div>
+    </div>
+  </div>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const loading = document.querySelector('.loading');
+
+    // Detect orientation by checking the width and height of the window
+    const isLandscape = window.innerWidth > window.innerHeight;
+
+    if (isLandscape) {
+      stage.classList.add('landscape');
+    } else {
+      stage.classList.add('portrait');
+    }
+
+    // Switcher between exhibition card and posts
+    function updateView() {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get('v') || 'card';  // default to 'card'
+
+      document.getElementById('exhCard').style.display  = view === 'card'  ? 'flex' : 'none';
+      document.getElementById('exhPosts').style.display = view === 'posts' ? 'block' : 'none';
+    }
+
+    // Run on initial load
+    updateView();
+
+    // If you want to allow toggling without a full reload:
+    window.addEventListener('popstate', updateView);
+  </script>
+
+</body>
+</html>
