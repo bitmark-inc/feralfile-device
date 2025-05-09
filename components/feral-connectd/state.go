@@ -44,9 +44,10 @@ func LoadState(logger *zap.Logger) (*State, error) {
 
 	// Try to read the file
 	data, err := os.ReadFile(STATE_FILE)
-	if os.IsNotExist(err) {
+	if os.IsNotExist(err) || len(data) == 0 {
 		// File doesn't exist, return empty state
-		return nil, nil
+		logger.Info("State file does not exist, returning empty state object")
+		return &State{}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to read state file: %w", err)
 	}
