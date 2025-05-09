@@ -73,8 +73,6 @@ jobs:
           # Copy the binary
           cp /tmp/feral-connectd/feral-connectd /build/archiso-radxa-x4/airootfs/usr/bin/
           chmod 755 /build/archiso-radxa-x4/airootfs/usr/bin/feral-connectd
-          
-          cp components/feral-connectd/connectd.service /build/archiso-radxa-x4/airootfs/etc/systemd/system/feral-connectd.service
 
       - name: Setup pacman
         run: |
