@@ -299,7 +299,7 @@ func (c *IndexerClient) GetTokens(ctx context.Context, indexIDs []string) ([]Tok
 
 func (c *IndexerClient) getTokens(ctx context.Context, indexIDs []string) ([]Token, error) {
 	query := `
-		{
+		query($indexIDs: [String!]!) {
 			tokens(
 				ids: $indexIDs
 				burnedIncluded: true
@@ -309,7 +309,6 @@ func (c *IndexerClient) getTokens(ctx context.Context, indexIDs []string) ([]Tok
 				indexID
 				source
 				asset {
-					thumbnailID
 					staticPreviewURLLandscape
 					staticPreviewURLPortrait
 					metadata {
