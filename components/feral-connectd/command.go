@@ -23,9 +23,15 @@ var CmdOK = struct {
 }
 
 type Command struct {
+	Command   Cmd
+	Arguments map[string]interface{}
+}
+
+type CommandHandler struct {
 	dataHandler    *DataHandler
 	cdp            *CDPClient
 	dailyScheduler *time.Timer
+	lastCmd        *Command
 }
 
 type CmdCastArtworkArgs struct {
@@ -44,38 +50,75 @@ type CmdCastExhibitionArgs struct {
 	Catalog      int    `json:"catalog"`
 }
 
-func NewCommand(dataHandler *DataHandler, cdp *CDPClient) *Command {
-	return &Command{
+func NewCommand(dataHandler *DataHandler, cdp *CDPClient) *CommandHandler {
+	return &CommandHandler{
 		dataHandler: dataHandler,
 		cdp:         cdp,
 	}
 }
 
-func (c *Command) Execute(ctx context.Context, cmd Cmd, args map[string]interface{}) (interface{}, error) {
-	bytes, err := json.Marshal(args)
+func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{}, error) {
+	var err error
+	var bytes []byte
+	defer func() {
+		if err == nil {
+			c.lastCmd = &cmd
+		}
+	}()
+
+	bytes, err = json.Marshal(cmd.Arguments)
 	if err != nil {
 		return nil, fmt.Errorf("invalid arguments: %s", err)
 	}
 
-	switch cmd {
+	var result interface{}
+	switch cmd.Command {
 	case CMD_CHECK_STATUS:
-		return c.checkStatus()
+		result, err = c.checkStatus()
 	case CMD_CAST_LIST_ARTWORK:
-		return c.castListArtwork(ctx, bytes)
+		result, err = c.castListArtwork(ctx, bytes)
 	case CMD_CAST_EXHIBITION:
-		return c.castExhibition(bytes)
+		result, err = c.castExhibition(ctx, bytes)
 	case CMD_CAST_DAILY:
-		return c.castDaily(ctx)
+		result, err = c.castDaily(ctx)
 	default:
 		return nil, fmt.Errorf("invalid command: %s", cmd)
 	}
+
+	return result, err
 }
 
-func (c *Command) checkStatus() (interface{}, error) {
-	return nil, nil
+type CheckStatusResp struct {
+	Device struct {
+		Name string `json:"name"`
+		ID   string `json:"id"`
+	} `json:"device"`
+	Command *Command               `json:"command"`
+	State   map[string]interface{} `json:"state"`
 }
 
-func (c *Command) castListArtwork(ctx context.Context, args []byte) (interface{}, error) {
+func (c *CommandHandler) checkStatus() (interface{}, error) {
+	// TODO: implement after the prototype is done
+	return &struct {
+		OK    bool             `json:"ok"`
+		State *CheckStatusResp `json:"state"`
+	}{
+		OK: true,
+		State: &CheckStatusResp{
+			Device: struct {
+				Name string `json:"name"`
+				ID   string `json:"id"`
+			}{
+				Name: "FF-X1",
+				ID:   "ff-x1-dummy",
+			},
+			Command: c.lastCmd,
+			State:   nil,
+		},
+	}, nil
+}
+
+func (c *CommandHandler) castListArtwork(ctx context.Context, args []byte) (interface{}, error) {
 	// Cancel any scheduled daily task
 	if c.dailyScheduler != nil {
 		c.dailyScheduler.Stop()
@@ -122,7 +165,7 @@ func (c *Command) castListArtwork(ctx context.Context, args []byte) (interface{}
 	return CmdOK, nil
 }
 
-func (c *Command) castExhibition(args []byte) (interface{}, error) {
+func (c *CommandHandler) castExhibition(ctx context.Context, args []byte) (interface{}, error) {
 	// Cancel any scheduled daily task
 	if c.dailyScheduler != nil {
 		c.dailyScheduler.Stop()
@@ -140,30 +183,32 @@ func (c *Command) castExhibition(args []byte) (interface{}, error) {
 		return nil, fmt.Errorf("temporary disabled: %d", cmdArgs.Catalog)
 	}
 
-	err = c.cdp.SendCDPRequest(CDP_METHOD_EVALUATE,
-		map[string]interface{}{
-			"expression": fmt.Sprintf(
-				`window.handleCDPRequest({
-				command: "castExhibition",
-				params: {
-					exhibitionId: "%s",
-					catalogId: "%s",
-					catalog: %d,
-				},
-			});`,
-				cmdArgs.ExhibitionID,
-				cmdArgs.CatalogID,
-				cmdArgs.Catalog,
-			),
-		})
+	artwork, err := c.dataHandler.FF.GetArtwork(ctx, cmdArgs.CatalogID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send CDP request: %s", err)
+		return nil, fmt.Errorf("failed to get artwork: %s", err)
+	}
+	if artwork == nil {
+		return nil, fmt.Errorf("artwork not found")
+	}
+	if artwork.PreviewMIMEType == nil {
+		return nil, fmt.Errorf("artwork preview MIME type not found")
+	}
+
+	cdpArgs := CdpPlayArtworkArgs{
+		URL:      artwork.GetPreviewURL(),
+		MIMEType: *artwork.PreviewMIMEType,
+		Mode:     "fit",
+	}
+
+	err = c.cdpPlayArtwork(cdpArgs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to play artwork: %s", err)
 	}
 
 	return CmdOK, nil
 }
 
-func (c *Command) castDaily(ctx context.Context) (interface{}, error) {
+func (c *CommandHandler) castDaily(ctx context.Context) (interface{}, error) {
 	// Cancel any existing scheduled task
 	if c.dailyScheduler != nil {
 		c.dailyScheduler.Stop()
@@ -226,7 +271,7 @@ type CdpPlayArtworkArgs struct {
 	Mode     string
 }
 
-func (c *Command) cdpPlayArtwork(args CdpPlayArtworkArgs) error {
+func (c *CommandHandler) cdpPlayArtwork(args CdpPlayArtworkArgs) error {
 	err := c.cdp.SendCDPRequest(CDP_METHOD_EVALUATE,
 		map[string]interface{}{
 			"expression": fmt.Sprintf(

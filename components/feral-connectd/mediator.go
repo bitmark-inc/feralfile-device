@@ -11,14 +11,14 @@ import (
 type Mediator struct {
 	relayer *RelayerClient
 	dbus    *DBusClient
-	cmd     *Command
+	cmd     *CommandHandler
 	logger  *zap.Logger
 }
 
 func NewMediator(
 	relayer *RelayerClient,
 	dbus *DBusClient,
-	cmd *Command,
+	cmd *CommandHandler,
 	logger *zap.Logger) *Mediator {
 	return &Mediator{
 		relayer: relayer,
@@ -121,7 +121,11 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, data map[string]int
 		}
 
 		// Execute command
-		result, err := m.cmd.Execute(ctx, Cmd(cmd), req)
+		result, err := m.cmd.Execute(ctx,
+			Command{
+				Command:   Cmd(cmd),
+				Arguments: req,
+			})
 		if err != nil {
 			m.logger.Error("Failed to execute command", zap.Error(err))
 			return err
