@@ -59,6 +59,7 @@ if [[ "${NO_NETWORK:-0}" == 1 ]]; then
   SKIP_PACMAN_INIT=1
 else
   SKIP_PACMAN_INIT=0
+  read -rp "Do you want to copy Wi-Fi credentials into the new system? [y/N]: " copy_wifi
 fi
 
 # ─── List available target disks ───────────────────────────────────────
@@ -124,7 +125,21 @@ mount "$BOOT_PART" /mnt/boot
 echo
 echo "Copying root filesystem..."
 rsync -aAX --info=progress2 --exclude={"/dev/*","/proc/*","/root/*","/sys/*","/tmp/*","/run/*","/mnt/*","/live-efi/*","/media/*","/lost+found"} / /mnt
-rm -rf /mnt/etc/systemd/system/getty@tty1.service.d/
+cat > /mnt/etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
+[Service]
+ExecStart=
+ExecStart=-/usr/bin/agetty --noclear --autologin feralfile %I $TERM
+EOF
+if [[ ! "$copy_wifi" =~ ^[yY]$ ]]; then
+  rm -f /mnt/etc/NetworkManager/system-connections/*
+fi
+echo -n > /mnt/etc/machine-id
+rm -f /mnt/var/lib/systemd/random-seed
+rm -f /mnt/etc/ssh/ssh_host_*
+rm -f /mnt/root/.bash_history
+rm -f /mnt/home/*/.bash_history 2>/dev/null || true
+rm -rf /mnt/var/log/*
+rm -rf /mnt/var/tmp/*
 # ─── Setup bootloader ──────────────────────────────────────────────────
 echo
 echo "Copying systemd-boot..."

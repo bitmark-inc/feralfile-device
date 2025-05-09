@@ -20,4 +20,7 @@ file_permissions=(
   ["/root/.automated_script.sh"]="0:0:755"
   ["/root/install-to-disk.sh"]="0:0:755"
   ["/home/feralfile"]="1000:1000:755"
+  ["/boot"]="0:0:755"
+  ["/boot/loader"]="0:0:700"
+  ["/boot/loader/random-seed"]="0:0:600"
 )
