@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	pingInterval = 5 * time.Second
-	pongWait     = 10 * time.Second
+	RELAYER_PING_INTERVAL = 5 * time.Second
+	RELAYER_PONG_WAIT     = 10 * time.Second
 )
 
 type RelayerConfig struct {
@@ -80,7 +80,7 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 	conn.SetPongHandler(func(appData string) error {
 		r.logger.Debug("Received pong")
 		conn.SetReadDeadline(time.Time{})
-		time.Sleep(pingInterval)
+		time.Sleep(RELAYER_PING_INTERVAL)
 		r.startPing()
 		return nil
 	})
@@ -182,7 +182,7 @@ func (r *RelayerClient) startPing() {
 
 	r.Unlock()
 	r.logger.Debug("Sent ping")
-	r.conn.SetReadDeadline(time.Now().Add(pongWait))
+	r.conn.SetReadDeadline(time.Now().Add(RELAYER_PONG_WAIT))
 }
 
 // Close closes the Relayer connection
