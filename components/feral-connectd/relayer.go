@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	RELAYER_PING_INTERVAL = 5 * time.Second
+	RELAYER_PING_INTERVAL = 15 * time.Second
 	RELAYER_PONG_WAIT     = 10 * time.Second
 )
 
