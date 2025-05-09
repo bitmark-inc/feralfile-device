@@ -31,7 +31,7 @@ type CommandHandler struct {
 	dataHandler    *DataHandler
 	cdp            *CDPClient
 	dailyScheduler *time.Timer
-	lastCmd        *Command
+	lastCDPCmd     *Command
 }
 
 type CmdCastArtworkArgs struct {
@@ -61,8 +61,8 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 	var err error
 	var bytes []byte
 	defer func() {
-		if err == nil {
-			c.lastCmd = &cmd
+		if err == nil && cmd.Command != CMD_CHECK_STATUS {
+			c.lastCDPCmd = &cmd
 		}
 	}()
 
@@ -112,7 +112,7 @@ func (c *CommandHandler) checkStatus() (interface{}, error) {
 				Name: "FF-X1",
 				ID:   "ff-x1-dummy",
 			},
-			Command: c.lastCmd,
+			Command: c.lastCDPCmd,
 			State:   nil,
 		},
 	}, nil
