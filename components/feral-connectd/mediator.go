@@ -63,17 +63,12 @@ func (m *Mediator) handleDBusSignal(
 			return err
 		}
 
-		// log
-		m.logger.Info("Connected to relayer")
-
 		err = m.cdp.Navigate(PLAYER_FILE)
 		if err != nil {
 			m.logger.Error("Failed to navigate to web app", zap.Error(err))
 			return err
 		}
 
-		// log
-		m.logger.Info("Navigated to web app")
 		_, err = m.cmd.Execute(ctx, Command{
 			Command: CMD_CAST_DAILY,
 		})
@@ -82,8 +77,6 @@ func (m *Mediator) handleDBusSignal(
 			return err
 		}
 
-		// log
-		m.logger.Info("Casting daily")
 	default:
 		return fmt.Errorf("unknown signal: %s", member)
 	}
