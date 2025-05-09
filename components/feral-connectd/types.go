@@ -143,38 +143,23 @@ type Response struct {
 	Ok bool `json:"ok"`
 }
 
+type DeviceInfo struct {
+	DeviceName string `json:"device_name"`
+	DeviceId   string `json:"device_id"`
+}
+
 type CheckStatusResponse struct {
-	Response
-}
+	Ok              bool        `json:"ok"`
+	ConnectedDevice *DeviceInfo `json:"connectedDevice"`
 
-type CastListArtworkResponse struct {
-	Response
-}
+	ExhibitionId *string            `json:"exhibitionId"`
+	Catalog      *ExhibitionCatalog `json:"catalog"`
+	CatalogId    *string            `json:"catalogId"`
 
-type PauseCastingResponse struct {
-	Response
-}
+	Artworks  *[]PlayArtwork `json:"artworks"`
+	StartTime *int           `json:"startTime"`
+	Index     *int           `json:"index"`
+	IsPaused  *bool          `json:"isPaused"`
 
-type ResumeCastingResponse struct {
-	Response
-}
-
-type NextArtworkResponse struct {
-	Response
-}
-
-type PreviousArtworkResponse struct {
-	Response
-}
-
-type UpdateDurationResponse struct {
-	Response
-}
-
-type CastExhibitionResponse struct {
-	Response
-}
-
-type CastDailyResponse struct {
-	Response
+	DisplayKey *string `json:"displayKey"`
 }

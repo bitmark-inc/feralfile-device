@@ -86,15 +86,6 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 	})
 	r.startPing()
 
-	defer func() {
-		r.Lock()
-		if r.conn != nil {
-			r.conn.Close()
-			r.conn = nil
-		}
-		r.Unlock()
-	}()
-
 	// Handle background tasks
 	r.background(ctx)
 

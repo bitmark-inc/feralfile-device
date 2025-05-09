@@ -37,18 +37,18 @@ func NewCommandHandler(cdp *CDPClient, logger *zap.Logger) *CommandHandler {
 }
 
 // HandleWSMessage processes incoming commands
-func (h *CommandHandler) HandleWSMessage(message map[string]interface{}) {
+func (h *CommandHandler) HandleWSMessage(message map[string]interface{}) interface{} {
 	command, ok := message["command"].(string)
 	if !ok {
 		h.logger.Error("No command found in message", zap.Any("message", message))
-		return
+		return Response{Ok: false}
 	}
 
 	request := message["request"].(map[string]interface{})
 
 	switch Command(command) {
 	case CheckStatus:
-		h.checkStatus(CheckStatusRequest{})
+		return h.checkStatus(CheckStatusRequest{})
 	case CastListArtwork:
 		req := CastListArtworkRequest{
 			StartTime: int(request["startTime"].(float64)),
@@ -68,15 +68,15 @@ func (h *CommandHandler) HandleWSMessage(message map[string]interface{}) {
 				})
 			}
 		}
-		h.castListArtwork(req)
+		return h.castListArtwork(req)
 	case PauseCasting:
-		h.pauseCasting(PauseCastingRequest{})
+		return h.pauseCasting(PauseCastingRequest{})
 	case ResumeCasting:
-		h.resumeCasting(ResumeCastingRequest{})
+		return h.resumeCasting(ResumeCastingRequest{})
 	case NextArtwork:
-		h.nextArtwork(NextArtworkRequest{})
+		return h.nextArtwork(NextArtworkRequest{})
 	case PreviousArtwork:
-		h.previousArtwork(PreviousArtworkRequest{})
+		return h.previousArtwork(PreviousArtworkRequest{})
 	case UpdateDuration:
 		req := UpdateDurationRequest{
 			Artworks: make([]PlayArtwork, 0),
@@ -90,38 +90,62 @@ func (h *CommandHandler) HandleWSMessage(message map[string]interface{}) {
 				})
 			}
 		}
-		h.updateDuration(req)
+		return h.updateDuration(req)
 	case CastExhibition:
 		req := CastExhibitionRequest{
 			ExhibitionId: request["exhibitionId"].(string),
 			CatalogId:    request["catalogId"].(string),
 			Catalog:      ExhibitionCatalog(request["catalog"].(string)),
 		}
-		h.castExhibition(req)
+		return h.castExhibition(req)
 	case CastDaily:
-		h.castDaily(CastDailyRequest{})
+		return h.castDaily(CastDailyRequest{})
 	default:
 		h.logger.Error("Unknown command", zap.String("command", command))
+		return Response{Ok: false}
 	}
 }
 
-func (h *CommandHandler) checkStatus(request CheckStatusRequest) {
+func (h *CommandHandler) checkStatus(request CheckStatusRequest) CheckStatusResponse {
 	h.logger.Info("Checking status")
 	resp, err := h.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
 		"expression": `
-	          window.handleCDPRequest({
-							command: "checkStatus",
-						});
+	           window.handleCDPRequest({
+                            command: "setArtwork",
+                            params: {
+                                url: "https://bit.ly/36pointsDE",
+                                mimeType: "text/html",
+                                mode: "fill",
+                            },
+                        });
 	      `,
 	})
 	if err != nil {
 		h.logger.Error("Failed to send checkStatus command to Chrome", zap.Error(err))
-		return
+		return CheckStatusResponse{Ok: false}
 	}
 	h.logger.Info("Check status response", zap.Any("response", resp))
+	return CheckStatusResponse{
+		Ok: true,
+		ConnectedDevice: &DeviceInfo{
+			DeviceName: "FF-Portal",
+			DeviceId:   "FF-X1-8UO8DX",
+		},
+
+		ExhibitionId: nil,
+		Catalog:      nil,
+		CatalogId:    nil,
+
+		Artworks:  nil,
+		StartTime: nil,
+		Index:     nil,
+		IsPaused:  nil,
+
+		DisplayKey: nil,
+	}
 }
 
-func (h *CommandHandler) castListArtwork(request CastListArtworkRequest) {
+func (h *CommandHandler) castListArtwork(request CastListArtworkRequest) Response {
 	// Extract asset IDs from artworks
 	assetIds := make([]string, 0, len(request.Artworks))
 	for _, artwork := range request.Artworks {
@@ -134,7 +158,7 @@ func (h *CommandHandler) castListArtwork(request CastListArtworkRequest) {
 	artworks, err := h.getNFTTokens(assetIds)
 	if err != nil {
 		h.logger.Error("Failed to get NFT tokens", zap.Error(err))
-		return
+		return Response{Ok: false}
 	}
 
 	h.logger.Info("Artworks", zap.Any("artworks", artworks))
@@ -142,7 +166,7 @@ func (h *CommandHandler) castListArtwork(request CastListArtworkRequest) {
 	artworksJSON, err := json.Marshal(request.Artworks)
 	if err != nil {
 		h.logger.Error("Failed to marshal artworks", zap.Error(err))
-		return
+		return Response{Ok: false}
 	}
 
 	resp, err := h.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
@@ -158,12 +182,15 @@ func (h *CommandHandler) castListArtwork(request CastListArtworkRequest) {
 	})
 	if err != nil {
 		h.logger.Error("Failed to send castListArtwork command to Chrome", zap.Error(err))
-		return
+		return Response{Ok: false}
 	}
 	h.logger.Info("Cast list artwork response", zap.Any("response", resp))
+	return Response{
+		Ok: true,
+	}
 }
 
-func (h *CommandHandler) pauseCasting(request PauseCastingRequest) {
+func (h *CommandHandler) pauseCasting(request PauseCastingRequest) Response {
 	h.logger.Info("Pausing casting")
 	resp, err := h.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
 		"expression": `
@@ -174,12 +201,13 @@ func (h *CommandHandler) pauseCasting(request PauseCastingRequest) {
 	})
 	if err != nil {
 		h.logger.Error("Failed to send pauseCasting command to Chrome", zap.Error(err))
-		return
+		return Response{Ok: false}
 	}
 	h.logger.Info("Pause casting response", zap.Any("response", resp))
+	return Response{Ok: true}
 }
 
-func (h *CommandHandler) resumeCasting(request ResumeCastingRequest) {
+func (h *CommandHandler) resumeCasting(request ResumeCastingRequest) Response {
 	h.logger.Info("Resuming casting")
 	resp, err := h.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
 		"expression": `
@@ -190,12 +218,13 @@ func (h *CommandHandler) resumeCasting(request ResumeCastingRequest) {
 	})
 	if err != nil {
 		h.logger.Error("Failed to send resumeCasting command to Chrome", zap.Error(err))
-		return
+		return Response{Ok: false}
 	}
 	h.logger.Info("Resume casting response", zap.Any("response", resp))
+	return Response{Ok: true}
 }
 
-func (h *CommandHandler) nextArtwork(request NextArtworkRequest) {
+func (h *CommandHandler) nextArtwork(request NextArtworkRequest) Response {
 	h.logger.Info("Next artwork")
 	resp, err := h.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
 		"expression": `
@@ -206,12 +235,13 @@ func (h *CommandHandler) nextArtwork(request NextArtworkRequest) {
 	})
 	if err != nil {
 		h.logger.Error("Failed to send nextArtwork command to Chrome", zap.Error(err))
-		return
+		return Response{Ok: false}
 	}
 	h.logger.Info("Next artwork response", zap.Any("response", resp))
+	return Response{Ok: true}
 }
 
-func (h *CommandHandler) previousArtwork(request PreviousArtworkRequest) {
+func (h *CommandHandler) previousArtwork(request PreviousArtworkRequest) Response {
 	h.logger.Info("Previous artwork")
 	resp, err := h.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
 		"expression": `
@@ -222,17 +252,20 @@ func (h *CommandHandler) previousArtwork(request PreviousArtworkRequest) {
 	})
 	if err != nil {
 		h.logger.Error("Failed to send previousArtwork command to Chrome", zap.Error(err))
-		return
+		return Response{Ok: false}
 	}
 	h.logger.Info("Previous artwork response", zap.Any("response", resp))
+	return Response{Ok: true}
 }
 
-func (h *CommandHandler) updateDuration(request UpdateDurationRequest) {
+func (h *CommandHandler) updateDuration(request UpdateDurationRequest) Response {
 	h.logger.Info("Updating duration")
 	artworksJSON, err := json.Marshal(request.Artworks)
 	if err != nil {
 		h.logger.Error("Failed to marshal artworks", zap.Error(err))
-		return
+		return Response{
+			Ok: true,
+		}
 	}
 	resp, err := h.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
 		"expression": fmt.Sprintf(`
@@ -246,12 +279,15 @@ func (h *CommandHandler) updateDuration(request UpdateDurationRequest) {
 	})
 	if err != nil {
 		h.logger.Error("Failed to send updateDuration command to Chrome", zap.Error(err))
-		return
+		return Response{}
 	}
 	h.logger.Info("Update duration response", zap.Any("response", resp))
+	return Response{
+		Ok: true,
+	}
 }
 
-func (h *CommandHandler) castExhibition(request CastExhibitionRequest) {
+func (h *CommandHandler) castExhibition(request CastExhibitionRequest) Response {
 	resp, err := h.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
 		"expression": fmt.Sprintf(`
 			window.handleCDPRequest({
@@ -266,12 +302,13 @@ func (h *CommandHandler) castExhibition(request CastExhibitionRequest) {
 	})
 	if err != nil {
 		h.logger.Error("Failed to send castExhibition command to Chrome", zap.Error(err))
-		return
+		return Response{Ok: false}
 	}
 	h.logger.Info("Cast exhibition response", zap.Any("response", resp))
+	return Response{Ok: true}
 }
 
-func (h *CommandHandler) castDaily(request CastDailyRequest) {
+func (h *CommandHandler) castDaily(request CastDailyRequest) Response {
 	resp, err := h.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
 		"expression": `
 	          window.handleCDPRequest({
@@ -281,9 +318,10 @@ func (h *CommandHandler) castDaily(request CastDailyRequest) {
 	})
 	if err != nil {
 		h.logger.Error("Failed to send castDaily command to Chrome", zap.Error(err))
-		return
+		return Response{Ok: false}
 	}
 	h.logger.Info("Cast daily response", zap.Any("response", resp))
+	return Response{Ok: true}
 }
 
 func (h *CommandHandler) getNFTTokens(ids []string) ([]PlayArtwork, error) {

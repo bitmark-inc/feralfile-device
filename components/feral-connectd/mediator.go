@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -82,11 +83,24 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, data map[string]int
 	m.logger.Info("Received relayer message", zap.Any("data", data))
 
 	messageID, _ := data["messageID"].(string)
-	message, ok := data["message"].(map[string]interface{})
-	if !ok {
-		m.logger.Error("Invalid message", zap.Any("data", data))
-		return fmt.Errorf("invalid message")
+	m.logger.Info("messageID", zap.String("messageID", messageID))
+
+	var message map[string]interface{}
+	switch msg := data["message"].(type) {
+	case string:
+		// Handle JSON string message
+		if err := json.Unmarshal([]byte(msg), &message); err != nil {
+			m.logger.Error("Failed to parse message JSON", zap.Error(err), zap.String("message", msg))
+			return fmt.Errorf("failed to parse message JSON: %w", err)
+		}
+	case map[string]interface{}:
+		// Handle direct map message
+		message = msg
+	default:
+		m.logger.Error("Invalid message format", zap.Any("data", data))
+		return fmt.Errorf("invalid message format")
 	}
+
 	switch messageID {
 	case "system":
 		// Parse locationID and topicID
@@ -120,7 +134,20 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, data map[string]int
 			return err
 		}
 	default:
-		m.commandHandler.HandleWSMessage(message)
+		response := m.commandHandler.HandleWSMessage(message)
+
+		//log response
+		m.logger.Info("Response", zap.Any("response", response))
+
+		if err := m.relayer.conn.WriteJSON(struct {
+			MessageID string      `json:"messageID"`
+			Message   interface{} `json:"message"`
+		}{
+			MessageID: messageID,
+			Message:   response,
+		}); err != nil {
+			m.relayer.logger.Error("Failed to send response", zap.Error(err))
+		}
 	}
 
 	return nil
