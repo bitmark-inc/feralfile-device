@@ -17,9 +17,20 @@ on:
           - Production
 
 jobs:
+  build-feral-connectd:
+    name: Build Feral Connectd
+    uses: ./.github/workflows/build-components.yaml
+    with:
+      component: feral-connectd
+      version: ${{ github.event.inputs.version }}
+      description: 'Feral File Connectd Service'
+      maintainer: 'Feral File'
+      build_pacman: false
+
   build-image:
     name: Generate Arch Linux Image for Radxa X4
     runs-on: ubuntu-latest
+    needs: build-feral-connectd
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
 
     container:
@@ -29,6 +40,12 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Download feral-connectd Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: feral-connectd
+          path: /tmp/feral-connectd
 
       - name: Install Build Dependencies
         run: |
@@ -47,6 +64,17 @@ jobs:
           cp -r components/launcher-ui/* /build/archiso-radxa-x4/airootfs/opt/feral/ui/launcher/
           mkdir -p /build/archiso-radxa-x4/airootfs/opt/feral/ui/player
           cp -r components/player-wrapper-ui/* /build/archiso-radxa-x4/airootfs/opt/feral/ui/player/
+
+      - name: Add feral-connectd Binary and Service
+        run: |
+          # Create bin directory if it doesn't exist
+          mkdir -p /build/archiso-radxa-x4/airootfs/usr/bin
+          
+          # Copy the binary
+          cp /tmp/feral-connectd/feral-connectd /build/archiso-radxa-x4/airootfs/usr/bin/
+          chmod 755 /build/archiso-radxa-x4/airootfs/usr/bin/feral-connectd
+          
+          cp components/feral-connectd/connectd.service /build/archiso-radxa-x4/airootfs/etc/systemd/system/feral-connectd.service
 
       - name: Setup pacman
         run: |

@@ -1,4 +1,4 @@
-name: Build Pacman Package
+name: Build Component
 
 on:
   workflow_call:
@@ -21,6 +21,11 @@ on:
         required: false
         type: string
         default: 'GitHub Actions'
+      build_pacman:
+        description: 'Whether to build a pacman package or just the binary'
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       component:
@@ -37,9 +42,14 @@ on:
         description: 'Package version (leave empty to use commit hash)'
         required: false
         type: string
+      build_pacman:
+        description: 'Whether to build a pacman package or just the binary'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
-  build-pacman:
+  build-component:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
@@ -64,7 +74,19 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Prepare source tarball & PKGBUILD
+      - name: Build Binary
+        working-directory: components/${{ inputs.component }}
+        run: |
+          go build -v -o "${{ inputs.component }}"
+          # Copy any associated service files if they exist
+          mkdir -p /tmp/artifact
+          cp "${{ inputs.component }}" /tmp/artifact/
+          if [ -f "*.service" ]; then
+            cp *.service /tmp/artifact/
+          fi
+
+      - name: Build Pacman Package
+        if: ${{ inputs.build_pacman == true }}
         working-directory: components/${{ inputs.component }}
         run: |
           set -euo pipefail
@@ -105,20 +127,25 @@ jobs:
           }
           EOF
 
-      - name: Build Pacman Package
-        working-directory: components/${{ inputs.component }}
-        run: |
           useradd -m builder
           chown -R builder:builder .
           su builder -c "makepkg -f --skipinteg"
+          
+          # Copy the package to the artifact directory
+          cp *.pkg.tar.zst /tmp/artifact/
 
-      - name: Upload Pacman Package
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.component }}
-          path: components/${{ inputs.component }}/*.pkg.tar.zst
+          path: /tmp/artifact
           retention-days: 7
 
-      - name: Package Info
+      - name: Component Info
         run: |
           echo "Component ${{ inputs.component }} version ${{ env.VERSION }} built successfully"
+          if [ "${{ inputs.build_pacman }}" == "true" ]; then
+            echo "Built as pacman package"
+          else
+            echo "Built as binary only"
+          fi
