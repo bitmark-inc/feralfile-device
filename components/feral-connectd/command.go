@@ -11,6 +11,7 @@ type Cmd string
 
 const (
 	CMD_CHECK_STATUS      Cmd = "checkStatus"
+	CMD_CONNECT           Cmd = "connect"
 	CMD_CAST_LIST_ARTWORK Cmd = "castListArtwork"
 	CMD_CAST_EXHIBITION   Cmd = "castExhibition"
 	CMD_CAST_DAILY        Cmd = "castDaily"
@@ -27,11 +28,18 @@ type Command struct {
 	Arguments map[string]interface{}
 }
 
+type Device struct {
+	ID       string `json:"device_id"`
+	Name     string `json:"device_name"`
+	Platform int    `json:"platform"`
+}
+
 type CommandHandler struct {
 	dataHandler    *DataHandler
 	cdp            *CDPClient
 	dailyScheduler *time.Timer
-	lastCDPCmd     *Command
+
+	lastCDPCmd *Command
 }
 
 type CmdCastArtworkArgs struct {
@@ -75,6 +83,8 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 	switch cmd.Command {
 	case CMD_CHECK_STATUS:
 		result, err = c.checkStatus()
+	case CMD_CONNECT:
+		result, err = c.connect(bytes)
 	case CMD_CAST_LIST_ARTWORK:
 		result, err = c.castListArtwork(ctx, bytes)
 	case CMD_CAST_EXHIBITION:
@@ -89,31 +99,21 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 }
 
 type CheckStatusResp struct {
-	Device struct {
-		Name string `json:"name"`
-		ID   string `json:"id"`
-	} `json:"device"`
-	Command *Command               `json:"command"`
-	State   map[string]interface{} `json:"state"`
+	Device   *Device                `json:"device"`
+	Command  *Command               `json:"lastCDPCmd"`
+	CDPState map[string]interface{} `json:"cdpState"`
 }
 
 func (c *CommandHandler) checkStatus() (interface{}, error) {
-	// TODO: implement after the prototype is done
 	return &struct {
 		OK    bool             `json:"ok"`
 		State *CheckStatusResp `json:"state"`
 	}{
 		OK: true,
 		State: &CheckStatusResp{
-			Device: struct {
-				Name string `json:"name"`
-				ID   string `json:"id"`
-			}{
-				Name: "FF-X1",
-				ID:   "ff-x1-dummy",
-			},
-			Command: c.lastCDPCmd,
-			State:   nil,
+			Device:   GetState().ConnectedDevice,
+			Command:  c.lastCDPCmd,
+			CDPState: nil, // TODO: implement later after the prototype is done
 		},
 	}, nil
 }
@@ -160,6 +160,28 @@ func (c *CommandHandler) castListArtwork(ctx context.Context, args []byte) (inte
 	err = c.cdpPlayArtwork(cdpArgs[0])
 	if err != nil {
 		return nil, fmt.Errorf("failed to play artwork: %s", err)
+	}
+
+	return CmdOK, nil
+}
+
+type ConnectArgs struct {
+	Device         Device `json:"clientDevice"`
+	PrimaryAddress string `json:"primaryAddress"`
+}
+
+func (c *CommandHandler) connect(args []byte) (interface{}, error) {
+	var cmdArgs ConnectArgs
+	err := json.Unmarshal(args, &cmdArgs)
+	if err != nil {
+		return nil, fmt.Errorf("invalid arguments: %s", err)
+	}
+
+	state := GetState()
+	state.ConnectedDevice = &cmdArgs.Device
+	err = state.Save()
+	if err != nil {
+		return nil, fmt.Errorf("failed to save state: %s", err)
 	}
 
 	return CmdOK, nil

@@ -68,6 +68,14 @@ func (r *RelayerClient) RetriableConnect(ctx context.Context) error {
 
 // Connect connects to the Relayer server and listens for messages
 func (r *RelayerClient) Connect(ctx context.Context) error {
+	// Ensure the relayer is not connected
+	r.Lock()
+	if r.conn != nil {
+		r.Unlock()
+		return fmt.Errorf("relayer is already connected")
+	}
+	r.Unlock()
+
 	// Create URL with locationID and topicID if available
 	connectURL := r.config.Endpoint
 

@@ -174,7 +174,7 @@ func transformPreviewURL(url string) string {
 		return url
 	}
 
-	return fmt.Sprintf("%s/%s", config.FeralFile.AssetURL, url)
+	return fmt.Sprintf("%s/%s", GetConfig().FeralFile.AssetURL, url)
 }
 
 func (c *FeralFileClient) GetArtwork(ctx context.Context, id string) (*Artwork, error) {

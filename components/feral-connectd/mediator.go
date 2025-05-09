@@ -109,11 +109,12 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, data map[string]int
 			return fmt.Errorf("invalid message")
 		}
 
+		config := GetConfig()
 		config.RelayerConfig.LocationID = locationID
 		config.RelayerConfig.TopicID = topicID
 
 		// Persist configuration
-		err := PersistConfig(m.logger)
+		err := config.Save()
 		if err != nil {
 			m.logger.Error("Failed to persist configuration", zap.Error(err))
 			return err
