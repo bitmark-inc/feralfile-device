@@ -315,6 +315,7 @@ func (c *IndexerClient) getTokens(ctx context.Context, indexIDs []string) ([]Tok
 						project {
 							latest {
 								medium
+								mimeType
 								previewURL
 							}
 						}
