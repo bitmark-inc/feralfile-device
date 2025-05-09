@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -73,7 +72,7 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 	}
 
 	for _, t := range targets {
-		if t.Type == "page" && strings.Contains(t.Title, "Feral File") {
+		if t.Type == "page" {
 			pageTargets = append(pageTargets, t)
 		}
 	}
