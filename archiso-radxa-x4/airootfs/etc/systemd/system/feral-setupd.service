@@ -6,7 +6,7 @@ After=local-fs.target network.target bluetooth.service
 Type=oneshot
 User=feralfile
 Group=feralfile
-Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u feralfile)/bus"
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
 ExecStart=/usr/bin/feral-setupd
 RemainAfterExit=yes
 
