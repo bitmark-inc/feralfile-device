@@ -207,6 +207,10 @@ sed -i 's/^HOOKS=.*/HOOKS=(base udev modconf autodetect block filesystems)/' /et
 echo "Generating initramfs..."
 mkinitcpio -P
 
+chmod 755 /boot
+chmod 700 /boot/loader
+chmod 600 /boot/loader/random-seed 2>/dev/null || true
+
 echo "Installing systemd-boot to disk..."
 bootctl install
 EOF
