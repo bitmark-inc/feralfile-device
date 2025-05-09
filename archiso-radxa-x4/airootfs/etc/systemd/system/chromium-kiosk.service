@@ -10,6 +10,7 @@ Group=feralfile
 Environment="XDG_RUNTIME_DIR=/run/user/1000"
 Environment="WLR_RENDERER=pixman"
 ExecStart=/usr/bin/cage -- /usr/bin/chromium \
+--show-fps-counter \
 --ozone-platform=wayland \
 --no-first-run \
 --disable-sync \
