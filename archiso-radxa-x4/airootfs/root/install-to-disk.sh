@@ -6,20 +6,60 @@ sleep 5
 
 cleanup() {
   echo
-  echo "⚠️  Cleaning up..."
+  echo "After shutdown, please remove the installation USB stick."
+  echo "Please press any key to shut down the system safely."
+  read -n 1 -s -r -p ""
 
-  umount /mnt/dev
-  umount /mnt/proc
-  umount /mnt/sys
-  umount /mnt/boot
-  umount /mnt
-
-  echo "You may now reboot and remove the USB stick."
+  echo
+  echo "🔌 Shutting down now..."
+  shutdown -h now
 }
 trap cleanup EXIT
 
 echo "=== Feral File Arch Installer ==="
 echo
+
+# ─── Check and connect to Wi-Fi ─────────────────────────────────────────
+echo "Checking network connectivity..."
+if ! ping -q -c 1 -W 1 archlinux.org &>/dev/null; then
+  echo "⚠️  No internet connection detected."
+  read -rp "Do you want to connect to a Wi-Fi network? [y/N]: " wifi_choice
+
+  if [[ "$wifi_choice" =~ ^[yY]$ ]]; then
+    echo "Available Wi-Fi networks:"
+    nmcli device wifi rescan &>/dev/null
+    nmcli device wifi list
+
+    read -rp "Enter SSID: " wifi_ssid
+    read -rsp "Enter password for '$wifi_ssid': " wifi_pass
+    echo
+
+    if nmcli device wifi connect "$wifi_ssid" password "$wifi_pass"; then
+      echo "✅ Connected to Wi-Fi successfully."
+    else
+      echo "❌ Failed to connect to Wi-Fi."
+      NO_NETWORK=1
+    fi
+  else
+    echo "Skipping Wi-Fi setup..."
+    NO_NETWORK=1
+  fi
+else
+  echo "✅ Internet connection detected."
+fi
+
+# ─── Warn if offline installation ──────────────────────────────────────
+if [[ "${NO_NETWORK:-0}" == 1 ]]; then
+  echo
+  echo "⚠️  You are installing without an internet connection."
+  echo "    - Pacman will not be initialized."
+  echo "    - Only the base image will be used."
+  read -rp "Proceed with offline installation? [y/N]: " offline_confirm
+  [[ "$offline_confirm" != [yY] ]] && echo "Aborted." && exit 1
+  SKIP_PACMAN_INIT=1
+else
+  SKIP_PACMAN_INIT=0
+fi
 
 # ─── List available target disks ───────────────────────────────────────
 echo "Available disks:"
@@ -126,6 +166,25 @@ mount --bind /dev /mnt/dev
 mount --bind /proc /mnt/proc
 mount --bind /sys /mnt/sys
 
+if [[ "$SKIP_PACMAN_INIT" -eq 0 ]]; then
+arch-chroot /mnt /bin/bash <<EOF
+echo "Overwriting mkinitcpio.conf HOOKS..."
+sed -i 's/^HOOKS=.*/HOOKS=(base udev modconf autodetect block filesystems)/' /etc/mkinitcpio.conf
+
+echo "Generating initramfs..."
+mkinitcpio -P
+
+echo "Installing systemd-boot to disk..."
+bootctl install
+
+echo "Setting up pacman..."
+curl -o /etc/pacman.d/mirrorlist "https://archlinux.org/mirrorlist/?country=US&protocol=https&ip_version=4&use_mirror_status=on"
+sed -i 's/^#Server/Server/' /etc/pacman.d/mirrorlist
+pacman-key --init
+pacman-key --populate archlinux
+pacman -Syy
+EOF
+else
 arch-chroot /mnt /bin/bash <<EOF
 echo "Overwriting mkinitcpio.conf HOOKS..."
 sed -i 's/^HOOKS=.*/HOOKS=(base udev modconf autodetect block filesystems)/' /etc/mkinitcpio.conf
@@ -136,9 +195,10 @@ mkinitcpio -P
 echo "Installing systemd-boot to disk..."
 bootctl install
 EOF
+fi
 
 # ─── Post-install cleanup and prompt ───────────────────────────────────
 sleep 10
 
 echo
-echo "Arch Linux has been installed to $TARGET_DISK"
+echo "Arch Linux has been installed to $TARGET_DISK successfully!"
