@@ -100,14 +100,19 @@ jobs:
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.config
           cat > /build/archiso-radxa-x4/airootfs/home/feralfile/.config/connectd.json << EOF
           {
-            "relayer" : {
-                "endpoint" : "wss://tv-cast-coordination.autonomy-system.workers.dev",
-                "apiKey" : "$API_KEY",
-                "locationID":"",
-                "topicID":""
+            "relayer": {
+                "endpoint": "wss://tv-cast-coordination.bitmark-development.workers.dev",
+                "apiKey": "$API_KEY"
             },
-            "cdp" : {
-                "endpoint" : "http://127.0.0.1:9222"
+            "cdp": {
+                "endpoint": "http://127.0.0.1:9222"
+            },
+            "indexer": {
+                "endpoint": "https://indexer.feralfile.com/v2/graphql"
+            },
+            "feralFile": {
+                "endpoint": "https://feralfile.com",
+                "assetURL": "https://cdn.feralfileassets.com"
             }
           }
           EOF
