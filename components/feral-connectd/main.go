@@ -49,10 +49,10 @@ func main() {
 	}
 
 	// Load state
-	state, err := LoadState(logger)
-	if err != nil {
-		logger.Fatal("Failed to load state", zap.Error(err))
-	}
+	// state, err := LoadState(logger)
+	// if err != nil {
+	// 	logger.Fatal("Failed to load state", zap.Error(err))
+	// }
 
 	// Initialize CDP client
 	cdpClient := NewCDPClient(config.CDPConfig, logger)
@@ -72,7 +72,7 @@ func main() {
 	defer relayerClient.Close()
 
 	// Connect to Relayer if ready
-	if state.RelayerReadyConnecting() {
+	if GetState().RelayerReadyConnecting() {
 		err = relayerClient.RetriableConnect(ctx)
 		if err != nil {
 			logger.Fatal("Failed to connect to relayer", zap.Error(err))
