@@ -178,17 +178,19 @@ func transformPreviewURL(url string) string {
 }
 
 func (c *FeralFileClient) GetArtwork(ctx context.Context, id string) (*Artwork, error) {
-	var artwork Artwork
+	var resp struct {
+		Artwork Artwork `json:"result"`
+	}
 	if err := c.request(
 		ctx,
 		http.MethodGet,
 		fmt.Sprintf("/api/artworks/%s?includeSuccessfulSwap=true",
 			id),
 		nil,
-		&artwork); err != nil {
+		&resp); err != nil {
 		return nil, err
 	}
-	return &artwork, nil
+	return &resp.Artwork, nil
 }
 
 func (c *FeralFileClient) GetDaily(ctx context.Context, date time.Time) ([]Daily, error) {
