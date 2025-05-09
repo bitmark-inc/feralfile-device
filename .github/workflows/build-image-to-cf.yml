@@ -96,8 +96,7 @@ jobs:
 
           # Add connectd config
           API_KEY="${{ secrets.CONNECTD_API_KEY }}"
-          mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.config
-          cat > /build/archiso-radxa-x4/airootfs/home/feralfile/.config/connectd.json << EOF
+          cat > /build/archiso-radxa-x4/airootfs/home/feralfile/connectd.json << EOF
           {
             "relayer" : {
                 "endpoint" : "wss://tv-cast-coordination.autonomy-system.workers.dev",
@@ -110,7 +109,7 @@ jobs:
             }
           }
           EOF
-          chmod 755 /build/archiso-radxa-x4/airootfs/home/feralfile/.config/connectd.json
+          chmod 755 /build/archiso-radxa-x4/airootfs/home/feralfile/connectd.json
 
       - name: Setup pacman
         run: |
