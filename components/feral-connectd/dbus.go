@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	EVENT_SETUPD_WIFI_CONNECTED       = "setupd.wifi_connected"
-	EVENT_STATED_DEVICE_CONNECTED     = "stated.device_connected"
-	EVENT_CONNECTD_RELAYER_CONFIGURED = "connectd.relayer_configured"
+	EVENT_SETUPD_WIFI_CONNECTED       = "wifi_connected"
+	EVENT_STATED_DEVICE_CONNECTED     = "device_connected"
+	EVENT_CONNECTD_RELAYER_CONFIGURED = "relayer_configured"
 
 	DBUS_INTERFACE = "com.feralfile.connectd.general"
 	DBUS_PATH      = "/com/feralfile/connectd"
@@ -105,7 +105,7 @@ func (c *DBusClient) RemoveBusSignal(f BusSignalHandler) {
 }
 
 func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
-	i := strings.Index(sig.Name, ".")
+	i := strings.LastIndex(sig.Name, ".")
 	if i == -1 {
 		return fmt.Errorf("invalid signal name: %s", sig.Name)
 	}
@@ -114,7 +114,7 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 
 	for _, handler := range c.busSignalHandlers {
 		if err := handler(c.ctx, iface, sig.Path, member, sig.Body); err != nil {
-			c.logger.Error("Failed to handle signal", zap.String("interface", iface), zap.String("member", member), zap.Error(err))
+			c.logger.Warn("Failed to handle signal", zap.String("interface", iface), zap.String("member", member), zap.Error(err))
 		}
 	}
 
