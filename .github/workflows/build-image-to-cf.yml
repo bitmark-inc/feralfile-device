@@ -80,6 +80,7 @@ jobs:
           cp -r components/launcher-ui/* /build/archiso-radxa-x4/airootfs/opt/feral/ui/launcher/
           mkdir -p /build/archiso-radxa-x4/airootfs/opt/feral/ui/player
           cp -r components/player-wrapper-ui/* /build/archiso-radxa-x4/airootfs/opt/feral/ui/player/
+          mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.logs
 
       - name: Add feral-connectd and feral-setupd Binaries and Services
         run: |
