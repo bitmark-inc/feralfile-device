@@ -12,8 +12,10 @@ import (
 
 var (
 	CONFIG_FILE = "/home/feralfile/.config/connectd.json"
-	configLock  sync.Mutex
-	config      *Config
+	PLAYER_FILE = "/opt/feral/ui/player/index.html"
+
+	configLock sync.Mutex
+	config     *Config
 )
 
 // Configuration for all components

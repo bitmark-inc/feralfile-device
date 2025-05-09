@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type Cmd string
@@ -38,6 +40,7 @@ type CommandHandler struct {
 	dataHandler    *DataHandler
 	cdp            *CDPClient
 	dailyScheduler *time.Timer
+	logger         *zap.Logger
 
 	lastCDPCmd *Command
 }
@@ -58,10 +61,11 @@ type CmdCastExhibitionArgs struct {
 	Catalog      int    `json:"catalog"`
 }
 
-func NewCommand(dataHandler *DataHandler, cdp *CDPClient) *CommandHandler {
+func NewCommandHandler(dataHandler *DataHandler, cdp *CDPClient, logger *zap.Logger) *CommandHandler {
 	return &CommandHandler{
 		dataHandler: dataHandler,
 		cdp:         cdp,
+		logger:      logger,
 	}
 }
 
@@ -105,6 +109,7 @@ type CheckStatusResp struct {
 }
 
 func (c *CommandHandler) checkStatus() (interface{}, error) {
+	c.logger.Info("Checking status...")
 	return &struct {
 		OK    bool             `json:"ok"`
 		State *CheckStatusResp `json:"state"`
@@ -119,6 +124,8 @@ func (c *CommandHandler) checkStatus() (interface{}, error) {
 }
 
 func (c *CommandHandler) castListArtwork(ctx context.Context, args []byte) (interface{}, error) {
+	c.logger.Info("Casting list artwork...", zap.Any("args", args))
+
 	// Cancel any scheduled daily task
 	if c.dailyScheduler != nil {
 		c.dailyScheduler.Stop()
@@ -171,6 +178,8 @@ type ConnectArgs struct {
 }
 
 func (c *CommandHandler) connect(args []byte) (interface{}, error) {
+	c.logger.Info("Device connected...", zap.Any("args", args))
+
 	var cmdArgs ConnectArgs
 	err := json.Unmarshal(args, &cmdArgs)
 	if err != nil {
@@ -188,6 +197,8 @@ func (c *CommandHandler) connect(args []byte) (interface{}, error) {
 }
 
 func (c *CommandHandler) castExhibition(ctx context.Context, args []byte) (interface{}, error) {
+	c.logger.Info("Casting exhibition...", zap.Any("args", args))
+
 	// Cancel any scheduled daily task
 	if c.dailyScheduler != nil {
 		c.dailyScheduler.Stop()
@@ -231,6 +242,8 @@ func (c *CommandHandler) castExhibition(ctx context.Context, args []byte) (inter
 }
 
 func (c *CommandHandler) castDaily(ctx context.Context) (interface{}, error) {
+	c.logger.Info("Casting daily...")
+
 	// Cancel any existing scheduled task
 	if c.dailyScheduler != nil {
 		c.dailyScheduler.Stop()

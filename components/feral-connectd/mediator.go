@@ -56,33 +56,26 @@ func (m *Mediator) handleDBusSignal(
 	)
 
 	switch member {
-	case EVENT_SETUPD_WIFI_CONNECTED, EVENT_STATED_DEVICE_CONNECTED:
-		if m.relayer.conn != nil {
-			m.logger.Info("Relayer is connected, skipping connection")
-			return nil
-		}
-
+	case EVENT_SETUPD_WIFI_CONNECTED:
 		err := m.relayer.RetriableConnect(ctx)
 		if err != nil {
 			m.logger.Error("Failed to connect to relayer", zap.Error(err))
 			return err
 		}
 
-		err = m.cdp.Navigate("/opt/feral/ui/player/index.html")
+		err = m.cdp.Navigate(PLAYER_FILE)
 		if err != nil {
 			m.logger.Error("Failed to navigate to web app", zap.Error(err))
 			return err
 		}
 
-		result, err := m.cmd.Execute(ctx, Command{
+		_, err = m.cmd.Execute(ctx, Command{
 			Command: CMD_CAST_DAILY,
 		})
 		if err != nil {
 			m.logger.Error("Failed to cast daily", zap.Error(err))
 			return err
 		}
-
-		m.logger.Info("Casting daily", zap.Any("result", result))
 	default:
 		return fmt.Errorf("unknown signal: %s", member)
 	}
@@ -109,14 +102,14 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, data map[string]int
 			return fmt.Errorf("invalid message")
 		}
 
-		config := GetConfig()
-		config.RelayerConfig.LocationID = locationID
-		config.RelayerConfig.TopicID = topicID
+		state := GetState()
+		state.Relayer.LocationID = locationID
+		state.Relayer.TopicID = topicID
 
-		// Persist configuration
-		err := config.Save()
+		// Save state
+		err := state.Save()
 		if err != nil {
-			m.logger.Error("Failed to persist configuration", zap.Error(err))
+			m.logger.Error("Failed to persist state", zap.Error(err))
 			return err
 		}
 

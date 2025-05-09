@@ -12,7 +12,6 @@ import (
 
 const (
 	EVENT_SETUPD_WIFI_CONNECTED       = "wifi_connected"
-	EVENT_STATED_DEVICE_CONNECTED     = "device_connected"
 	EVENT_CONNECTD_RELAYER_CONFIGURED = "relayer_configured"
 
 	DBUS_INTERFACE = "com.feralfile.connectd.general"

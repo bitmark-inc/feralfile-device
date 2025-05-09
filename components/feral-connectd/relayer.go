@@ -18,14 +18,8 @@ const (
 )
 
 type RelayerConfig struct {
-	Endpoint   string `json:"endpoint"`
-	APIKey     string `json:"apiKey"`
-	LocationID string `json:"locationId"`
-	TopicID    string `json:"topicId"`
-}
-
-func (c *RelayerConfig) ReadyConnecting() bool {
-	return c.LocationID != "" && c.TopicID != ""
+	Endpoint string `json:"endpoint"`
+	APIKey   string `json:"apiKey"`
 }
 
 type RelayerHandler func(ctx context.Context, data map[string]interface{}) error
@@ -83,12 +77,9 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 		connectURL += fmt.Sprintf("/api/connection?apiKey=%s", r.config.APIKey)
 	}
 
-	if r.config.LocationID != "" {
-		connectURL += fmt.Sprintf("&locationID=%s", r.config.LocationID)
-	}
-
-	if r.config.TopicID != "" {
-		connectURL += fmt.Sprintf("&topicID=%s", r.config.TopicID)
+	state := GetState()
+	if state.RelayerReadyConnecting() {
+		connectURL += fmt.Sprintf("&locationID=%s&topicID=%s", state.Relayer.LocationID, state.Relayer.TopicID)
 	}
 
 	r.logger.Info("Connecting to WebSocket", zap.String("url", connectURL))
@@ -106,7 +97,7 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 	r.Unlock()
 
 	conn.SetPongHandler(func(appData string) error {
-		r.logger.Debug("Received pong")
+		r.logger.Info("Received pong")
 		conn.SetReadDeadline(time.Time{})
 		time.Sleep(RELAYER_PING_INTERVAL)
 		r.startPing()
@@ -208,7 +199,7 @@ func (r *RelayerClient) startPing() {
 	}
 
 	r.Unlock()
-	r.logger.Debug("Sent ping")
+	r.logger.Info("Sent ping")
 	r.conn.SetReadDeadline(time.Now().Add(RELAYER_PONG_WAIT))
 }
 

@@ -66,7 +66,7 @@ func main() {
 	defer relayerClient.Close()
 
 	// Connect to Relayer if ready
-	if config.RelayerConfig.ReadyConnecting() {
+	if GetState().RelayerReadyConnecting() {
 		err = relayerClient.RetriableConnect(ctx)
 		if err != nil {
 			logger.Fatal("Failed to connect to relayer", zap.Error(err))
@@ -83,7 +83,7 @@ func main() {
 
 	// Initialize DataHandler
 	dataHandler := NewDataHandler(config.FeralFile.Endpoint, config.Indexer.Endpoint, logger)
-	cmd := NewCommand(dataHandler, cdpClient)
+	cmd := NewCommandHandler(dataHandler, cdpClient, logger)
 
 	// Initialize Mediator
 	mediator := NewMediator(relayerClient, dbusClient, cdpClient, cmd, logger)
