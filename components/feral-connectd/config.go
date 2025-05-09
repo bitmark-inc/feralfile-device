@@ -29,6 +29,8 @@ type Config struct {
 
 // LoadConfig loads the configuration from a JSON file
 func LoadConfig(logger *zap.Logger) (*Config, error) {
+	logger.Info("Loading config", zap.String("file", CONFIG_FILE))
+
 	// Try to read the file
 	data, err := os.ReadFile(CONFIG_FILE)
 	if os.IsNotExist(err) {

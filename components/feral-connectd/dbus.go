@@ -44,6 +44,7 @@ func NewDBusClient(ctx context.Context, logger *zap.Logger, relayer *RelayerClie
 }
 
 func (c *DBusClient) Start() error {
+	c.logger.Info("Starting DBusClient")
 	conn, err := dbus.SessionBus()
 	if err != nil {
 		return err
@@ -66,6 +67,7 @@ func (c *DBusClient) Start() error {
 
 func (c *DBusClient) background() {
 	go func() {
+		c.logger.Info("DBusClient background goroutine started")
 		for {
 			select {
 			case <-c.ctx.Done():
@@ -133,12 +135,15 @@ func (c *DBusClient) Send(
 	c.Lock()
 	defer c.Unlock()
 
+	c.logger.Info("Sending signal", zap.String("interface", iface), zap.String("member", member), zap.Any("values", values))
 	return c.conn.Emit(path, iface+"."+member, values...)
 }
 
 func (c *DBusClient) Stop() error {
 	c.Lock()
 	defer c.Unlock()
+
+	c.logger.Info("Stopping DBusClient")
 
 	select {
 	case <-c.doneChan:

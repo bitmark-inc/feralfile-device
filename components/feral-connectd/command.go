@@ -70,6 +70,8 @@ func NewCommandHandler(dataHandler *DataHandler, cdp *CDPClient, logger *zap.Log
 }
 
 func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{}, error) {
+	c.logger.Info("Executing command", zap.String("command", string(cmd.Command)))
+
 	var err error
 	var bytes []byte
 	defer func() {
@@ -109,7 +111,6 @@ type CheckStatusResp struct {
 }
 
 func (c *CommandHandler) checkStatus() (interface{}, error) {
-	c.logger.Info("Checking status...")
 	return &struct {
 		OK    bool             `json:"ok"`
 		State *CheckStatusResp `json:"state"`
@@ -124,8 +125,6 @@ func (c *CommandHandler) checkStatus() (interface{}, error) {
 }
 
 func (c *CommandHandler) castListArtwork(ctx context.Context, args []byte) (interface{}, error) {
-	c.logger.Info("Casting list artwork...", zap.Any("args", args))
-
 	// Cancel any scheduled daily task
 	if c.dailyScheduler != nil {
 		c.dailyScheduler.Stop()
@@ -178,8 +177,6 @@ type ConnectArgs struct {
 }
 
 func (c *CommandHandler) connect(args []byte) (interface{}, error) {
-	c.logger.Info("Device connected...", zap.Any("args", args))
-
 	var cmdArgs ConnectArgs
 	err := json.Unmarshal(args, &cmdArgs)
 	if err != nil {
@@ -197,8 +194,6 @@ func (c *CommandHandler) connect(args []byte) (interface{}, error) {
 }
 
 func (c *CommandHandler) castExhibition(ctx context.Context, args []byte) (interface{}, error) {
-	c.logger.Info("Casting exhibition...", zap.Any("args", args))
-
 	// Cancel any scheduled daily task
 	if c.dailyScheduler != nil {
 		c.dailyScheduler.Stop()

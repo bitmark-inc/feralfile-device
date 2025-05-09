@@ -78,6 +78,8 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 	}
 	r.Unlock()
 
+	r.logger.Info("Connecting to Relayer", zap.String("endpoint", r.config.Endpoint))
+
 	// Create URL with locationID and topicID if available
 	connectURL := r.config.Endpoint
 
@@ -116,7 +118,7 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 	// Handle background tasks
 	r.background(ctx)
 
-	r.logger.Info("Connected to WebSocket")
+	r.logger.Info("Connected to Relayer")
 
 	return nil
 }
@@ -141,6 +143,7 @@ func (r *RelayerClient) RemoveRelayerMessage(f RelayerHandler) {
 
 func (r *RelayerClient) background(ctx context.Context) {
 	go func() {
+		r.logger.Info("Relayer background goroutine started")
 		for {
 			select {
 			case <-ctx.Done():
@@ -189,6 +192,8 @@ func (r *RelayerClient) Send(ctx context.Context, data interface{}) error {
 	r.Lock()
 	defer r.Unlock()
 
+	r.logger.Info("Sending message to Relayer", zap.Any("data", data))
+
 	return r.conn.WriteJSON(data)
 }
 
@@ -200,6 +205,8 @@ func (r *RelayerClient) startPing() {
 		return
 	}
 
+	r.logger.Info("Sending ping")
+
 	if err := r.conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
 		r.logger.Error("Failed to send ping", zap.Error(err))
 		r.Unlock()
@@ -207,7 +214,6 @@ func (r *RelayerClient) startPing() {
 	}
 
 	r.Unlock()
-	r.logger.Info("Sent ping")
 	r.conn.SetReadDeadline(time.Now().Add(RELAYER_PONG_WAIT))
 }
 
@@ -215,6 +221,8 @@ func (r *RelayerClient) startPing() {
 func (r *RelayerClient) Close() {
 	r.Lock()
 	defer r.Unlock()
+
+	r.logger.Info("Closing Relayer connection")
 
 	select {
 	case <-r.done:

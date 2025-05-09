@@ -43,6 +43,8 @@ func NewCDPClient(config *CDPConfig, logger *zap.Logger) *CDPClient {
 
 // InitCDP fetches WS endpoint and dials Chromium
 func (c *CDPClient) InitCDP(ctx context.Context) error {
+	c.logger.Info("Initializing CDP", zap.String("endpoint", c.endpoint))
+
 	// Fetch JSON with websocket debugger URL
 	resp, err := http.Get(c.endpoint + "/json")
 	if err != nil {
@@ -95,13 +97,11 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 		return fmt.Errorf("cdp dial error: %w", err)
 	}
 
-	c.logger.Info("Connected to Chromium CDP page target",
-		zap.String("url", target.WebSocketDebuggerURL))
+	c.logger.Info("Connected to CDP", zap.String("url", target.WebSocketDebuggerURL))
 
 	// Start goroutine to handle context cancellation
 	go func() {
 		<-ctx.Done()
-		c.logger.Info("Closing CDP connection due to context cancellation")
 		c.Close()
 	}()
 
@@ -109,6 +109,7 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 }
 
 func (c *CDPClient) Navigate(url string) error {
+	c.logger.Info("Navigating to", zap.String("url", url))
 	return c.SendCDPRequest(CDP_METHOD_NAVIGATE, map[string]interface{}{
 		"url": url,
 	})
@@ -116,6 +117,8 @@ func (c *CDPClient) Navigate(url string) error {
 
 // SendCDPRequest sends a raw CDP JSON-RPC message and waits for response
 func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{}) error {
+	c.logger.Info("Sending CDP request", zap.String("method", method), zap.Any("params", params))
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -155,7 +158,7 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 		return fmt.Errorf("CDP error: %v", err)
 	}
 
-	c.logger.Debug("CDP response received",
+	c.logger.Info("Received CDP response",
 		zap.String("method", method),
 		zap.String("response", string(response)))
 	return nil
@@ -165,6 +168,8 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 func (c *CDPClient) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	c.logger.Info("Closing CDP connection")
 
 	if c.isClosed {
 		// Already closed
@@ -176,5 +181,6 @@ func (c *CDPClient) Close() {
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil
+		c.logger.Info("CDP connection closed")
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -31,7 +33,9 @@ func (c *State) RelayerReadyConnecting() bool {
 }
 
 // LoadState loads state from file or creates a new one if file doesn't exist
-func LoadState() (*State, error) {
+func LoadState(logger *zap.Logger) (*State, error) {
+	logger.Info("Loading state", zap.String("file", STATE_FILE))
+
 	// Ensure directory exists
 	stateDir := filepath.Dir(STATE_FILE)
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
