@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
@@ -21,6 +22,10 @@ type RelayerConfig struct {
 	APIKey     string `json:"apiKey"`
 	LocationID string `json:"locationId"`
 	TopicID    string `json:"topicId"`
+}
+
+func (c *RelayerConfig) ReadyConnecting() bool {
+	return c.LocationID != "" && c.TopicID != ""
 }
 
 type RelayerHandler func(ctx context.Context, data map[string]interface{}) error
@@ -44,6 +49,21 @@ func NewRelayerClient(config *RelayerConfig, logger *zap.Logger) *RelayerClient 
 		logger:   logger,
 		handlers: []RelayerHandler{},
 	}
+}
+
+// RetriableConnect connects to the Relayer server and listens for messages
+// with exponential backoff
+func (r *RelayerClient) RetriableConnect(ctx context.Context) error {
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = 5 * time.Second
+	bo.Multiplier = 2
+	bo.MaxElapsedTime = 30 * time.Second
+
+	err := backoff.Retry(func() error {
+		return r.Connect(ctx)
+	}, bo)
+
+	return err
 }
 
 // Connect connects to the Relayer server and listens for messages

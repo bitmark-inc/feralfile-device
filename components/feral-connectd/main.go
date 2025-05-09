@@ -65,6 +65,14 @@ func main() {
 	relayerClient := NewRelayerClient(config.RelayerConfig, logger)
 	defer relayerClient.Close()
 
+	// Connect to Relayer if ready
+	if config.RelayerConfig.ReadyConnecting() {
+		err = relayerClient.RetriableConnect(ctx)
+		if err != nil {
+			logger.Fatal("Failed to connect to relayer", zap.Error(err))
+		}
+	}
+
 	// Initialize DBus client
 	dbusClient := NewDBusClient(ctx, logger, relayerClient)
 	err = dbusClient.Start()

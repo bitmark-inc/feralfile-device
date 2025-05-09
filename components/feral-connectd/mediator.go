@@ -3,9 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/godbus/dbus/v5"
 	"go.uber.org/zap"
 )
@@ -56,14 +54,7 @@ func (m *Mediator) handleDBusSignal(
 
 	switch member {
 	case EVENT_SETUPD_WIFI_CONNECTED, EVENT_STATED_DEVICE_CONNECTED:
-		bo := backoff.NewExponentialBackOff()
-		bo.InitialInterval = 5 * time.Second
-		bo.Multiplier = 2
-		bo.MaxElapsedTime = 30 * time.Second
-
-		err := backoff.Retry(func() error {
-			return m.relayer.Connect(ctx)
-		}, bo)
+		err := m.relayer.RetriableConnect(ctx)
 		if err != nil {
 			m.logger.Error("Failed to connect to relayer", zap.Error(err))
 			return err
