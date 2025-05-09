@@ -242,8 +242,6 @@ func (c *CommandHandler) castExhibition(ctx context.Context, args []byte) (inter
 }
 
 func (c *CommandHandler) castDaily(ctx context.Context) (interface{}, error) {
-	c.logger.Info("Casting daily...")
-
 	// Cancel any existing scheduled task
 	if c.dailyScheduler != nil {
 		c.dailyScheduler.Stop()
@@ -271,7 +269,7 @@ func (c *CommandHandler) castDaily(ctx context.Context) (interface{}, error) {
 
 	var indexIDs []string
 	for _, daily := range dailies {
-		indexIDs = append(indexIDs, daily.TokenID)
+		indexIDs = append(indexIDs, GetIndexID(daily.Blockchain, daily.ContractAddress, daily.TokenID))
 	}
 
 	tokens, err := c.dataHandler.IC.getTokens(ctx, indexIDs)
