@@ -61,7 +61,7 @@ func (c *Command) Execute(ctx context.Context, cmd Cmd, args map[string]interfac
 	case CMD_CAST_LIST_ARTWORK:
 		return c.castListArtwork(ctx, bytes)
 	case CMD_CAST_EXHIBITION:
-		return c.castExhibition(ctx, bytes)
+		return c.castExhibition(bytes)
 	case CMD_CAST_DAILY:
 		return c.castDaily()
 	default:
@@ -110,9 +110,10 @@ func (c *Command) castListArtwork(ctx context.Context, args []byte) (interface{}
 	}
 
 	// TODO: handle multiple artworks playing
-	err = c.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
-		"expression": fmt.Sprintf(
-			`window.handleCDPRequest({
+	err = c.cdp.SendCDPRequest(CDP_METHOD_EVALUATE,
+		map[string]interface{}{
+			"expression": fmt.Sprintf(
+				`window.handleCDPRequest({
                             command: "setArtwork",
                             params: {
                                 url: "%s",
@@ -120,11 +121,11 @@ func (c *Command) castListArtwork(ctx context.Context, args []byte) (interface{}
                                 mode: "%s",
                             },
                         });`,
-			cdpArgs[0].URL,
-			cdpArgs[0].MIMEType,
-			cdpArgs[0].Mode,
-		),
-	})
+				cdpArgs[0].URL,
+				cdpArgs[0].MIMEType,
+				cdpArgs[0].Mode,
+			),
+		})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send CDP request: %s", err)
 	}
@@ -132,10 +133,53 @@ func (c *Command) castListArtwork(ctx context.Context, args []byte) (interface{}
 	return CmdOK, nil
 }
 
-func (c *Command) castExhibition(ctx context.Context, args []byte) (interface{}, error) {
-	return nil, nil
+func (c *Command) castExhibition(args []byte) (interface{}, error) {
+	var cmdArgs CmdCastExhibitionArgs
+	err := json.Unmarshal(args, &cmdArgs)
+	if err != nil {
+		return nil, fmt.Errorf("invalid arguments: %s", err)
+	}
+
+	// TODO: temporary disabled
+	if cmdArgs.Catalog != 4 {
+		return nil, fmt.Errorf("temporary disabled: %d", cmdArgs.Catalog)
+	}
+
+	err = c.cdp.SendCDPRequest(CDP_METHOD_EVALUATE,
+		map[string]interface{}{
+			"expression": fmt.Sprintf(
+				`window.handleCDPRequest({
+				command: "castExhibition",
+				params: {
+					exhibitionId: "%s",
+					catalogId: "%s",
+					catalog: %d,
+				},
+			});`,
+				cmdArgs.ExhibitionID,
+				cmdArgs.CatalogID,
+				cmdArgs.Catalog,
+			),
+		})
+	if err != nil {
+		return nil, fmt.Errorf("failed to send CDP request: %s", err)
+	}
+
+	return CmdOK, nil
 }
 
 func (c *Command) castDaily() (interface{}, error) {
-	return nil, nil
+	err := c.cdp.SendCDPRequest(CDP_METHOD_EVALUATE,
+		map[string]interface{}{
+			"expression": fmt.Sprintf(
+				`window.handleCDPRequest({
+				command: "castDaily",
+			});`,
+			),
+		})
+	if err != nil {
+		return nil, fmt.Errorf("failed to send CDP request: %s", err)
+	}
+
+	return CmdOK, nil
 }

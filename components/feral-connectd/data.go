@@ -249,9 +249,9 @@ type AssetConfiguration struct {
 
 type ProjectMetadata struct {
 	Latest *struct {
-		Medium     *string `json:"medium"`
-		MIMEType   *string `json:"mimeType"`
-		PreviewURL *string `json:"previewURL"`
+		Medium     string `json:"medium"`
+		MIMEType   string `json:"mimeType"`
+		PreviewURL string `json:"previewURL"`
 	} `json:"latest"`
 }
 
