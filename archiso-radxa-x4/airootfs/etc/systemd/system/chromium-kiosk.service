@@ -1,0 +1,30 @@
+[Unit]
+Description=Chromium Kiosk Mode
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=feralfile
+Group=feralfile
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+Environment="WLR_RENDERER=pixman"
+ExecStart=/usr/bin/cage -- /usr/bin/chromium \
+--ozone-platform=wayland \
+--no-first-run \
+--disable-sync \
+--disable-translate \
+--disable-infobars \
+--disable-features=TranslateUI \
+--enable-features=VaapiVideoDecodeLinux,VaapiVideoDecoder,CanvasOopRasterization \
+--enable-gpu-rasterization \
+--enable-zero-copy \
+--ignore-gpu-blocklist \
+--autoplay-policy=no-user-gesture-required \
+--enable-features=AcceleratedVideoDecodeLinuxGL \
+file:///opt/feral/ui/launcher/index.html?device_id=FF-X1&step=qr
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
