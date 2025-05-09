@@ -110,12 +110,12 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 }
 
 // SendCDPRequest sends a raw CDP JSON-RPC message and waits for response
-func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{}) error {
+func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{}) (map[string]interface{}, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.isClosed || c.conn == nil {
-		return fmt.Errorf("CDP connection is not initialized or already closed")
+		return nil, fmt.Errorf("CDP connection is not initialized or already closed")
 	}
 
 	c.reqID++
@@ -127,33 +127,33 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("CDP marshal error: %w", err)
+		return nil, fmt.Errorf("CDP marshal error: %w", err)
 	}
 
 	if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
-		return fmt.Errorf("CDP write error: %w", err)
+		return nil, fmt.Errorf("CDP write error: %w", err)
 	}
 
 	// Wait for response
 	_, response, err := c.conn.ReadMessage()
 	if err != nil {
-		return fmt.Errorf("failed to read CDP response: %w", err)
+		return nil, fmt.Errorf("failed to read CDP response: %w", err)
 	}
 
 	var resp map[string]interface{}
 	if err := json.Unmarshal(response, &resp); err != nil {
-		return fmt.Errorf("failed to parse CDP response: %w", err)
+		return nil, fmt.Errorf("failed to parse CDP response: %w", err)
 	}
 
 	// Check for error in response
 	if err, ok := resp["error"].(map[string]interface{}); ok {
-		return fmt.Errorf("CDP error: %v", err)
+		return nil, fmt.Errorf("CDP error: %v", err)
 	}
 
 	c.logger.Debug("CDP response received",
 		zap.String("method", method),
 		zap.String("response", string(response)))
-	return nil
+	return resp, nil
 }
 
 // Close closes the CDP connection

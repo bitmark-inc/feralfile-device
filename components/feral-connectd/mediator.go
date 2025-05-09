@@ -11,22 +11,25 @@ import (
 )
 
 type Mediator struct {
-	relayer *RelayerClient
-	dbus    *DBusClient
-	cdp     *CDPClient
-	logger  *zap.Logger
+	relayer        *RelayerClient
+	dbus           *DBusClient
+	cdp            *CDPClient
+	commandHandler *CommandHandler
+	logger         *zap.Logger
 }
 
 func NewMediator(
 	relayer *RelayerClient,
 	dbus *DBusClient,
 	cdp *CDPClient,
-	logger *zap.Logger) *Mediator {
+	logger *zap.Logger,
+) *Mediator {
 	return &Mediator{
-		relayer: relayer,
-		dbus:    dbus,
-		cdp:     cdp,
-		logger:  logger,
+		relayer:        relayer,
+		dbus:           dbus,
+		cdp:            cdp,
+		commandHandler: NewCommandHandler(cdp, logger),
+		logger:         logger,
 	}
 }
 
@@ -117,7 +120,7 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, data map[string]int
 			return err
 		}
 	default:
-		// TODO run cdp
+		m.commandHandler.HandleWSMessage(message)
 	}
 
 	return nil
