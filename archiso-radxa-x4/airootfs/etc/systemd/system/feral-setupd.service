@@ -3,12 +3,11 @@ Description=Feral File Setup Service
 After=local-fs.target network.target bluetooth.service
 
 [Service]
-Type=oneshot
+Type=simple
 User=feralfile
 Group=feralfile
 Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
 ExecStart=/usr/bin/feral-setupd
-RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target

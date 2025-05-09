@@ -1,7 +1,7 @@
 [Unit]
 Description=Feral File Connectd
-After=getty@tty1.service chromium-kiosk.service network.target local-fs.target
-Requires=getty@tty1.service chromium-kiosk.service network.target
+After=chromium-kiosk.service network.target local-fs.target
+Requires=chromium-kiosk.service network.target
 
 [Service]
 Type=simple

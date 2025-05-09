@@ -1,7 +1,5 @@
 [Unit]
 Description=Chromium Kiosk Mode
-After=getty@tty1.service
-Requires=getty@tty1.service
 
 [Service]
 Type=simple
