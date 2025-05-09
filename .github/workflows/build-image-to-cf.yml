@@ -94,6 +94,24 @@ jobs:
           cp /tmp/feral-setupd/feral-setupd /build/archiso-radxa-x4/airootfs/usr/bin/
           chmod 755 /build/archiso-radxa-x4/airootfs/usr/bin/feral-setupd
 
+          # Add connectd config
+          API_KEY="${{ secrets.CONNECTD_API_KEY }}"
+          mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.config
+          cat > /build/archiso-radxa-x4/airootfs/home/feralfile/.config/connectd.json << EOF
+          {
+            "relayer" : {
+                "endpoint" : "wss://tv-cast-coordination.autonomy-system.workers.dev",
+                "apiKey" : "$API_KEY",
+                "locationID":"",
+                "topicID":""
+            },
+            "cdp" : {
+                "endpoint" : "http://127.0.0.1:9222"
+            }
+          }
+          EOF
+          chmod 755 /build/archiso-radxa-x4/airootfs/home/feralfile/.config/connectd.json
+
       - name: Setup pacman
         run: |
           curl -o /etc/pacman.d/mirrorlist "https://archlinux.org/mirrorlist/?country=US&protocol=https&ip_version=4&use_mirror_status=on"

@@ -77,11 +77,14 @@ func (c *DBusClient) background() {
 				c.logger.Info("DBusClient stopped")
 				return
 			case sig := <-c.sigChan:
-				if sig != nil {
-					c.logger.Info("Received signal", zap.String("interface", sig.Name))
-					if err := c.handleSignalRecv(sig); err != nil {
-						c.logger.Error("Failed to handle signal", zap.Error(err))
-					}
+				if sig == nil {
+					c.logger.Warn("Received nil signal")
+					continue
+				}
+
+				c.logger.Info("Received signal", zap.String("interface", sig.Name))
+				if err := c.handleSignalRecv(sig); err != nil {
+					c.logger.Error("Failed to handle signal", zap.Error(err))
 				}
 			}
 		}

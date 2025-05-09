@@ -19,7 +19,7 @@ type Config struct {
 }
 
 const (
-	CONFIG_FILE_DIR = "/var/lib/feralfile/connectd.json"
+	CONFIG_FILE_DIR = "/home/feralfile/.config/connectd.json"
 )
 
 // LoadConfig loads the configuration from a JSON file
