@@ -20,4 +20,6 @@ file_permissions=(
   ["/root/.automated_script.sh"]="0:0:755"
   ["/root/install-to-disk.sh"]="0:0:755"
   ["/home/feralfile"]="1000:1000:755"
+  ["/usr/bin/feral-setupd"]="0:0:755"
+  ["/usr/bin/feral-connectd"]="0:0:755"
 )
