@@ -157,6 +157,14 @@ func (r *RelayerClient) background(ctx context.Context) {
 	}()
 }
 
+// Send sends a message to the Relayer server
+func (r *RelayerClient) Send(ctx context.Context, data interface{}) error {
+	r.Lock()
+	defer r.Unlock()
+
+	return r.conn.WriteJSON(data)
+}
+
 // startPingPong sends periodic pings to keep the connection alive
 func (r *RelayerClient) startPing() {
 	r.Lock()

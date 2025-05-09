@@ -13,19 +13,19 @@ import (
 type Mediator struct {
 	relayer *RelayerClient
 	dbus    *DBusClient
-	cdp     *CDPClient
+	cmd     *Command
 	logger  *zap.Logger
 }
 
 func NewMediator(
 	relayer *RelayerClient,
 	dbus *DBusClient,
-	cdp *CDPClient,
+	cmd *Command,
 	logger *zap.Logger) *Mediator {
 	return &Mediator{
 		relayer: relayer,
 		dbus:    dbus,
-		cdp:     cdp,
+		cmd:     cmd,
 		logger:  logger,
 	}
 }
@@ -117,7 +117,35 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, data map[string]int
 			return err
 		}
 	default:
-		// TODO run cdp
+		cmd, ok := message["command"].(string)
+		if !ok {
+			m.logger.Error("Invalid message", zap.Any("data", data))
+			return fmt.Errorf("invalid message")
+		}
+
+		req, ok := message["request"].(map[string]interface{})
+		if !ok {
+			m.logger.Error("Invalid message", zap.Any("data", data))
+			return fmt.Errorf("invalid message")
+		}
+
+		// Execute command
+		result, err := m.cmd.Execute(ctx, Cmd(cmd), req)
+		if err != nil {
+			m.logger.Error("Failed to execute command", zap.Error(err))
+			return err
+		}
+
+		// Send result to relayer
+		err = m.relayer.Send(ctx,
+			map[string]interface{}{
+				"messageID": messageID,
+				"message":   result,
+			})
+		if err != nil {
+			m.logger.Error("Failed to send acknowledgement to relayer", zap.Error(err))
+			return err
+		}
 	}
 
 	return nil

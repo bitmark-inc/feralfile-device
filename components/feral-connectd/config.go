@@ -12,8 +12,10 @@ var config *Config
 
 // Configuration for all components
 type Config struct {
-	CDPConfig     *CDPConfig     `json:"cdp"`
-	RelayerConfig *RelayerConfig `json:"relayer"`
+	CDPConfig     *CDPConfig       `json:"cdp"`
+	RelayerConfig *RelayerConfig   `json:"relayer"`
+	FeralFile     *FeralFileConfig `json:"feralFile"`
+	Indexer       *IndexerConfig   `json:"indexer"`
 }
 
 const (

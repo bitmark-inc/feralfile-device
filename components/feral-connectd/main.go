@@ -73,8 +73,12 @@ func main() {
 	}
 	defer dbusClient.Stop()
 
+	// Initialize DataHandler
+	dataHandler := NewDataHandler(config.FeralFile.Endpoint, config.Indexer.Endpoint, logger)
+	cmd := NewCommand(dataHandler, cdpClient)
+
 	// Initialize Mediator
-	mediator := NewMediator(relayerClient, dbusClient, cdpClient, logger)
+	mediator := NewMediator(relayerClient, dbusClient, cmd, logger)
 	mediator.Start()
 	defer mediator.Stop()
 
