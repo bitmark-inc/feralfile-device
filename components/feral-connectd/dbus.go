@@ -53,8 +53,9 @@ func (c *DBusClient) Start() error {
 	conn.Signal(c.sigChan)
 
 	err = conn.AddMatchSignalContext(c.ctx,
-		dbus.WithMatchPathNamespace(dbus.ObjectPath("/com/feralfile/")),
+		dbus.WithMatchPathNamespace(dbus.ObjectPath("/com/feralfile")),
 	)
+
 	if err != nil {
 		return err
 	}
