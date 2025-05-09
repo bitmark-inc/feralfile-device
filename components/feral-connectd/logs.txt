@@ -1,3 +1,0 @@
-INFO	feral-connectd/cdp.go:99	Connected to Chromium CDP page target	{"url": "ws://127.0.0.1:9222/devtools/page/9B324DF95224C6D627911C2EC991B689"}
-INFO	feral-connectd/watchdog.go:32	Starting watchdog	{"interval": "15s"}
-FATAL	feral-connectd/main.go:80	DBus init failed	{"error": "dbus: couldn't determine address of session bus"}
