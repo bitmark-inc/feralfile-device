@@ -1,7 +1,7 @@
 [Unit]
 Description=Feral File Connectd
-After=local-fs.target network.target
-Wants=network.target
+After=chromium-kiosk.service network.target local-fs.target
+Requires=chromium-kiosk.service network.target
 
 [Service]
 Type=notify
