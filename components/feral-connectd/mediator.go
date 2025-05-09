@@ -11,6 +11,7 @@ import (
 type Mediator struct {
 	relayer *RelayerClient
 	dbus    *DBusClient
+	cdp     *CDPClient
 	cmd     *CommandHandler
 	logger  *zap.Logger
 }
@@ -18,11 +19,13 @@ type Mediator struct {
 func NewMediator(
 	relayer *RelayerClient,
 	dbus *DBusClient,
+	cdp *CDPClient,
 	cmd *CommandHandler,
 	logger *zap.Logger) *Mediator {
 	return &Mediator{
 		relayer: relayer,
 		dbus:    dbus,
+		cdp:     cdp,
 		cmd:     cmd,
 		logger:  logger,
 	}
@@ -60,19 +63,21 @@ func (m *Mediator) handleDBusSignal(
 			return err
 		}
 
-		result, err := m.cmd.Execute(ctx,
-			Command{
-				Command: CMD_NAVIGATE,
-				Arguments: map[string]interface{}{
-					"url": "/opt/feral/ui/player/index.html",
-				},
-			})
+		err = m.cdp.Navigate("/opt/feral/ui/player/index.html")
 		if err != nil {
-			m.logger.Error("Failed to navigate chromium", zap.Error(err))
+			m.logger.Error("Failed to navigate to web app", zap.Error(err))
 			return err
 		}
 
-		m.logger.Info("Navigated to web app", zap.Any("result", result))
+		result, err := m.cmd.Execute(ctx, Command{
+			Command: CMD_CAST_DAILY,
+		})
+		if err != nil {
+			m.logger.Error("Failed to cast daily", zap.Error(err))
+			return err
+		}
+
+		m.logger.Info("Casting daily", zap.Any("result", result))
 	default:
 		return fmt.Errorf("unknown signal: %s", member)
 	}
