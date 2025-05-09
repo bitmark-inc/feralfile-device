@@ -1,0 +1,1 @@
+sudo chown feralfile:feralfile /home/feralfile
