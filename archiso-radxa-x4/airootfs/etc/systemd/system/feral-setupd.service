@@ -1,12 +1,13 @@
 [Unit]
 Description=Feral File Setup Service
-After=network.target
+After=local-fs.target network.target bluetooth.service
 
 [Service]
-Type=simple
+Type=oneshot
+User=feralfile
+Group=feralfile
 ExecStart=/usr/bin/feral-setupd
-Restart=always
-RestartSec=5
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
