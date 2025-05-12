@@ -16,6 +16,7 @@ ExecStart=/usr/bin/cage -- /usr/bin/chromium \
 --disable-infobars \
 --disable-features=TranslateUI \
 --autoplay-policy=no-user-gesture-required \
+--allow-file-access-from-files \
 file:///opt/feral/ui/launcher/index.html?device_id=ffx1&step=qr
 Restart=always
 RestartSec=5

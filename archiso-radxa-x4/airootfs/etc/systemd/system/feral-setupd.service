@@ -1,6 +1,10 @@
 [Unit]
 Description=Feral File Setup Service
-After=local-fs.target network.target bluetooth.service
+After=chromium-kiosk.service bluetooth.service network.target feral-connectd.service
+Requires=chromium-kiosk.service bluetooth.service
+Wants=network.target
+# Add a check for CDP readiness
+ExecStartPre=/bin/sh -c 'while ! curl -s http://localhost:9222/json/version >/dev/null; do sleep 0.5; done'
 
 [Service]
 Type=simple
