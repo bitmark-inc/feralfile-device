@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"go.uber.org/zap"
 )
 
@@ -28,7 +31,26 @@ type State struct {
 	} `json:"relayer"`
 }
 
-func (c *State) RelayerReadyConnecting() bool {
+func (c *State) WaitForRelayerChanReady(ctx context.Context) bool {
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = 5 * time.Second
+	bo.Multiplier = 2
+	bo.MaxElapsedTime = time.Minute
+
+	err := backoff.Retry(func() error {
+		if c.RelayerChanReady() {
+			return nil
+		}
+		return fmt.Errorf("relayer channel is not ready")
+	}, bo)
+
+	return err == nil
+}
+
+func (c *State) RelayerChanReady() bool {
+	c.Lock()
+	defer c.Unlock()
+
 	return c.Relayer.LocationID != "" && c.Relayer.TopicID != ""
 }
 

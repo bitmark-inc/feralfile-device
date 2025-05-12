@@ -53,7 +53,7 @@ func (r *RelayerClient) RetriableConnect(ctx context.Context) error {
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = 5 * time.Second
 	bo.Multiplier = 2
-	bo.MaxElapsedTime = 30 * time.Second
+	bo.MaxElapsedTime = time.Minute
 
 	var err error
 	ops := func() error {
@@ -65,6 +65,10 @@ func (r *RelayerClient) RetriableConnect(ctx context.Context) error {
 	}
 
 	_ = backoff.Retry(ops, bo)
+
+	if err != nil {
+		r.logger.Error("Failed to connect to Relayer after retrying within 1 minute", zap.Error(err))
+	}
 	return err
 }
 
@@ -88,7 +92,7 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 	}
 
 	state := GetState()
-	if state.RelayerReadyConnecting() {
+	if state.RelayerChanReady() {
 		connectURL += fmt.Sprintf("&locationID=%s&topicID=%s", state.Relayer.LocationID, state.Relayer.TopicID)
 	}
 

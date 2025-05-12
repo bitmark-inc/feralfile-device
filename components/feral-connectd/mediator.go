@@ -45,43 +45,43 @@ func (m *Mediator) handleDBusSignal(
 	ctx context.Context,
 	iface string,
 	path dbus.ObjectPath,
-	member string,
-	body []interface{}) error {
+	member DBusMember,
+	body []interface{}) ([]interface{}, error) {
 	m.logger.Info(
 		"Received DBus signal",
 		zap.String("interface", iface),
 		zap.String("path", string(path)),
-		zap.String("member", member),
+		zap.String("member", member.String()),
 		zap.Any("body", body),
 	)
 
 	switch member {
 	case EVENT_SETUPD_WIFI_CONNECTED:
+		// Connect to the relayer
 		err := m.relayer.RetriableConnect(ctx)
 		if err != nil {
 			m.logger.Error("Failed to connect to relayer", zap.Error(err))
-			return err
+			return nil, err
 		}
 
-		err = m.cdp.Navigate(PLAYER_FILE)
-		if err != nil {
-			m.logger.Error("Failed to navigate to web app", zap.Error(err))
-			return err
+		// Wait for the relayer to be connected
+		if !GetState().WaitForRelayerChanReady(ctx) {
+			m.logger.Error("Failed to connect to relayer")
+			return nil, fmt.Errorf("failed to connect to relayer")
 		}
 
-		_, err = m.cmd.Execute(ctx, Command{
-			Command: CMD_CAST_DAILY,
-		})
-		if err != nil {
-			m.logger.Error("Failed to cast daily", zap.Error(err))
-			return err
-		}
+		// Send the locationID and topicID to the setupd
+		relayer := GetState().Relayer
+		return []interface{}{
+			relayer.LocationID,
+			relayer.TopicID,
+		}, nil
 
 	default:
-		return fmt.Errorf("unknown signal: %s", member)
+		m.logger.Warn("Unknown signal", zap.String("member", member.String()))
 	}
 
-	return nil
+	return nil, nil
 }
 
 func (m *Mediator) handleRelayerMessage(ctx context.Context, data map[string]interface{}) error {
@@ -111,19 +111,6 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, data map[string]int
 		err := state.Save()
 		if err != nil {
 			m.logger.Error("Failed to persist state", zap.Error(err))
-			return err
-		}
-
-		// Publish locationID and topicID
-		err = m.dbus.Send(
-			DBUS_INTERFACE,
-			DBUS_PATH,
-			EVENT_CONNECTD_RELAYER_CONFIGURED,
-			locationID,
-			topicID,
-		)
-		if err != nil {
-			m.logger.Error("Failed to send DBus signal", zap.Error(err))
 			return err
 		}
 	default:
