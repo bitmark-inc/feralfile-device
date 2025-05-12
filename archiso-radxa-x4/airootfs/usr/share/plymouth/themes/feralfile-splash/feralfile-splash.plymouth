@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=FeralFile Splash
+Description=Splash screen with logo for FeralFile Device
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/feralfile-splash
+ScriptFile=/usr/share/plymouth/themes/feralfile-splash/feralfile-splash.script 

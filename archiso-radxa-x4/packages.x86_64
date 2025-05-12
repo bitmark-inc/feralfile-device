@@ -57,3 +57,6 @@ pulseaudio-bluetooth
 # Debug / Monitoring
 intel-gpu-tools
 lm_sensors
+
+# Boot splash screen
+plymouth

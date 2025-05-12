@@ -1,0 +1,42 @@
+# Set background color to black
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+# Get screen dimensions
+screen_width = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+# Load the splash image
+splash_image = Image("splash.png");
+splash_width = splash_image.GetWidth();
+splash_height = splash_image.GetHeight();
+
+# Center the image on screen
+splash_sprite = Sprite(splash_image);
+splash_sprite.SetPosition(screen_width / 2 - splash_width / 2, screen_height / 2 - splash_height / 2, 1);
+
+# Initially transparent
+splash_sprite.SetOpacity(0);
+
+# Fade in animation duration in seconds
+fade_duration = 1.5;
+start_time = 0;
+
+fun refresh_callback() {
+    if (Plymouth.GetMode() != "boot") return;
+    
+    if (start_time == 0) {
+        start_time = Time();
+    }
+    
+    time_elapsed = Time() - start_time;
+    
+    if (time_elapsed < fade_duration) {
+        opacity = time_elapsed / fade_duration;
+        splash_sprite.SetOpacity(opacity);
+    } else {
+        splash_sprite.SetOpacity(1);
+    }
+}
+
+Plymouth.SetRefreshFunction(refresh_callback); 
