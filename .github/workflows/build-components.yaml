@@ -9,7 +9,7 @@ on:
         type: string
       version:
         description: 'Package version'
-        required: false
+        required: true
         type: string
       description:
         description: 'Package description'
@@ -46,8 +46,8 @@ on:
           - feral-watchdog
           - launcher-ui
       version:
-        description: 'Package version (leave empty to use commit hash)'
-        required: false
+        description: 'Package version'
+        required: true
         type: string
       build_pacman:
         description: 'Whether to build a pacman package or just the binary'
@@ -98,11 +98,7 @@ jobs:
       - name: Set Version
         id: set-version
         run: |
-          if [ -z "${{ inputs.version }}" ]; then
-            VERSION="${{ github.sha }}"
-          else
-            VERSION="${{ inputs.version }}"
-          fi
+          VERSION="${{ inputs.version }}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
