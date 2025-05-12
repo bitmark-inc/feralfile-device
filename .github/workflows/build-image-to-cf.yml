@@ -96,13 +96,12 @@ jobs:
           chmod 755 /build/archiso-radxa-x4/airootfs/usr/bin/feral-setupd
 
           # Add connectd config
-          API_KEY="${{ secrets.CONNECTD_API_KEY }}"
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.config
           cat > /build/archiso-radxa-x4/airootfs/home/feralfile/.config/connectd.json << EOF
           {
             "relayer": {
-                "endpoint": "wss://tv-cast-coordination.bitmark-development.workers.dev",
-                "apiKey": "$API_KEY"
+                "endpoint": "${{ vars.RELAYER_ENDPOINT }}",
+                "apiKey": "${{ secrets.RELAYER_API_KEY }}"
             },
             "cdp": {
                 "endpoint": "http://127.0.0.1:9222"
