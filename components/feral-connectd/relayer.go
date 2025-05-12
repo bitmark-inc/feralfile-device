@@ -15,16 +15,49 @@ import (
 var errRelayerAlreadyConnected = fmt.Errorf("relayer is already connected")
 
 const (
-	RELAYER_PING_INTERVAL = 15 * time.Second
-	RELAYER_PONG_WAIT     = 10 * time.Second
+	RELAYER_MESSAGE_ID_SYSTEM = "system"
+	RELAYER_PING_INTERVAL     = 15 * time.Second
+	RELAYER_PONG_WAIT         = 10 * time.Second
 )
+
+type RelayerCmd string
+
+const (
+	RELAYER_CMD_CHECK_STATUS         RelayerCmd = "checkStatus"
+	RELAYER_CMD_CONNECT              RelayerCmd = "connect"
+	RELAYER_CMD_SHOW_PAIRING_QR_CODE RelayerCmd = "showPairingQRCode"
+)
+
+func (c RelayerCmd) CDPCmd() bool {
+	return c != RELAYER_CMD_CHECK_STATUS && c != RELAYER_CMD_CONNECT && c != RELAYER_CMD_SHOW_PAIRING_QR_CODE
+}
+
+type RelayerPayload struct {
+	MessageID string `json:"messageID"`
+	Message   struct {
+		Command RelayerCmd             `json:"command"`
+		Args    map[string]interface{} `json:"request"`
+	} `json:"message"`
+}
+
+func (p RelayerPayload) JSON() ([]byte, error) {
+	return json.Marshal(p)
+}
+
+func (p RelayerPayload) Arguments(key string) (interface{}, error) {
+	v, ok := p.Message.Args[key]
+	if !ok {
+		return nil, fmt.Errorf("key %s not found", key)
+	}
+	return v, nil
+}
 
 type RelayerConfig struct {
 	Endpoint string `json:"endpoint"`
 	APIKey   string `json:"apiKey"`
 }
 
-type RelayerHandler func(ctx context.Context, data map[string]interface{}) error
+type RelayerHandler func(ctx context.Context, payload RelayerPayload) error
 
 // RelayerClient handles Relayer connection to relay server
 type RelayerClient struct {
@@ -55,8 +88,10 @@ func (r *RelayerClient) RetriableConnect(ctx context.Context) error {
 	bo.Multiplier = 2
 	bo.MaxElapsedTime = time.Minute
 
+	attempts := 0
 	var err error
 	ops := func() error {
+		r.logger.Info("Connecting to Relayer", zap.String("endpoint", r.config.Endpoint), zap.Int("attempts", attempts))
 		err = r.Connect(ctx)
 		if err == errRelayerAlreadyConnected {
 			return nil
@@ -67,7 +102,7 @@ func (r *RelayerClient) RetriableConnect(ctx context.Context) error {
 	_ = backoff.Retry(ops, bo)
 
 	if err != nil {
-		r.logger.Error("Failed to connect to Relayer after retrying within 1 minute", zap.Error(err))
+		r.logger.Error("Failed to connect to Relayer after retrying %d attempts within 1 minute", zap.Int("attempts", attempts), zap.Error(err))
 	}
 	return err
 }
@@ -173,16 +208,16 @@ func (r *RelayerClient) background(ctx context.Context) {
 					continue
 				}
 
-				// Check JSON
-				var data map[string]interface{}
-				if err := json.Unmarshal(msg, &data); err != nil {
+				// Unmarshal payload
+				var payload RelayerPayload
+				if err := json.Unmarshal(msg, &payload); err != nil {
 					r.logger.Error("Invalid JSON received", zap.ByteString("message", msg))
 					continue
 				}
 
-				// Forward message to handlers
+				// Forward payload to handlers
 				for _, handler := range r.handlers {
-					if err := handler(ctx, data); err != nil {
+					if err := handler(ctx, payload); err != nil {
 						r.logger.Error("Failed to handle message", zap.Error(err))
 					}
 				}

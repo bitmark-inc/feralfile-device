@@ -21,10 +21,8 @@ var (
 // Configuration for all components
 type Config struct {
 	sync.Mutex
-	CDPConfig     *CDPConfig       `json:"cdp"`
-	RelayerConfig *RelayerConfig   `json:"relayer"`
-	FeralFile     *FeralFileConfig `json:"feralFile"`
-	Indexer       *IndexerConfig   `json:"indexer"`
+	CDPConfig     *CDPConfig     `json:"cdp"`
+	RelayerConfig *RelayerConfig `json:"relayer"`
 }
 
 // LoadConfig loads the configuration from a JSON file
@@ -90,8 +88,6 @@ func GetConfig() *Config {
 		config = &Config{
 			CDPConfig:     &CDPConfig{},
 			RelayerConfig: &RelayerConfig{},
-			FeralFile:     &FeralFileConfig{},
-			Indexer:       &IndexerConfig{},
 		}
 	}
 	return config

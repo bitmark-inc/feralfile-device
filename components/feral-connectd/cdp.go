@@ -14,7 +14,6 @@ import (
 
 // CDP Methods
 const (
-	CDP_METHOD_NAVIGATE = "Page.navigate"
 	CDP_METHOD_EVALUATE = "Runtime.evaluate"
 )
 
@@ -106,13 +105,6 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 	}()
 
 	return nil
-}
-
-func (c *CDPClient) Navigate(url string) error {
-	c.logger.Info("Navigating to", zap.String("url", url))
-	return c.SendCDPRequest(CDP_METHOD_NAVIGATE, map[string]interface{}{
-		"url": url,
-	})
 }
 
 // SendCDPRequest sends a raw CDP JSON-RPC message and waits for response

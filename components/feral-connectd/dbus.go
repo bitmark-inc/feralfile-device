@@ -28,12 +28,20 @@ func (e DBusMember) ACK() DBusMember {
 	return DBusMember(fmt.Sprintf("%s_ACK", e))
 }
 
+type DBusPayload struct {
+	Interface string
+	Path      dbus.ObjectPath
+	Member    DBusMember
+	Body      []interface{}
+}
+
+func (p DBusPayload) Name() string {
+	return fmt.Sprintf("%s.%s", p.Interface, p.Member)
+}
+
 type BusSignalHandler func(
 	ctx context.Context,
-	iface string,
-	path dbus.ObjectPath,
-	member DBusMember,
-	body []interface{}) ([]interface{}, error)
+	payload DBusPayload) ([]interface{}, error)
 
 type DBusClient struct {
 	sync.Mutex
@@ -132,42 +140,49 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 	}
 	iface := sig.Name[:i]
 	member := DBusMember(sig.Name[i+1:])
+	payload := DBusPayload{
+		Interface: iface,
+		Path:      sig.Path,
+		Member:    member,
+		Body:      sig.Body,
+	}
 
 	for _, handler := range c.busSignalHandlers {
-		result, err := handler(c.ctx, iface, sig.Path, member, sig.Body)
+		p := payload
+
+		// Handle signal
+		result, err := handler(c.ctx, p)
 		if err != nil {
-			c.logger.Warn("Failed to handle signal", zap.String("interface", iface), zap.String("member", member.String()), zap.Error(err))
+			c.logger.Warn("Failed to handle signal", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
 			continue
 		}
-		if result != nil {
-			err = c.ACK(iface, sig.Path, member, result...)
-			if err != nil {
-				c.logger.Warn("Failed to send ACK", zap.String("interface", iface), zap.String("member", member.String()), zap.Error(err))
-			}
+
+		// Send ACK with handler result
+		p.Body = result
+		err = c.ACK(p)
+		if err != nil {
+			c.logger.Warn("Failed to send ACK", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
 		}
 	}
 
 	return nil
 }
 
-func (c *DBusClient) ACK(
-	iface string,
-	path dbus.ObjectPath,
-	member DBusMember,
-	values ...interface{}) error {
-	return c.Send(iface, path, member.ACK(), values...)
+func (c *DBusClient) ACK(payload DBusPayload) error {
+	return c.Send(DBusPayload{
+		Interface: payload.Interface,
+		Path:      payload.Path,
+		Member:    payload.Member.ACK(),
+		Body:      payload.Body,
+	})
 }
 
-func (c *DBusClient) Send(
-	iface string,
-	path dbus.ObjectPath,
-	member DBusMember,
-	values ...interface{}) error {
+func (c *DBusClient) Send(payload DBusPayload) error {
 	c.Lock()
 	defer c.Unlock()
 
-	c.logger.Info("Sending signal", zap.String("interface", iface), zap.String("member", member.String()), zap.Any("values", values))
-	return c.conn.Emit(path, iface+"."+member.String(), values...)
+	c.logger.Info("Sending signal", zap.String("interface", payload.Interface), zap.String("path", string(payload.Path)), zap.String("member", payload.Member.String()), zap.Any("body", payload.Body))
+	return c.conn.Emit(payload.Path, payload.Name(), payload.Body...)
 }
 
 func (c *DBusClient) Stop() error {

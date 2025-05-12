@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"reflect"
 
-	"github.com/godbus/dbus/v5"
 	"go.uber.org/zap"
 )
 
@@ -43,19 +43,16 @@ func (m *Mediator) Stop() {
 
 func (m *Mediator) handleDBusSignal(
 	ctx context.Context,
-	iface string,
-	path dbus.ObjectPath,
-	member DBusMember,
-	body []interface{}) ([]interface{}, error) {
+	payload DBusPayload) ([]interface{}, error) {
 	m.logger.Info(
 		"Received DBus signal",
-		zap.String("interface", iface),
-		zap.String("path", string(path)),
-		zap.String("member", member.String()),
-		zap.Any("body", body),
+		zap.String("interface", payload.Interface),
+		zap.String("path", string(payload.Path)),
+		zap.String("member", payload.Member.String()),
+		zap.Any("body", payload.Body),
 	)
 
-	switch member {
+	switch payload.Member {
 	case EVENT_SETUPD_WIFI_CONNECTED:
 		// Connect to the relayer
 		err := m.relayer.RetriableConnect(ctx)
@@ -66,8 +63,8 @@ func (m *Mediator) handleDBusSignal(
 
 		// Wait for the relayer to be connected
 		if !GetState().WaitForRelayerChanReady(ctx) {
-			m.logger.Error("Failed to connect to relayer")
-			return nil, fmt.Errorf("failed to connect to relayer")
+			m.logger.Error("Relayer channel is not ready")
+			return nil, fmt.Errorf("relayer channel is not ready")
 		}
 
 		// Send the locationID and topicID to the setupd
@@ -78,74 +75,67 @@ func (m *Mediator) handleDBusSignal(
 		}, nil
 
 	default:
-		m.logger.Warn("Unknown signal", zap.String("member", member.String()))
+		m.logger.Warn("Unknown signal", zap.String("member", payload.Member.String()))
 	}
 
 	return nil, nil
 }
 
-func (m *Mediator) handleRelayerMessage(ctx context.Context, data map[string]interface{}) error {
-	m.logger.Info("Received relayer message", zap.Any("data", data))
+func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayload) error {
+	m.logger.Info("Received relayer message", zap.Any("payload", payload))
 
-	messageID, _ := data["messageID"].(string)
-	message, ok := data["message"].(map[string]interface{})
-	if !ok {
-		m.logger.Error("Invalid message", zap.Any("data", data))
-		return fmt.Errorf("invalid message")
-	}
-	switch messageID {
-	case "system":
+	switch payload.MessageID {
+	case RELAYER_MESSAGE_ID_SYSTEM:
 		// Parse locationID and topicID
-		locationID, _ := message["locationID"].(string)
-		topicID, _ := message["topicID"].(string)
-		if locationID == "" || topicID == "" {
-			m.logger.Error("Invalid message", zap.Any("data", data))
-			return fmt.Errorf("invalid message")
+		locationID, err := payload.Arguments("locationID")
+		if err != nil {
+			m.logger.Error("Invalid locationID", zap.Error(err))
+			return err
+		}
+		topicID, err := payload.Arguments("topicID")
+		if err != nil {
+			m.logger.Error("Invalid topicID", zap.Error(err))
+			return err
 		}
 
-		state := GetState()
-		state.Relayer.LocationID = locationID
-		state.Relayer.TopicID = topicID
+		if reflect.TypeOf(locationID).Kind() != reflect.String || reflect.TypeOf(topicID).Kind() != reflect.String {
+			m.logger.Error("Payload doesn't contain locationID or topicID", zap.Any("payload", payload))
+			return fmt.Errorf("payload doesn't contain locationID or topicID")
+		}
 
 		// Save state
-		err := state.Save()
+		state := GetState()
+		state.Relayer.LocationID = locationID.(string)
+		state.Relayer.TopicID = topicID.(string)
+		err = state.Save()
 		if err != nil {
 			m.logger.Error("Failed to persist state", zap.Error(err))
 			return err
 		}
 	default:
-		cmd, ok := message["command"].(string)
-		if !ok {
-			m.logger.Error("Invalid message", zap.Any("data", data))
-			return fmt.Errorf("invalid message")
-		}
+		cmd := payload.Message.Command
+		if cmd.CDPCmd() {
+			p, err := payload.JSON()
+			if err != nil {
+				m.logger.Error("Failed to marshal payload", zap.Error(err))
+				return err
+			}
 
-		req, ok := message["request"].(map[string]interface{})
-		if !ok {
-			m.logger.Error("Invalid message", zap.Any("data", data))
-			return fmt.Errorf("invalid message")
-		}
-
-		// Execute command
-		result, err := m.cmd.Execute(ctx,
-			Command{
-				Command:   Cmd(cmd),
-				Arguments: req,
+			return m.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
+				"expression": fmt.Sprintf("window.handleCDPRequest(%s)", string(p)),
 			})
-		if err != nil {
-			m.logger.Error("Failed to execute command", zap.Error(err))
-			return err
-		}
+		} else {
+			result, err := m.cmd.Execute(ctx,
+				Command{
+					Command:   cmd,
+					Arguments: payload.Message.Args,
+				})
+			if err != nil {
+				m.logger.Error("Failed to execute command", zap.Error(err))
+				return err
+			}
 
-		// Send result to relayer
-		err = m.relayer.Send(ctx,
-			map[string]interface{}{
-				"messageID": messageID,
-				"message":   result,
-			})
-		if err != nil {
-			m.logger.Error("Failed to send acknowledgement to relayer", zap.Error(err))
-			return err
+			return m.relayer.Send(ctx, result)
 		}
 	}
 
