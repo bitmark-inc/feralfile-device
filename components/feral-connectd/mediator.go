@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"go.uber.org/zap"
 )
@@ -86,34 +85,29 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayl
 
 	switch payload.MessageID {
 	case RELAYER_MESSAGE_ID_SYSTEM:
-		// Parse locationID and topicID
-		locationID, err := payload.Arguments("locationID")
-		if err != nil {
-			m.logger.Error("Invalid locationID", zap.Error(err))
-			return err
-		}
-		topicID, err := payload.Arguments("topicID")
-		if err != nil {
-			m.logger.Error("Invalid topicID", zap.Error(err))
-			return err
-		}
-
-		if reflect.TypeOf(locationID).Kind() != reflect.String || reflect.TypeOf(topicID).Kind() != reflect.String {
+		locationID := payload.Message.LocationID
+		topicID := payload.Message.TopicID
+		if locationID == nil || topicID == nil {
 			m.logger.Error("Payload doesn't contain locationID or topicID", zap.Any("payload", payload))
 			return fmt.Errorf("payload doesn't contain locationID or topicID")
 		}
 
 		// Save state
 		state := GetState()
-		state.Relayer.LocationID = locationID.(string)
-		state.Relayer.TopicID = topicID.(string)
-		err = state.Save()
+		state.Relayer.LocationID = *locationID
+		state.Relayer.TopicID = *topicID
+		err := state.Save()
 		if err != nil {
 			m.logger.Error("Failed to persist state", zap.Error(err))
 			return err
 		}
 	default:
 		cmd := payload.Message.Command
+		if cmd == nil {
+			m.logger.Error("Payload doesn't contain command", zap.Any("payload", payload))
+			return fmt.Errorf("payload doesn't contain command")
+		}
+
 		if cmd.CDPCmd() {
 			p, err := payload.JSON()
 			if err != nil {
@@ -127,7 +121,7 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayl
 		} else {
 			result, err := m.cmd.Execute(ctx,
 				Command{
-					Command:   cmd,
+					Command:   *cmd,
 					Arguments: payload.Message.Args,
 				})
 			if err != nil {

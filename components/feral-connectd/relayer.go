@@ -35,8 +35,10 @@ func (c RelayerCmd) CDPCmd() bool {
 type RelayerPayload struct {
 	MessageID string `json:"messageID"`
 	Message   struct {
-		Command RelayerCmd             `json:"command"`
-		Args    map[string]interface{} `json:"request"`
+		Command    *RelayerCmd            `json:"command"`
+		Args       map[string]interface{} `json:"request"`
+		LocationID *string                `json:"locationID"`
+		TopicID    *string                `json:"topicID"`
 	} `json:"message"`
 }
 
