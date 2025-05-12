@@ -3,6 +3,13 @@ name: Update Pacman Repo DB
 on:
   workflow_dispatch:
   workflow_call:
+    secrets:
+        CLOUDFLARE_ACCOUNT_ID:
+          required: true
+        CLOUDFLARE_ACCESS_KEY_ID:
+          required: true
+        CLOUDFLARE_SECRET_ACCESS_KEY:
+          required: true
 
 jobs:
   update-repo:

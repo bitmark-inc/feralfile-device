@@ -20,6 +20,10 @@ jobs:
   build-feral-connectd:
     name: Build Feral Connectd
     uses: ./.github/workflows/build-components.yaml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
     with:
       component: feral-connectd
       version: ${{ github.event.inputs.version }}
@@ -30,6 +34,10 @@ jobs:
   build-feral-setupd:
     name: Build Feral Setupd
     uses: ./.github/workflows/build-components.yaml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
     with:
       component: feral-setupd
       version: ${{ github.event.inputs.version }}
@@ -41,6 +49,10 @@ jobs:
     name: Build Feralfile pacman repo
     needs: [build-feral-connectd, build-feral-setupd]
     uses: ./.github/workflows/pacman-repo.yaml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
 
   build-image:
     name: Generate Arch Linux Image for Radxa X4

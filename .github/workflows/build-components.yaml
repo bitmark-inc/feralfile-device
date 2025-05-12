@@ -26,6 +26,13 @@ on:
         required: false
         type: boolean
         default: false
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+      CLOUDFLARE_ACCESS_KEY_ID:
+        required: true
+      CLOUDFLARE_SECRET_ACCESS_KEY:
+        required: true
   workflow_dispatch:
     inputs:
       component:
