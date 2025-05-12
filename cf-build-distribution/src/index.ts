@@ -168,8 +168,8 @@ export default {
       return new Response('Invalid APT repository path structure', { status: 400 });
     }
 
-    if (url.pathname.startsWith('/archlinux')) {
-      const path = url.pathname.replace('/archlinux', '');
+    if (url.pathname.startsWith('/archlinux/')) {
+      const path = url.pathname.replace('/archlinux/', '');
       const key = path; // keep original path in R2
 
       const object = await env.BUCKET.get(key);
