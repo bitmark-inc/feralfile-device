@@ -37,10 +37,15 @@ jobs:
       maintainer: 'Feral File'
       build_pacman: false
 
+  build-feralfile-pacman-repo:
+    name: Build Feralfile pacman repo
+    needs: [build-feral-connectd, build-feral-setupd]
+    uses: ./.github/workflows/pacman-repo.yaml
+
   build-image:
     name: Generate Arch Linux Image for Radxa X4
     runs-on: ubuntu-latest
-    needs: [build-feral-connectd, build-feral-setupd]
+    needs: [build-feral-connectd, build-feral-setupd, build-feralfile-pacman-repo]
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
 
     container:
@@ -73,6 +78,36 @@ jobs:
         run: |
           mkdir -p /build
           cp -r archiso-radxa-x4 /build/
+
+      - name: Inject pacman.conf
+        run: |
+          cat > /build/archiso-radxa-x4/airootfs/etc/pacman.conf << EOF
+          [options]
+          HoldPkg     = pacman glibc
+          Architecture = auto
+          Color
+          CheckSpace
+          ParallelDownloads = 5
+          SigLevel    = Required DatabaseOptional
+          LocalFileSigLevel = Optional
+          ILoveCandy
+
+          [core]
+          Include = /etc/pacman.d/mirrorlist
+
+          [extra]
+          Include = /etc/pacman.d/mirrorlist
+
+          [community]
+          Include = /etc/pacman.d/mirrorlist
+
+          [multilib]
+          Include = /etc/pacman.d/mirrorlist
+
+          [feralfile]
+          SigLevel = Optional TrustAll
+          Server = https://${{ secrets.DISTRIBUTION_AUTH_USER }}:${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}@feralfile-device-distribution.bitmark-development.workers.dev/archlinux/${{ github.ref_name }}/os/\$arch
+          EOF
 
       - name: Copy UI files
         run: |
