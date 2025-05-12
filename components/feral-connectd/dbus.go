@@ -25,7 +25,7 @@ func (e DBusMember) String() string {
 }
 
 func (e DBusMember) ACK() DBusMember {
-	return DBusMember(fmt.Sprintf("%s_ACK", e))
+	return DBusMember(fmt.Sprintf("%s_ack", e))
 }
 
 type DBusPayload struct {
