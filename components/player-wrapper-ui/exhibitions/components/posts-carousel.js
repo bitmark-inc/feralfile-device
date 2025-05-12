@@ -1,17 +1,8 @@
-import { posts } from '../data.js';
+import { exhibitionDetail } from '../data.js';
+import { PostType, getFormattedPosts } from '../post.service.js';
 
-const PostType = {
-  CuratorNote:   "Curator's note",
-  ArtistNote:    "Artist's note",
-  CloseUp:       "close-up",
-  Event:         "event",
-  News:          "news",
-  Schedule:      "schedule",
-  WhitePaper:    "white-paper",
-  J043Custom:    "jg043-custom",
-  Foreword:      "foreword"
-};
 const screenRatio = window.innerWidth / window.innerHeight;
+const youtubeFailedThumbnailHeight = 90;
 
 function formatDateTime(iso){
   const d = new Date(iso);
@@ -33,6 +24,7 @@ function formatDateTime(iso){
 
 function buildSlides() {
   const wrapper = document.getElementById('carousel-wrapper');
+  const posts = getFormattedPosts(exhibitionDetail);
 
   posts.forEach(item => {
     if (item.dateTime && !item.date) {
@@ -93,7 +85,7 @@ function renderPostsCard(item, cardElement) {
     cardElement.appendChild(makeP('type', 'Close up', 22));
     if (item.thumbUrls && item.thumbUrls.length) {
       const thumbDiv = document.createElement('div');
-      thumbDiv.className = `thumbnail ${window.viewMode === ViewMode.landscape ? 'landscapeThumbnail' : 'portraitThumbnail'}`;
+      thumbDiv.className = `thumbnail ${window.viewMode == 'landscape' ? 'landscapeThumbnail' : 'portraitThumbnail'}`;
       thumbDiv.style.marginTop = `${45 * screenRatio}px`;
       item.thumbUrls.forEach(url => {
         const img = document.createElement('img');
@@ -120,12 +112,12 @@ function renderPostsCard(item, cardElement) {
       const thumbDiv = document.createElement('div');
       thumbDiv.className = 'thumbnail';
       thumbDiv.style.marginTop = `${45 * screenRatio}px`;
-      item.thumbUrls.forEach(url => {
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = 'thumbnail';
-        thumbDiv.appendChild(img);
-      });
+      const img = document.createElement('img');
+      img.src = item.thumbUrls[0]; // the default thumbnail index is 0
+      img.alt = 'thumbnail';
+      img.addEventListener('load', () => onPostThumbnailLoad(item.thumbUrls, 0, img));
+
+      thumbDiv.appendChild(img);
       cardElement.appendChild(thumbDiv);
     }
     // title
@@ -146,6 +138,17 @@ function renderPostsCard(item, cardElement) {
   }
 
   return cardElement;
+}
+
+function onPostThumbnailLoad(urls, currentIndex, imgElement) {
+  if (imgElement.naturalHeight <= youtubeFailedThumbnailHeight) {
+    if (currentIndex < urls.length - 1) {
+      const nextIndex = currentIndex + 1;
+      imgElement.src = urls[nextIndex];
+    } else {
+      imgElement.src = undefined; // No valid image found
+    }
+  }
 }
 
 function initCarousel() {

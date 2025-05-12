@@ -33,6 +33,7 @@
 
     // Detect orientation by checking the width and height of the window
     const isLandscape = window.innerWidth > window.innerHeight;
+    window.viewMode = isLandscape ? 'landscape' : 'portrait';
 
     if (isLandscape) {
       stage.classList.add('landscape');

@@ -125,12 +125,10 @@ html,body{margin:0;height:100%;background:#000;color:#fff;font-family:sans-serif
   width: 100%;
   max-width: none;
 }
-.type { font-size:1.2rem; opacity:0.8; text-transform:uppercase }
+.type { font-size:1.2rem; opacity:0.8; }
 .postTitle { font-size:1.5rem; margin:.5rem 0 }
 .content { font-size:1rem; margin-top:.5rem }
-.thumbnail { display:flex; gap:.5rem; overflow-x:auto; margin-top:.5rem }
-.thumbnail img { height:80px; border-radius:4px }
-
-@media (max-width: 768px) {
-
-}
+.thumbnail { width: 100%; height: 100%; position: relative; }
+.thumbnail img { width: 100%; height: 100%; max-height: 45vh; object-fit: cover; }
+.landscapeThumbnail img { max-height: 45vh; }
+.portraitThumbnail img { max-height: 80vh; }
