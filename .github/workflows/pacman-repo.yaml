@@ -2,6 +2,7 @@ name: Update Pacman Repo DB
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   update-repo:
