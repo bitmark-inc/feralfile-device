@@ -46,8 +46,6 @@ jobs:
         working-directory: repo/x86_64
         run: |
           repo-add feralfile.db.tar.gz *.pkg.tar.zst
-          ln -sf feralfile.db.tar.gz feralfile.db
-          ln -sf feralfile.files.tar.gz feralfile.files
 
       - name: Upload Repo Database
         working-directory: repo/x86_64
