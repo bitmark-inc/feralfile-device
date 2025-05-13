@@ -1,0 +1,11 @@
+[Unit]
+Description=FeralFile Updater - %i Run
+
+[Timer]
+Persistent=true
+OnCalendar=%i
+RandomizedDelaySec=7200  # Up to 2 hour random delay
+Unit=feral-updater@%i.service
+
+[Install]
+WantedBy=timers.target

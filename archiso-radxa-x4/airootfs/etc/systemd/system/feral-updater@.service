@@ -1,0 +1,8 @@
+[Unit]
+Description=FeralFile Updater Instance - %i
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/feralfile/scripts/feral-updater.sh
+EOF
