@@ -1,0 +1,89 @@
+name: Update Pacman Repo DB
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+        CLOUDFLARE_ACCOUNT_ID:
+          required: true
+        CLOUDFLARE_ACCESS_KEY_ID:
+          required: true
+        CLOUDFLARE_SECRET_ACCESS_KEY:
+          required: true
+
+jobs:
+  update-repo:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+
+    steps:
+      - name: Install Required Packages
+        run: |
+          pacman -Sy --noconfirm rclone pacman-contrib git
+
+      - name: Configure Rclone
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf << EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+          secret_access_key = ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
+          endpoint = https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          acl = private
+          no_check_bucket = true
+          EOF
+
+      - name: Download All Packages
+        run: |
+          mkdir -p repo/x86_64
+          cd repo/x86_64
+          rclone copy "r2:${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}/${{ github.ref_name }}/os/x86_64/" . --verbose
+
+      - name: Generate Pacman Database - repo feralfile
+        working-directory: repo/x86_64
+        run: |
+          repo-add feralfile.db.tar.gz *.pkg.tar.zst
+
+      - name: Upload Repo Database
+        working-directory: repo/x86_64
+        run: |
+          rclone copy . \
+            "r2:${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}/${{ github.ref_name }}/os/x86_64/" \
+            --include "feralfile.db*" \
+            --include "feralfile.files*" \
+            --s3-upload-cutoff=100M \
+            --s3-chunk-size=100M \
+            --transfers=3 \
+            --verbose \
+            --stats=1s
+
+      - name: Prune Old Packages in R2
+        working-directory: repo/x86_64
+        run: |
+          mkdir -p db-extracted
+          tar -xf feralfile.db.tar.gz -C db-extracted
+          [ -f feralfile.db.tar.gz.old ] && tar -xf feralfile.db.tar.gz.old -C db-extracted
+
+          find db-extracted -mindepth 1 -maxdepth 1 -type d \
+            | sed 's@.*/@@' | sort -u > keep_list.txt
+
+          rclone lsf "r2:${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}/${{ github.ref_name }}/os/x86_64/" \
+            --include "*.pkg.tar.zst" > all_packages.txt
+
+          while read pkgfile; do
+            base=${pkgfile%.pkg.tar.zst}
+            base=${base%-x86_64}
+
+            if ! grep -qx "$base" keep_list.txt; then
+              echo "Deleting $pkgfile"
+              rclone delete "r2:${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}/${{ github.ref_name }}/os/x86_64/$pkgfile"
+            fi
+          done < all_packages.txt
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf repo

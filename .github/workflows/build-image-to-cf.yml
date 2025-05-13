@@ -20,27 +20,42 @@ jobs:
   build-feral-connectd:
     name: Build Feral Connectd
     uses: ./.github/workflows/build-components.yaml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
     with:
       component: feral-connectd
       version: ${{ github.event.inputs.version }}
       description: 'Feral File Connectd Service'
       maintainer: 'Feral File'
-      build_pacman: false
       
   build-feral-setupd:
     name: Build Feral Setupd
     uses: ./.github/workflows/build-components.yaml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
     with:
       component: feral-setupd
       version: ${{ github.event.inputs.version }}
       description: 'Feral File Setup Service'
       maintainer: 'Feral File'
-      build_pacman: false
+
+  build-feralfile-pacman-repo:
+    name: Build Feralfile pacman repo
+    needs: [build-feral-connectd, build-feral-setupd]
+    uses: ./.github/workflows/pacman-repo.yaml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
 
   build-image:
     name: Generate Arch Linux Image for Radxa X4
     runs-on: ubuntu-latest
-    needs: [build-feral-connectd, build-feral-setupd]
+    needs: [build-feral-connectd, build-feral-setupd, build-feralfile-pacman-repo]
     environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
 
     container:
@@ -50,18 +65,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Download feral-connectd Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: feral-connectd
-          path: /tmp/feral-connectd
-
-      - name: Download feral-setupd Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: feral-setupd
-          path: /tmp/feral-setupd
 
       - name: Install Build Dependencies
         run: |
@@ -74,6 +77,24 @@ jobs:
           mkdir -p /build
           cp -r archiso-radxa-x4 /build/
 
+      - name: Inject pacman.conf
+        env:
+          AUTH_USER: ${{ secrets.DISTRIBUTION_AUTH_USER }}
+          AUTH_PASS: ${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}
+        run: |
+          set -e
+
+          ENCODED_USER=$(printf '%s' "$AUTH_USER" | jq -sRr @uri)
+          ENCODED_PASS=$(printf '%s' "$AUTH_PASS" | jq -sRr @uri)
+
+          cat >> /build/archiso-radxa-x4/pacman.conf << EOF
+          [feralfile]
+          SigLevel = Optional TrustAll
+          Server = https://${ENCODED_USER}:${ENCODED_PASS}@feralfile-device-distribution.bitmark-development.workers.dev/archlinux/${{ github.ref_name }}/os/\$arch
+          EOF
+
+          cp /build/archiso-radxa-x4/pacman.conf /build/archiso-radxa-x4/airootfs/etc/pacman.conf
+
       - name: Copy UI files
         run: |
           mkdir -p /build/archiso-radxa-x4/airootfs/opt/feral/ui/launcher
@@ -82,19 +103,8 @@ jobs:
           cp -r components/player-wrapper-ui/* /build/archiso-radxa-x4/airootfs/opt/feral/ui/player/
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.logs
 
-      - name: Add feral-connectd and feral-setupd Binaries and Services
+      - name: Add feral-connectd and feral-setupd Configs and Services
         run: |
-          # Create bin directory if it doesn't exist
-          mkdir -p /build/archiso-radxa-x4/airootfs/usr/bin
-          
-          # Copy the binary
-          cp /tmp/feral-connectd/feral-connectd /build/archiso-radxa-x4/airootfs/usr/bin/
-          chmod 755 /build/archiso-radxa-x4/airootfs/usr/bin/feral-connectd
-
-          # Copy the binary
-          cp /tmp/feral-setupd/feral-setupd /build/archiso-radxa-x4/airootfs/usr/bin/
-          chmod 755 /build/archiso-radxa-x4/airootfs/usr/bin/feral-setupd
-
           # Add connectd config
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.config
           cat > /build/archiso-radxa-x4/airootfs/home/feralfile/.config/connectd.json << EOF
@@ -124,6 +134,10 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syy --debug
+
+          # copy US mirror list to iso
+          mkdir -p /build/archiso-radxa-x4/airootfs/etc/pacman.d
+          cp /etc/pacman.d/mirrorlist /build/archiso-radxa-x4/airootfs/etc/pacman.d/mirrorlist
 
       - name: Build ISO Image
         run: |

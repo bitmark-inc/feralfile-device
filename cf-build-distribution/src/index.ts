@@ -168,6 +168,31 @@ export default {
       return new Response('Invalid APT repository path structure', { status: 400 });
     }
 
+    if (url.pathname.startsWith('/archlinux/')) {
+      const path = url.pathname.replace('/archlinux/', '');
+
+      const key = path
+        .replace(/\.db(?=($|\.))/, '.db.tar.gz')
+        .replace(/\.files(?=($|\.))/, '.files.tar.gz');
+
+      const object = await env.BUCKET.get(key);
+      if (!object) {
+        return new Response(`${key} not found`, { status: 404 });
+      }
+
+      // MIME types
+      let contentType = 'application/octet-stream';
+      if (key.endsWith('.zst')) contentType = 'application/zstd';
+      
+      return new Response(object.body, {
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': object.size.toString(),
+          'Cache-Control': 'public, max-age=3600',
+        },
+      });
+    }
+
     // List files and generate HTML
     const files = await listFiles(env.BUCKET);
     const html = generateHtml(files);
