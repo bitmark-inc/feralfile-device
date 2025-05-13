@@ -17,7 +17,7 @@ var errRelayerAlreadyConnected = fmt.Errorf("relayer is already connected")
 const (
 	RELAYER_MESSAGE_ID_SYSTEM = "system"
 	RELAYER_PING_INTERVAL     = 15 * time.Second
-	RELAYER_PONG_WAIT         = 10 * time.Second
+	RELAYER_PONG_WAIT         = 3 * time.Second
 )
 
 type RelayerCmd string
@@ -35,10 +35,10 @@ func (c RelayerCmd) CDPCmd() bool {
 type RelayerPayload struct {
 	MessageID string `json:"messageID"`
 	Message   struct {
-		Command    *RelayerCmd            `json:"command"`
-		Args       map[string]interface{} `json:"request"`
-		LocationID *string                `json:"locationID"`
-		TopicID    *string                `json:"topicID"`
+		Command    *RelayerCmd            `json:"command,omitempty"`
+		Args       map[string]interface{} `json:"request,omitempty"`
+		LocationID *string                `json:"locationID,omitempty"`
+		TopicID    *string                `json:"topicID,omitempty"`
 	} `json:"message"`
 }
 
@@ -65,11 +65,12 @@ type RelayerHandler func(ctx context.Context, payload RelayerPayload) error
 type RelayerClient struct {
 	sync.Mutex
 
-	config   *RelayerConfig
-	conn     *websocket.Conn
-	done     chan struct{}
-	logger   *zap.Logger
-	handlers []RelayerHandler
+	config       *RelayerConfig
+	conn         *websocket.Conn
+	done         chan struct{}
+	pingDoneChan chan struct{}
+	logger       *zap.Logger
+	handlers     []RelayerHandler
 }
 
 // NewRelayerClient creates a new Relayer client
@@ -147,14 +148,32 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 	r.conn = conn
 	r.Unlock()
 
+	// Set pong handler
 	conn.SetPongHandler(func(_ string) error {
 		r.logger.Info("Received pong")
 		conn.SetReadDeadline(time.Time{})
-		time.Sleep(RELAYER_PING_INTERVAL)
-		r.ping()
 		return nil
 	})
-	r.ping()
+
+	if r.pingDoneChan == nil {
+		r.pingDoneChan = make(chan struct{})
+	}
+
+	// Start pinging
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-r.done:
+				return
+			case <-r.pingDoneChan:
+				return
+			case <-time.After(RELAYER_PING_INTERVAL):
+				r.ping()
+			}
+		}
+	}()
 
 	// Handle background tasks
 	r.background(ctx)
@@ -170,10 +189,16 @@ func (r *RelayerClient) reconnect(ctx context.Context) error {
 	r.logger.Info("Reconnecting to Relayer")
 
 	// Close the connection
-	if err := r.conn.Close(); err != nil {
-		r.Unlock()
-		r.logger.Info("Failed to close connection", zap.Error(err))
-		return err
+	if r.conn != nil {
+		if err := r.conn.Close(); err != nil {
+			r.Unlock()
+			r.logger.Info("Failed to close connection", zap.Error(err))
+			return err
+		}
+	}
+	if r.pingDoneChan != nil {
+		close(r.pingDoneChan)
+		r.pingDoneChan = nil
 	}
 	r.conn = nil
 	r.Unlock()
@@ -295,9 +320,18 @@ func (r *RelayerClient) Close() {
 	select {
 	case <-r.done:
 		// Already closed
-		return
 	default:
 		close(r.done)
+	}
+
+	if r.pingDoneChan != nil {
+		select {
+		case <-r.pingDoneChan:
+			// Already closed
+		default:
+			close(r.pingDoneChan)
+		}
+		r.pingDoneChan = nil
 	}
 
 	if r.conn != nil {
