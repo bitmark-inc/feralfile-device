@@ -62,8 +62,6 @@ lm_sensors
 plymouth
 
 # Plymouth dependencies
-plymouth-git
-plymouth-theme-spinner
 libdrm
 mesa-utils
 xf86-video-intel
