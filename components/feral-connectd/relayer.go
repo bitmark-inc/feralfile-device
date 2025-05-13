@@ -88,13 +88,15 @@ func (r *RelayerClient) RetryableConnect(ctx context.Context) error {
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = 2 * time.Second
 	bo.Multiplier = 2
-	bo.MaxElapsedTime = 32 * time.Second
+	bo.RandomizationFactor = 0.5
+	bo.MaxElapsedTime = 30 * time.Second
 
 	attempts := 0
 	var err error
 	ops := func() error {
+		attempts++
 		r.logger.Info("Connecting to Relayer", zap.String("endpoint", r.config.Endpoint), zap.Int("attempts", attempts))
-		err = r.Connect(ctx)
+		err = r.connect(ctx)
 		if err == errRelayerAlreadyConnected {
 			return nil
 		}
@@ -104,13 +106,13 @@ func (r *RelayerClient) RetryableConnect(ctx context.Context) error {
 	_ = backoff.Retry(ops, bo)
 
 	if err != nil {
-		r.logger.Error("Failed to connect to Relayer after retrying %d attempts within 1 minute", zap.Int("attempts", attempts), zap.Error(err))
+		r.logger.Error("Failed to connect to Relayer after retrying %d attempts", zap.Int("attempts", attempts), zap.Error(err))
 	}
 	return err
 }
 
-// Connect connects to the Relayer server and listens for messages
-func (r *RelayerClient) Connect(ctx context.Context) error {
+// connect connects to the Relayer server and listens for messages
+func (r *RelayerClient) connect(ctx context.Context) error {
 	// Ensure the relayer is not connected
 	r.Lock()
 	if r.conn != nil {
@@ -118,8 +120,6 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 		return errRelayerAlreadyConnected
 	}
 	r.Unlock()
-
-	r.logger.Info("Connecting to Relayer", zap.String("endpoint", r.config.Endpoint))
 
 	// Create URL with locationID and topicID if available
 	connectURL := r.config.Endpoint
@@ -133,8 +133,8 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 		connectURL += fmt.Sprintf("&locationID=%s&topicID=%s", state.Relayer.LocationID, state.Relayer.TopicID)
 	}
 
-	r.logger.Info("Connecting to WebSocket", zap.String("url", connectURL))
 	dialer := websocket.DefaultDialer
+	dialer.HandshakeTimeout = 5 * time.Second
 
 	r.Lock()
 	conn, _, err := dialer.Dial(connectURL, nil)
@@ -147,14 +147,14 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 	r.conn = conn
 	r.Unlock()
 
-	conn.SetPongHandler(func(appData string) error {
+	conn.SetPongHandler(func(_ string) error {
 		r.logger.Info("Received pong")
 		conn.SetReadDeadline(time.Time{})
 		time.Sleep(RELAYER_PING_INTERVAL)
-		r.startPing()
+		r.ping()
 		return nil
 	})
-	r.startPing()
+	r.ping()
 
 	// Handle background tasks
 	r.background(ctx)
@@ -162,6 +162,24 @@ func (r *RelayerClient) Connect(ctx context.Context) error {
 	r.logger.Info("Connected to Relayer")
 
 	return nil
+}
+
+func (r *RelayerClient) reconnect(ctx context.Context) error {
+	r.Lock()
+
+	r.logger.Info("Reconnecting to Relayer")
+
+	// Close the connection
+	if err := r.conn.Close(); err != nil {
+		r.Unlock()
+		r.logger.Info("Failed to close connection", zap.Error(err))
+		return err
+	}
+	r.conn = nil
+	r.Unlock()
+
+	// Retry to connect
+	return r.RetryableConnect(ctx)
 }
 
 func (r *RelayerClient) OnRelayerMessage(f RelayerHandler) {
@@ -206,8 +224,13 @@ func (r *RelayerClient) background(ctx context.Context) {
 				r.Unlock()
 				_, msg, err := conn.ReadMessage()
 				if err != nil {
-					r.logger.Error("Failed to read message", zap.Error(err))
-					continue
+					r.logger.Error("Failed to read message. Will attempt to reconnect shortly", zap.Error(err))
+					err := r.reconnect(ctx)
+					if err != nil {
+						r.logger.Error("Failed to reconnect to Relayer. Terminating", zap.Error(err))
+						panic(err)
+					}
+					return
 				}
 
 				// Unmarshal payload
@@ -245,23 +268,20 @@ func (r *RelayerClient) Send(ctx context.Context, data interface{}) error {
 	return r.conn.WriteJSON(data)
 }
 
-// startPingPong sends periodic pings to keep the connection alive
-func (r *RelayerClient) startPing() {
+// ping sends a ping to keep the connection alive
+func (r *RelayerClient) ping() {
 	r.Lock()
+	defer r.Unlock()
 	if r.conn == nil {
-		r.Unlock()
 		return
 	}
 
 	r.logger.Info("Sending ping")
-
 	if err := r.conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
 		r.logger.Error("Failed to send ping", zap.Error(err))
-		r.Unlock()
 		return
 	}
 
-	r.Unlock()
 	r.conn.SetReadDeadline(time.Now().Add(RELAYER_PONG_WAIT))
 }
 

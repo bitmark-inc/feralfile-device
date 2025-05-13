@@ -204,7 +204,8 @@ func (c *DBusClient) RetryableSend(ctx context.Context, payload DBusPayload) err
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = 2 * time.Second
 	bo.Multiplier = 2
-	bo.MaxElapsedTime = 16 * time.Second
+	bo.RandomizationFactor = 0.5
+	bo.MaxElapsedTime = 30 * time.Second
 
 	// Create a channel to receive ACK
 	ackChan := make(chan struct{})

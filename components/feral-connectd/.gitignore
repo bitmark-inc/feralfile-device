@@ -33,5 +33,6 @@ Thumbs.db
 
 # Config
 connectd.json
+connectd.state
 
 logs.txt
