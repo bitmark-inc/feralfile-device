@@ -13,11 +13,12 @@ import (
 const (
 	WATCHDOG_INTERVAL = 15 * time.Second
 	SHUTDOWN_TIMEOUT  = 1 * time.Second
+	DEBUG             = true
 )
 
 func main() {
 	// Initialize logger with debug enabled for development
-	logger, err := New(true)
+	logger, err := New(DEBUG)
 	if err != nil {
 		panic("Failed to initialize logger: " + err.Error())
 	}
@@ -81,11 +82,13 @@ func main() {
 
 	// Initialize DBus client
 	dbusClient := NewDBusClient(ctx, logger, relayerClient)
-	err = dbusClient.Start()
-	if err != nil {
-		logger.Fatal("DBus init failed", zap.Error(err))
+	if !DEBUG {
+		err = dbusClient.Start()
+		if err != nil {
+			logger.Fatal("DBus init failed", zap.Error(err))
+		}
+		defer dbusClient.Stop()
 	}
-	defer dbusClient.Stop()
 
 	// Initialize command handler
 	cmd := NewCommandHandler(cdpClient, dbusClient, logger)

@@ -152,35 +152,28 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 		zap.String("response", string(response)))
 
 	var resp struct {
-		Method   string `json:"method"`
-		Response struct {
-			ID     int `json:"id"`
+		ID     int `json:"id"`
+		Result struct {
 			Result struct {
-				Result struct {
-					Type        string                 `json:"type"`
-					Subtype     *string                `json:"subtype"`
-					ClassName   *string                `json:"className"`
-					Description *string                `json:"description"`
-					Value       map[string]interface{} `json:"value"`
-				} `json:"result"`
+				Type        string      `json:"type"`
+				Subtype     *string     `json:"subtype"`
+				ClassName   *string     `json:"className"`
+				Description *string     `json:"description"`
+				Value       interface{} `json:"value"`
 			} `json:"result"`
-		} `json:"response"`
+		} `json:"result"`
 	}
 	if err := json.Unmarshal(response, &resp); err != nil {
 		return nil, fmt.Errorf("failed to parse CDP response: %w", err)
 	}
 
-	// Check for method mismatch
-	if resp.Method != method {
-		return nil, fmt.Errorf("CDP method mismatch: %s != %s", resp.Method, method)
-	}
-	result := resp.Response.Result.Result
+	result := resp.Result.Result
 
 	// Check for uncaught errors
 	if result.Type == CDP_TYPE_OBJECT &&
 		result.Subtype != nil &&
 		*result.Subtype == CDP_SUBTYPE_ERROR {
-		return nil, fmt.Errorf("CDP error: %v", result.Description)
+		return nil, fmt.Errorf("CDP error: %v", *result.Description)
 	}
 
 	// Check for response type mismatch

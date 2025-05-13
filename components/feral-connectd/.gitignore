@@ -35,4 +35,5 @@ Thumbs.db
 connectd.json
 connectd.state
 
+connectd.log
 logs.txt

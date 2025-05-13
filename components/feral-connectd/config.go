@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"go.uber.org/zap"
 )
 
 var (
-	CONFIG_FILE = "/home/feralfile/.config/connectd.json"
+	CONFIG_FILE       = "/home/feralfile/.config/connectd.json"
+	DEBUG_CONFIG_FILE = "./connectd.json"
 
 	configLock sync.Mutex
 	config     *Config
@@ -26,10 +26,11 @@ type Config struct {
 
 // LoadConfig loads the configuration from a JSON file
 func LoadConfig(logger *zap.Logger) (*Config, error) {
-	logger.Info("Loading config", zap.String("file", CONFIG_FILE))
+	fp := GetConfigFile()
+	logger.Info("Loading config", zap.String("file", fp))
 
 	// Try to read the file
-	data, err := os.ReadFile(CONFIG_FILE)
+	data, err := os.ReadFile(fp)
 	if os.IsNotExist(err) {
 		return nil, fmt.Errorf("config file not found: %w", err)
 	} else if err != nil {
@@ -49,35 +50,6 @@ func LoadConfig(logger *zap.Logger) (*Config, error) {
 	return config, nil
 }
 
-// PersistConfig persists the configuration to a JSON file
-func (c *Config) Save() error {
-	c.Lock()
-	defer c.Unlock()
-
-	// Ensure directory exists
-	configDir := filepath.Dir(CONFIG_FILE)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	data, err := json.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("failed to marshal configuration: %w", err)
-	}
-
-	// Write to a temporary file first, then rename for atomic updates
-	tempFile := CONFIG_FILE + ".tmp"
-	if err := os.WriteFile(tempFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write configuration: %w", err)
-	}
-
-	if err := os.Rename(tempFile, CONFIG_FILE); err != nil {
-		return fmt.Errorf("failed to finalize configuration file: %w", err)
-	}
-
-	return nil
-}
-
 // GetConfig returns the current configuration safely
 func GetConfig() *Config {
 	configLock.Lock()
@@ -90,4 +62,12 @@ func GetConfig() *Config {
 		}
 	}
 	return config
+}
+
+func GetConfigFile() string {
+	fp := CONFIG_FILE
+	if DEBUG {
+		fp = DEBUG_CONFIG_FILE
+	}
+	return fp
 }

@@ -7,11 +7,18 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+const (
+	LOG_FILE       = "/home/feralfile/.logs/connectd.log"
+	DEBUG_LOG_FILE = "./connectd.log"
+)
+
 func New(debug bool) (*zap.Logger, error) {
 	var config zap.Config
+	fp := LOG_FILE
 	if debug {
 		config = zap.NewDevelopmentConfig()
 		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		fp = DEBUG_LOG_FILE
 	} else {
 		config = zap.NewProductionConfig()
 	}
@@ -22,7 +29,7 @@ func New(debug bool) (*zap.Logger, error) {
 	config.EncoderConfig.CallerKey = "caller"
 	config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
 
-	logFile, err := os.OpenFile("/home/feralfile/.logs/connectd.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile(fp, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}
