@@ -4,7 +4,7 @@ enable NetworkManager.service
 enable chromium-kiosk.service
 enable feral-setupd.service
 enable feral-connectd.service
-systemctl enable plymouth-start.service
-systemctl enable plymouth-read-write.service
-systemctl enable plymouth-quit.service
-systemctl enable plymouth-quit-wait.service
+enable plymouth-start.service
+enable plymouth-read-write.service
+enable plymouth-quit.service
+enable plymouth-quit-wait.service
