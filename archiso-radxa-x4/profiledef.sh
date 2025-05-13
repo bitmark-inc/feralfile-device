@@ -28,4 +28,7 @@ file_permissions=(
   ["/etc/plymouth/plymouthd.conf"]="0:0:644"
   ["/etc/initcpio/hooks/plymouth-theme"]="0:0:755"
   ["/etc/initcpio/install/plymouth-theme"]="0:0:755"
+  ["/usr/share/plymouth/plymouthd.defaults"]="0:0:644"
+  ["/root/plymouth-setup.sh"]="0:0:755"
+  ["/etc/profile.d/plymouth-setup.sh"]="0:0:755"
 )
