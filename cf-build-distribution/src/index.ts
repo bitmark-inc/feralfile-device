@@ -172,8 +172,8 @@ export default {
       const path = url.pathname.replace('/archlinux/', '');
 
       const key = path
-        .replace(/\.db$/, '.db.tar.gz')
-        .replace(/\.files$/, '.files.tar.gz');
+        .replace(/\.db(?=($|\.))/, '.db.tar.gz')
+        .replace(/\.files(?=($|\.))/, '.files.tar.gz');
 
       const object = await env.BUCKET.get(key);
       if (!object) {
