@@ -1,0 +1,19 @@
+#!/bin/bash
+build() {
+    local THEME_DIR="/usr/share/plymouth/themes/feralfile-splash"
+    
+    add_binary /usr/bin/plymouth
+    add_binary /usr/lib/plymouth/plymouth-populate-initrd
+    
+    add_file /etc/plymouth/plymouthd.conf
+    add_file ${THEME_DIR}/feralfile-splash.plymouth
+    add_file ${THEME_DIR}/feralfile-splash.script
+    add_file ${THEME_DIR}/splash.jpg
+    
+    add_runscript
+}
+help() {
+    cat <<HELPEOF
+    This hook includes the Plymouth theme files in the initramfs
+HELPEOF
+}

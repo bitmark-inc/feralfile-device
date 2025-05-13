@@ -1,0 +1,9 @@
+#!/bin/bash
+build() {
+    add_hook plymouth_theme_hook
+}
+help() {
+    cat <<HELPEOF
+    This hook includes the Plymouth theme files in the initramfs
+HELPEOF
+}
