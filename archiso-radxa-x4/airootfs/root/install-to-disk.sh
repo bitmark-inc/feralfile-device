@@ -193,8 +193,6 @@ echo "Installing systemd-boot to disk..."
 bootctl install
 
 echo "Setting up pacman..."
-curl -o /etc/pacman.d/mirrorlist "https://archlinux.org/mirrorlist/?country=US&protocol=https&ip_version=4&use_mirror_status=on"
-sed -i 's/^#Server/Server/' /etc/pacman.d/mirrorlist
 pacman-key --init
 pacman-key --populate archlinux
 pacman -Syy
