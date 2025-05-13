@@ -6,9 +6,9 @@ build() {
     add_binary /usr/lib/plymouth/plymouth-populate-initrd
     
     add_file /etc/plymouth/plymouthd.conf
-    add_file ${THEME_DIR}/feralfile-splash.plymouth
-    add_file ${THEME_DIR}/feralfile-splash.script
-    add_file ${THEME_DIR}/splash.jpg
+    add_file "${THEME_DIR}/feralfile-splash.plymouth"
+    add_file "${THEME_DIR}/feralfile-splash.script"
+    add_file "${THEME_DIR}/splash.jpg"
     
     add_runscript
 }

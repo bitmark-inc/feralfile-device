@@ -22,4 +22,10 @@ file_permissions=(
   ["/home/feralfile/"]="1000:1000:755"
   ["/usr/bin/feral-setupd"]="0:0:755"
   ["/usr/bin/feral-connectd"]="0:0:755"
+  ["/usr/share/plymouth/themes/feralfile-splash/feralfile-splash.script"]="0:0:644"
+  ["/usr/share/plymouth/themes/feralfile-splash/feralfile-splash.plymouth"]="0:0:644"
+  ["/usr/share/plymouth/themes/feralfile-splash/splash.jpg"]="0:0:644"
+  ["/etc/plymouth/plymouthd.conf"]="0:0:644"
+  ["/etc/initcpio/hooks/plymouth-theme"]="0:0:755"
+  ["/etc/initcpio/install/plymouth-theme"]="0:0:755"
 )

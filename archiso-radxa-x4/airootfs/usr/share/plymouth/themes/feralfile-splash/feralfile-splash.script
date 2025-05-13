@@ -1,19 +1,11 @@
-# Set background color to black
+# Super simple script for testing
 Window.SetBackgroundTopColor(0, 0, 0);
 Window.SetBackgroundBottomColor(0, 0, 0);
 
-# Get screen dimensions
-screen_width = Window.GetWidth();
-screen_height = Window.GetHeight();
-
-# Load the splash image
 splash_image = Image("splash.jpg");
-splash_width = splash_image.GetWidth();
-splash_height = splash_image.GetHeight();
-
-# Center the image on screen
 splash_sprite = Sprite(splash_image);
-splash_sprite.SetPosition(screen_width / 2 - splash_width / 2, screen_height / 2 - splash_height / 2, 1);
+splash_sprite.SetPosition(Window.GetWidth() / 2 - splash_image.GetWidth() / 2,
+                          Window.GetHeight() / 2 - splash_image.GetHeight() / 2, 1);
 
 # Set initial opacity
 splash_sprite.SetOpacity(0);
@@ -27,8 +19,8 @@ version_label = Text(version_text);
 version_label.SetFontSize(10);
 version_label.SetColor(0.7, 0.85, 0.95);  # Light blue like in screenshot
 version_sprite.SetImage(version_label);
-version_sprite.SetPosition(screen_width / 2 - version_label.GetWidth() / 2, 
-                          screen_height - 40, 2);
+version_sprite.SetPosition(Window.GetWidth() / 2 - version_label.GetWidth() / 2, 
+                          Window.GetHeight() - 40, 2);
 version_sprite.SetOpacity(0);
 
 # Fade in animation
@@ -39,7 +31,7 @@ start_time = 0;
 debug_sprite = Sprite();
 debug_text = Text("Loading...");
 debug_sprite.SetImage(debug_text);
-debug_sprite.SetPosition(screen_width / 2 - 50, screen_height / 2 + splash_height / 2 + 20, 10000);
+debug_sprite.SetPosition(Window.GetWidth() / 2 - 50, Window.GetHeight() / 2 + splash_image.GetHeight() / 2 + 20, 10000);
 
 fun refresh_callback() {
     # Remove mode check to ensure it always runs

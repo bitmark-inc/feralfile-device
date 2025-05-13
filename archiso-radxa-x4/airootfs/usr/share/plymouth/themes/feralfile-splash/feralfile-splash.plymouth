@@ -5,4 +5,5 @@ ModuleName=script
 
 [script]
 ImageDir=/usr/share/plymouth/themes/feralfile-splash
-ScriptFile=/usr/share/plymouth/themes/feralfile-splash/feralfile-splash.script 
+ScriptFile=/usr/share/plymouth/themes/feralfile-splash/feralfile-splash.script
+ThemeDir=/usr/share/plymouth/themes/feralfile-splash 
