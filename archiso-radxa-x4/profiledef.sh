@@ -30,4 +30,6 @@ file_permissions=(
   ["/etc/initcpio/install/plymouth-theme"]="0:0:755"
   ["/root/plymouth-setup.sh"]="0:0:755"
   ["/etc/profile.d/plymouth-setup.sh"]="0:0:755"
+  ["/etc/initcpio/hooks/plymouth-drm"]="0:0:755"
+  ["/etc/initcpio/install/plymouth-drm"]="0:0:755"
 )

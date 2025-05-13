@@ -60,3 +60,10 @@ lm_sensors
 
 # Boot splash screen
 plymouth
+
+# Plymouth dependencies
+plymouth-git
+plymouth-theme-spinner
+libdrm
+mesa-utils
+xf86-video-intel

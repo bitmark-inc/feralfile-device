@@ -1,0 +1,27 @@
+#!/bin/bash
+build() {
+    # Add the DRM kernel modules
+    add_all_modules "/drivers/gpu/drm"
+    add_module i915
+    add_module radeon
+    add_module nouveau
+    add_module amdgpu
+    
+    # Add the necessary DRM libraries
+    add_binary /usr/lib/libdrm.so
+    add_binary /usr/lib/libdrm_intel.so
+    add_binary /usr/lib/libdrm_amdgpu.so
+    add_binary /usr/lib/libdrm_radeon.so
+    add_binary /usr/lib/libdrm_nouveau.so
+    
+    # Add Plymouth DRM plugin if it exists
+    if [ -f /usr/lib/plymouth/renderers/drm.so ]; then
+        add_binary /usr/lib/plymouth/renderers/drm.so
+    fi
+}
+
+help() {
+    cat <<HELPEOF
+This hook adds DRM modules and libraries for Plymouth
+HELPEOF
+}
