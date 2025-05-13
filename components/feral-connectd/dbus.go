@@ -15,12 +15,16 @@ import (
 type DBusMember string
 
 const (
+	EVENT_SYSTEM_NAME_ACQUIRED        DBusMember = "NameAcquired"
 	EVENT_SETUPD_WIFI_CONNECTED       DBusMember = "wifi_connected"
 	EVENT_SETUPD_SHOW_PAIRING_QR_CODE DBusMember = "show_pairing_qr_code"
 	EVENT_CONNECTD_RELAYER_CONFIGURED DBusMember = "relayer_configured"
 
-	DBUS_INTERFACE = "com.feralfile.connectd.general"
-	DBUS_PATH      = "/com/feralfile/connectd"
+	SYSTEM_DBUS_INTERFACE = "org.freedesktop.DBus"
+	DBUS_INTERFACE        = "com.feralfile.connectd.general"
+
+	SYSTEM_DBUS_PATH = "/org/freedesktop/DBus"
+	DBUS_PATH        = "/com/feralfile/connectd"
 )
 
 func (e DBusMember) String() string {
@@ -44,6 +48,12 @@ type DBusPayload struct {
 
 func (p DBusPayload) Name() string {
 	return fmt.Sprintf("%s.%s", p.Interface, p.Member)
+}
+
+func (p DBusPayload) IsSystemNameAcquired() bool {
+	return p.Interface == SYSTEM_DBUS_INTERFACE &&
+		p.Path == SYSTEM_DBUS_PATH &&
+		p.Member == EVENT_SYSTEM_NAME_ACQUIRED
 }
 
 type BusSignalHandler func(
@@ -159,6 +169,11 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 		Path:      sig.Path,
 		Member:    member,
 		Body:      sig.Body,
+	}
+
+	// Skip system name acquired signals
+	if payload.IsSystemNameAcquired() {
+		return nil
 	}
 
 	for _, handler := range c.busSignalHandlers {

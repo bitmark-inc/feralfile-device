@@ -35,7 +35,8 @@ func (c *State) WaitForRelayerChanReady(ctx context.Context) bool {
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = 2 * time.Second
 	bo.Multiplier = 2
-	bo.MaxElapsedTime = 32 * time.Second
+	bo.RandomizationFactor = 0.5
+	bo.MaxElapsedTime = 30 * time.Second
 
 	err := backoff.Retry(func() error {
 		if c.RelayerChanReady() {
