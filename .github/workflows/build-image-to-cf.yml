@@ -92,7 +92,15 @@ jobs:
           cp -r archiso-radxa-x4 /build/
 
       - name: Inject pacman.conf
+        env:
+          AUTH_USER: ${{ secrets.DISTRIBUTION_AUTH_USER }}
+          AUTH_PASS: ${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}
         run: |
+          set -e
+
+          ENCODED_USER=$(printf '%s' "$AUTH_USER" | jq -sRr @uri)
+          ENCODED_PASS=$(printf '%s' "$AUTH_PASS" | jq -sRr @uri)
+
           cat > /build/archiso-radxa-x4/airootfs/etc/pacman.conf << EOF
           [options]
           HoldPkg     = pacman glibc
@@ -118,7 +126,7 @@ jobs:
 
           [feralfile]
           SigLevel = Optional TrustAll
-          Server = https://${{ secrets.DISTRIBUTION_AUTH_USER }}:${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}@feralfile-device-distribution.bitmark-development.workers.dev/archlinux/${{ github.ref_name }}/os/\$arch
+          Server = https://${ENCODED_USER}:${ENCODED_PASS}@feralfile-device-distribution.bitmark-development.workers.dev/archlinux/${{ github.ref_name }}/os/\$arch
           EOF
 
       - name: Copy UI files
