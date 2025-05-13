@@ -12,9 +12,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// CDP Methods
 const (
+	// CDP Methods
 	CDP_METHOD_EVALUATE = "Runtime.evaluate"
+
+	// CDP Types
+	CDP_TYPE_STRING = "string"
+	CDP_TYPE_OBJECT = "object"
+
+	// CDP Subtypes
+	CDP_SUBTYPE_ERROR = "error"
 )
 
 type CDPConfig struct {
@@ -108,14 +115,14 @@ func (c *CDPClient) InitCDP(ctx context.Context) error {
 }
 
 // SendCDPRequest sends a raw CDP JSON-RPC message and waits for response
-func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{}) error {
+func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{}) (interface{}, error) {
 	c.logger.Info("Sending CDP request", zap.String("method", method), zap.Any("params", params))
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.isClosed || c.conn == nil {
-		return fmt.Errorf("CDP connection is not initialized or already closed")
+		return nil, fmt.Errorf("CDP connection is not initialized or already closed")
 	}
 
 	c.reqID++
@@ -127,33 +134,61 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("CDP marshal error: %w", err)
+		return nil, fmt.Errorf("CDP marshal error: %w", err)
 	}
 
 	if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
-		return fmt.Errorf("CDP write error: %w", err)
+		return nil, fmt.Errorf("CDP write error: %w", err)
 	}
 
 	// Wait for response
 	_, response, err := c.conn.ReadMessage()
 	if err != nil {
-		return fmt.Errorf("failed to read CDP response: %w", err)
-	}
-
-	var resp map[string]interface{}
-	if err := json.Unmarshal(response, &resp); err != nil {
-		return fmt.Errorf("failed to parse CDP response: %w", err)
-	}
-
-	// Check for error in response
-	if err, ok := resp["error"].(map[string]interface{}); ok {
-		return fmt.Errorf("CDP error: %v", err)
+		return nil, fmt.Errorf("failed to read CDP response: %w", err)
 	}
 
 	c.logger.Info("Received CDP response",
 		zap.String("method", method),
 		zap.String("response", string(response)))
-	return nil
+
+	var resp struct {
+		Method   string `json:"method"`
+		Response struct {
+			ID     int `json:"id"`
+			Result struct {
+				Result struct {
+					Type        string                 `json:"type"`
+					Subtype     *string                `json:"subtype"`
+					ClassName   *string                `json:"className"`
+					Description *string                `json:"description"`
+					Value       map[string]interface{} `json:"value"`
+				} `json:"result"`
+			} `json:"result"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal(response, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse CDP response: %w", err)
+	}
+
+	// Check for method mismatch
+	if resp.Method != method {
+		return nil, fmt.Errorf("CDP method mismatch: %s != %s", resp.Method, method)
+	}
+	result := resp.Response.Result.Result
+
+	// Check for uncaught errors
+	if result.Type == CDP_TYPE_OBJECT &&
+		result.Subtype != nil &&
+		*result.Subtype == CDP_SUBTYPE_ERROR {
+		return nil, fmt.Errorf("CDP error: %v", result.Description)
+	}
+
+	// Check for response type mismatch
+	if result.Type != CDP_TYPE_STRING {
+		return nil, fmt.Errorf("CDP response type mismatch: %s != %s", result.Type, CDP_TYPE_STRING)
+	}
+
+	return result.Value, nil
 }
 
 // Close closes the CDP connection

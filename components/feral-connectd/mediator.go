@@ -114,9 +114,15 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayl
 				return err
 			}
 
-			return m.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
+			result, err := m.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
 				"expression": fmt.Sprintf("window.handleCDPRequest(%s)", string(p)),
 			})
+			if err != nil {
+				m.logger.Error("Failed to send CDP request", zap.Error(err))
+				return err
+			}
+
+			return m.relayer.Send(ctx, result)
 		} else {
 			result, err := m.cmd.Execute(ctx,
 				Command{
@@ -128,7 +134,11 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayl
 				return err
 			}
 
-			return m.relayer.Send(ctx, result)
+			return m.relayer.Send(ctx,
+				map[string]interface{}{
+					"messageID": payload.MessageID,
+					"message":   result,
+				})
 		}
 	}
 
