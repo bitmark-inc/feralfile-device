@@ -29,7 +29,6 @@ jobs:
       version: ${{ github.event.inputs.version }}
       description: 'Feral File Connectd Service'
       maintainer: 'Feral File'
-      build_pacman: true
       
   build-feral-setupd:
     name: Build Feral Setupd
@@ -43,7 +42,6 @@ jobs:
       version: ${{ github.event.inputs.version }}
       description: 'Feral File Setup Service'
       maintainer: 'Feral File'
-      build_pacman: true
 
   build-feralfile-pacman-repo:
     name: Build Feralfile pacman repo
@@ -68,18 +66,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Download feral-connectd Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: feral-connectd
-          path: /tmp/feral-connectd
-
-      - name: Download feral-setupd Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: feral-setupd
-          path: /tmp/feral-setupd
-
       - name: Install Build Dependencies
         run: |
           pacman -Syu --noconfirm
@@ -100,6 +86,12 @@ jobs:
 
           ENCODED_USER=$(printf '%s' "$AUTH_USER" | jq -sRr @uri)
           ENCODED_PASS=$(printf '%s' "$AUTH_PASS" | jq -sRr @uri)
+
+          cat >> /build/archiso-radxa-x4/pacman.conf << EOF
+          [feralfile]
+          SigLevel = Optional TrustAll
+          Server = https://${ENCODED_USER}:${ENCODED_PASS}@feralfile-device-distribution.bitmark-development.workers.dev/archlinux/${{ github.ref_name }}/os/\$arch
+          EOF
 
           cat > /build/archiso-radxa-x4/airootfs/etc/pacman.conf << EOF
           [options]
@@ -137,19 +129,8 @@ jobs:
           cp -r components/player-wrapper-ui/* /build/archiso-radxa-x4/airootfs/opt/feral/ui/player/
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.logs
 
-      - name: Add feral-connectd and feral-setupd Binaries and Services
+      - name: Add feral-connectd and feral-setupd Configs and Services
         run: |
-          # Create bin directory if it doesn't exist
-          mkdir -p /build/archiso-radxa-x4/airootfs/usr/bin
-          
-          # Copy the binary
-          cp /tmp/feral-connectd/feral-connectd /build/archiso-radxa-x4/airootfs/usr/bin/
-          chmod 755 /build/archiso-radxa-x4/airootfs/usr/bin/feral-connectd
-
-          # Copy the binary
-          cp /tmp/feral-setupd/feral-setupd /build/archiso-radxa-x4/airootfs/usr/bin/
-          chmod 755 /build/archiso-radxa-x4/airootfs/usr/bin/feral-setupd
-
           # Add connectd config
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.config
           cat > /build/archiso-radxa-x4/airootfs/home/feralfile/.config/connectd.json << EOF

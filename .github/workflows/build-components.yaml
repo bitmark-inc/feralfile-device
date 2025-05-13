@@ -21,11 +21,6 @@ on:
         required: false
         type: string
         default: 'GitHub Actions'
-      build_pacman:
-        description: 'Whether to build a pacman package or just the binary'
-        required: false
-        type: boolean
-        default: false
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         required: true
@@ -49,11 +44,6 @@ on:
         description: 'Package version'
         required: true
         type: string
-      build_pacman:
-        description: 'Whether to build a pacman package or just the binary'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   build-component:
@@ -102,42 +92,15 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build Go Binary
-        if: steps.build-type.outputs.type == 'go'
-        working-directory: components/${{ inputs.component }}
-        run: |
-          go build -v -o "${{ inputs.component }}"
-          # Copy any associated service files if they exist
-          mkdir -p /tmp/artifact
-          cp "${{ inputs.component }}" /tmp/artifact/
-          if [ -f "*.service" ]; then
-            cp *.service /tmp/artifact/
-          fi
-
-      - name: Build Rust Binary
-        if: steps.build-type.outputs.type == 'rust'
-        working-directory: components/${{ inputs.component }}
-        run: |
-          cargo build --release
-          # Copy from the target directory using the binary name from Cargo.toml
-          cp "target/release/${{ steps.build-type.outputs.binary_name }}" "./${{ inputs.component }}"
-          # Copy any associated service files if they exist
-          mkdir -p /tmp/artifact
-          cp "${{ inputs.component }}" /tmp/artifact/
-          if [ -f "*.service" ]; then
-            cp *.service /tmp/artifact/
-          fi
-
       - name: Build Pacman Package
-        if: ${{ inputs.build_pacman == true }}
         working-directory: components/${{ inputs.component }}
         run: |
-          pacman -S --noconfirm rclone
-
           set -euo pipefail
           COMP=${{ inputs.component }}
           VER=${VERSION}
-          TARBALL="${COMP}.tar.gz"
+          TARBALL="${COMP}_${VER}.tar.gz"
+
+          mkdir -p /tmp
 
           # 1) Create the tarball in /tmp to avoid it being seen mid–archive
           tar czf "/tmp/${TARBALL}" --exclude="${TARBALL}" .
@@ -205,6 +168,10 @@ jobs:
           useradd -m builder
           chown -R builder:builder .
           su builder -c "makepkg -f --skipinteg"
+      - name: Rclone to r2
+        working-directory: components/${{ inputs.component }}
+        run: |
+          pacman -S --noconfirm rclone
 
           # Configure rclone
           mkdir -p ~/.config/rclone
@@ -227,18 +194,7 @@ jobs:
             --transfers=7 \
             --verbose \
             --stats=1s
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ inputs.component }}
-          path: /tmp/artifact
-          retention-days: 7
-
       - name: Component Info
         run: |
           echo "Component ${{ inputs.component }} version ${{ env.VERSION }} built successfully"
-          if [ "${{ inputs.build_pacman }}" == "true" ]; then
-            echo "Built as pacman package"
-          else
-            echo "Built as binary only"
-          fi
+          echo "Built as pacman package and uploaded to R2"

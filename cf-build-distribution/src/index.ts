@@ -170,7 +170,10 @@ export default {
 
     if (url.pathname.startsWith('/archlinux/')) {
       const path = url.pathname.replace('/archlinux/', '');
-      const key = path; // keep original path in R2
+
+      const key = path
+        .replace(/\.db$/, '.db.tar.gz')
+        .replace(/\.files$/, '.files.tar.gz');
 
       const object = await env.BUCKET.get(key);
       if (!object) {
@@ -180,8 +183,7 @@ export default {
       // MIME types
       let contentType = 'application/octet-stream';
       if (key.endsWith('.zst')) contentType = 'application/zstd';
-      else if (key.endsWith('.db') || key.endsWith('.db.tar.gz')) contentType = 'application/x-pacman-database';
-
+      
       return new Response(object.body, {
         headers: {
           'Content-Type': contentType,
