@@ -198,3 +198,7 @@ jobs:
         run: |
           echo "Component ${{ inputs.component }} version ${{ env.VERSION }} built successfully"
           echo "Built as pacman package and uploaded to R2"
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /components

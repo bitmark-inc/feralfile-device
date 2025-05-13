@@ -61,3 +61,7 @@ jobs:
             --transfers=3 \
             --verbose \
             --stats=1s
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /repo
