@@ -4,7 +4,7 @@ use std::process::Command;
 
 use crate::constant;
 
-pub async fn connect(ssid: &str, pass: &str) -> Result<(), Box<dyn Error>> {
+pub fn connect(ssid: &str, pass: &str) -> Result<(), Box<dyn Error>> {
     // delete any existing connection, don't care if it fails
     // we need this because of a bug with nmcli
     // https://bbs.archlinux.org/viewtopic.php?id=300321&p=2
@@ -40,7 +40,7 @@ fn delete(ssid: &str) -> Result<(), Box<dyn Error>> {
     }
 }
 
-pub async fn list_ssids() -> Result<Vec<String>, Box<dyn Error>> {
+pub fn list_ssids() -> Result<Vec<String>, Box<dyn Error>> {
     // Run nmcli in terse mode to get only SSID fields
     let output = Command::new("nmcli")
         .args(&["-t", "-f", "SSID", "device", "wifi", "list"])
