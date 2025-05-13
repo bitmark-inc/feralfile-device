@@ -54,10 +54,9 @@ func (m *Mediator) handleDBusSignal(
 	switch payload.Member {
 	case EVENT_SETUPD_WIFI_CONNECTED:
 		// Connect to the relayer
-		err := m.relayer.RetriableConnect(ctx)
+		err := m.relayer.RetryableConnect(ctx)
 		if err != nil {
 			m.logger.Error("Failed to connect to relayer", zap.Error(err))
-			return nil, err
 		}
 
 		// Wait for the relayer to be connected

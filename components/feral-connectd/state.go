@@ -33,9 +33,9 @@ type State struct {
 
 func (c *State) WaitForRelayerChanReady(ctx context.Context) bool {
 	bo := backoff.NewExponentialBackOff()
-	bo.InitialInterval = 5 * time.Second
+	bo.InitialInterval = 2 * time.Second
 	bo.Multiplier = 2
-	bo.MaxElapsedTime = time.Minute
+	bo.MaxElapsedTime = 32 * time.Second
 
 	err := backoff.Retry(func() error {
 		if c.RelayerChanReady() {

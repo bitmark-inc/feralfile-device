@@ -27,14 +27,16 @@ type Device struct {
 
 type CommandHandler struct {
 	cdp    *CDPClient
+	dbus   *DBusClient
 	logger *zap.Logger
 
 	lastCDPCmd *Command
 }
 
-func NewCommandHandler(cdp *CDPClient, logger *zap.Logger) *CommandHandler {
+func NewCommandHandler(cdp *CDPClient, dbus *DBusClient, logger *zap.Logger) *CommandHandler {
 	return &CommandHandler{
 		cdp:    cdp,
+		dbus:   dbus,
 		logger: logger,
 	}
 }
@@ -61,6 +63,8 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 		result, err = c.checkStatus()
 	case RELAYER_CMD_CONNECT:
 		result, err = c.connect(bytes)
+	case RELAYER_CMD_SHOW_PAIRING_QR_CODE:
+		result, err = c.showPairingQRCode(ctx, bytes)
 	default:
 		return nil, fmt.Errorf("invalid command: %s", cmd)
 	}
@@ -68,13 +72,13 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 	return result, err
 }
 
-type CheckStatusResp struct {
-	Device   *Device                `json:"device"`
-	Command  *Command               `json:"lastCDPCmd"`
-	CDPState map[string]interface{} `json:"cdpState"`
-}
-
 func (c *CommandHandler) checkStatus() (interface{}, error) {
+	type CheckStatusResp struct {
+		Device   *Device                `json:"device"`
+		Command  *Command               `json:"lastCDPCmd"`
+		CDPState map[string]interface{} `json:"cdpState"`
+	}
+
 	return &struct {
 		OK    bool             `json:"ok"`
 		State *CheckStatusResp `json:"state"`
@@ -88,13 +92,11 @@ func (c *CommandHandler) checkStatus() (interface{}, error) {
 	}, nil
 }
 
-type ConnectArgs struct {
-	Device         Device `json:"clientDevice"`
-	PrimaryAddress string `json:"primaryAddress"`
-}
-
 func (c *CommandHandler) connect(args []byte) (interface{}, error) {
-	var cmdArgs ConnectArgs
+	var cmdArgs struct {
+		Device         Device `json:"clientDevice"`
+		PrimaryAddress string `json:"primaryAddress"`
+	}
 	err := json.Unmarshal(args, &cmdArgs)
 	if err != nil {
 		return nil, fmt.Errorf("invalid arguments: %s", err)
@@ -107,5 +109,23 @@ func (c *CommandHandler) connect(args []byte) (interface{}, error) {
 		return nil, fmt.Errorf("failed to save state: %s", err)
 	}
 
+	return CmdOK, nil
+}
+
+func (c *CommandHandler) showPairingQRCode(ctx context.Context, args []byte) (interface{}, error) {
+	var cmdArgs struct {
+		Show bool `json:"show"`
+	}
+	err := json.Unmarshal(args, &cmdArgs)
+	if err != nil {
+		return nil, fmt.Errorf("invalid arguments: %s", err)
+	}
+
+	err = c.dbus.RetryableSend(ctx, DBusPayload{
+		Interface: DBUS_INTERFACE,
+		Path:      DBUS_PATH,
+		Member:    EVENT_SETUPD_SHOW_PAIRING_QR_CODE,
+		Body:      []interface{}{cmdArgs.Show},
+	})
 	return CmdOK, nil
 }

@@ -82,13 +82,13 @@ func NewRelayerClient(config *RelayerConfig, logger *zap.Logger) *RelayerClient 
 	}
 }
 
-// RetriableConnect connects to the Relayer server and listens for messages
+// RetryableConnect connects to the Relayer server and listens for messages
 // with exponential backoff
-func (r *RelayerClient) RetriableConnect(ctx context.Context) error {
+func (r *RelayerClient) RetryableConnect(ctx context.Context) error {
 	bo := backoff.NewExponentialBackOff()
-	bo.InitialInterval = 5 * time.Second
+	bo.InitialInterval = 2 * time.Second
 	bo.Multiplier = 2
-	bo.MaxElapsedTime = time.Minute
+	bo.MaxElapsedTime = 32 * time.Second
 
 	attempts := 0
 	var err error
@@ -219,9 +219,16 @@ func (r *RelayerClient) background(ctx context.Context) {
 
 				// Forward payload to handlers
 				for _, handler := range r.handlers {
-					if err := handler(ctx, payload); err != nil {
-						r.logger.Error("Failed to handle message", zap.Error(err))
-					}
+					p := payload
+					h := handler
+
+					// Run the handler in a separate goroutine to avoid blocking the main thread
+					go func(ctx context.Context, payload RelayerPayload, handler RelayerHandler) error {
+						if err := handler(ctx, payload); err != nil {
+							r.logger.Error("Failed to handle message", zap.Error(err))
+						}
+						return nil
+					}(ctx, p, h)
 				}
 			}
 		}

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/godbus/dbus/v5"
 	"go.uber.org/zap"
 )
@@ -14,6 +16,7 @@ type DBusMember string
 
 const (
 	EVENT_SETUPD_WIFI_CONNECTED       DBusMember = "wifi_connected"
+	EVENT_SETUPD_SHOW_PAIRING_QR_CODE DBusMember = "show_pairing_qr_code"
 	EVENT_CONNECTD_RELAYER_CONFIGURED DBusMember = "relayer_configured"
 
 	DBUS_INTERFACE = "com.feralfile.connectd.general"
@@ -26,6 +29,10 @@ func (e DBusMember) String() string {
 
 func (e DBusMember) ACK() DBusMember {
 	return DBusMember(fmt.Sprintf("%s_ack", e))
+}
+
+func (e DBusMember) IsACK() bool {
+	return strings.HasSuffix(string(e), "_ack")
 }
 
 type DBusPayload struct {
@@ -133,6 +140,7 @@ func (c *DBusClient) RemoveBusSignal(f BusSignalHandler) {
 	}
 }
 
+// handleSignalRecv handles a received signal that's not an ACK
 func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 	i := strings.LastIndex(sig.Name, ".")
 	if i == -1 {
@@ -140,6 +148,12 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 	}
 	iface := sig.Name[:i]
 	member := DBusMember(sig.Name[i+1:])
+
+	// Skip ACK signals
+	if member.IsACK() {
+		return nil
+	}
+
 	payload := DBusPayload{
 		Interface: iface,
 		Path:      sig.Path,
@@ -149,20 +163,26 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 
 	for _, handler := range c.busSignalHandlers {
 		p := payload
+		h := handler
 
-		// Handle signal
-		result, err := handler(c.ctx, p)
-		if err != nil {
-			c.logger.Warn("Failed to handle signal", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
-			continue
-		}
+		// Run the handler in a separate goroutine to avoid blocking the main thread
+		go func(ctx context.Context, payload DBusPayload, handler BusSignalHandler) error {
+			// Handle signal
+			result, err := handler(ctx, payload)
+			if err != nil {
+				c.logger.Warn("Failed to handle signal", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
+				return nil
+			}
 
-		// Send ACK with handler result
-		p.Body = result
-		err = c.ACK(p)
-		if err != nil {
-			c.logger.Warn("Failed to send ACK", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
-		}
+			// Send ACK with handler result
+			p.Body = result
+			err = c.ACK(p)
+			if err != nil {
+				c.logger.Warn("Failed to send ACK", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
+			}
+
+			return nil
+		}(c.ctx, p, h)
 	}
 
 	return nil
@@ -175,6 +195,61 @@ func (c *DBusClient) ACK(payload DBusPayload) error {
 		Member:    payload.Member.ACK(),
 		Body:      payload.Body,
 	})
+}
+
+// RetryableSend retries sending a signal until an ACK is received
+// This function will be blocked until an ACK is received or the context is cancelled or the backoff timer expires
+// So it should be called in a separate goroutine unless you want to block the main thread
+func (c *DBusClient) RetryableSend(ctx context.Context, payload DBusPayload) error {
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = 2 * time.Second
+	bo.Multiplier = 2
+	bo.MaxElapsedTime = 16 * time.Second
+
+	// Create a channel to receive ACK
+	ackChan := make(chan struct{})
+
+	// Create a temporary handler to listen for ACK
+	var handler BusSignalHandler
+	handler = func(ctx context.Context, p DBusPayload) ([]interface{}, error) {
+		// Check if this is the ACK for our signal
+		if p.Member == payload.Member.ACK() {
+			close(ackChan)
+			// Remove this temporary handler
+			c.RemoveBusSignal(handler)
+			return nil, nil
+		}
+		return nil, nil
+	}
+
+	// Add the temporary handler
+	c.OnBusSignal(handler)
+	defer c.RemoveBusSignal(handler)
+
+	// Retry ops
+	attempts := 0
+	ops := func() error {
+		attempts++
+		c.logger.Info(fmt.Sprintf("Sending signal with %d attempts", attempts), zap.String("interface", payload.Interface), zap.String("path", string(payload.Path)), zap.String("member", payload.Member.String()), zap.Any("body", payload.Body))
+
+		// Send the signal
+		if err := c.Send(payload); err != nil {
+			c.logger.Error("Failed to send signal", zap.Error(err))
+			return err
+		}
+
+		// Wait for ACK with timeout
+		select {
+		case <-ackChan:
+			return nil // ACK received, success
+		case <-ctx.Done():
+			return backoff.Permanent(ctx.Err()) // Context cancelled
+		case <-time.After(bo.NextBackOff()):
+			return fmt.Errorf("timeout waiting for ACK") // Timeout, will retry
+		}
+	}
+
+	return backoff.Retry(ops, bo)
 }
 
 func (c *DBusClient) Send(payload DBusPayload) error {
