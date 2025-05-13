@@ -189,12 +189,12 @@ func (c *CDPClient) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.logger.Info("Closing CDP connection")
-
 	if c.isClosed {
 		// Already closed
 		return
 	}
+
+	c.logger.Info("Closing CDP connection")
 
 	c.isClosed = true
 

@@ -284,7 +284,7 @@ func (c *DBusClient) Stop() error {
 
 	select {
 	case <-c.doneChan:
-		return nil
+		// Already closed
 	default:
 		close(c.doneChan)
 	}

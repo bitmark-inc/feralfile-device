@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -93,23 +94,38 @@ func (r *RelayerClient) RetryableConnect(ctx context.Context) error {
 	bo.MaxElapsedTime = 30 * time.Second
 
 	attempts := 0
-	var err error
 	ops := func() error {
+		// Check if context is cancelled or done channel is closed
+		select {
+		case <-ctx.Done():
+			return backoff.Permanent(ctx.Err()) // Permanent error stops retry
+		case <-r.done:
+			return backoff.Permanent(fmt.Errorf("connection aborted")) // Permanent error stops retry
+		default:
+			// Continue with connection attempt
+		}
+
 		attempts++
 		r.logger.Info("Connecting to Relayer", zap.String("endpoint", r.config.Endpoint), zap.Int("attempts", attempts))
-		err = r.connect(ctx)
+
+		err := r.connect(ctx)
 		if err == errRelayerAlreadyConnected {
 			return nil
 		}
 		return err
 	}
 
-	_ = backoff.Retry(ops, bo)
-
+	err := backoff.Retry(ops, bo)
 	if err != nil {
-		r.logger.Error("Failed to connect to Relayer after retrying %d attempts", zap.Int("attempts", attempts), zap.Error(err))
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			r.logger.Warn("Retry stopped due to context cancellation")
+			return nil
+		}
+		r.logger.Error("Failed to connect to Relayer after retrying", zap.Int("attempts", attempts), zap.Error(err))
+		return err
 	}
-	return err
+
+	return nil
 }
 
 // connect connects to the Relayer server and listens for messages
