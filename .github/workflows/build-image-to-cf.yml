@@ -93,33 +93,7 @@ jobs:
           Server = https://${ENCODED_USER}:${ENCODED_PASS}@feralfile-device-distribution.bitmark-development.workers.dev/archlinux/${{ github.ref_name }}/os/\$arch
           EOF
 
-          cat > /build/archiso-radxa-x4/airootfs/etc/pacman.conf << EOF
-          [options]
-          HoldPkg     = pacman glibc
-          Architecture = auto
-          Color
-          CheckSpace
-          ParallelDownloads = 5
-          SigLevel    = Required DatabaseOptional
-          LocalFileSigLevel = Optional
-          ILoveCandy
-
-          [core]
-          Include = /etc/pacman.d/mirrorlist
-
-          [extra]
-          Include = /etc/pacman.d/mirrorlist
-
-          [community]
-          Include = /etc/pacman.d/mirrorlist
-
-          [multilib]
-          Include = /etc/pacman.d/mirrorlist
-
-          [feralfile]
-          SigLevel = Optional TrustAll
-          Server = https://${ENCODED_USER}:${ENCODED_PASS}@feralfile-device-distribution.bitmark-development.workers.dev/archlinux/${{ github.ref_name }}/os/\$arch
-          EOF
+          cp /build/archiso-radxa-x4/pacman.conf /build/archiso-radxa-x4/airootfs/etc/pacman.conf
 
       - name: Copy UI files
         run: |
@@ -160,6 +134,10 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syy --debug
+
+          # copy US mirror list to iso
+          mkdir -p /build/archiso-radxa-x4/airootfs/etc/pacman.d
+          cp /etc/pacman.d/mirrorlist /build/archiso-radxa-x4/airootfs/etc/pacman.d/mirrorlist
 
       - name: Build ISO Image
         run: |
