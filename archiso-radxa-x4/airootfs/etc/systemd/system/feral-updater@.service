@@ -5,4 +5,3 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/home/feralfile/scripts/feral-updater.sh
-EOF

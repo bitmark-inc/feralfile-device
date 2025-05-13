@@ -4,7 +4,7 @@ Description=FeralFile Updater - %i Run
 [Timer]
 Persistent=true
 OnCalendar=%i
-RandomizedDelaySec=7200  # Up to 2 hour random delay
+RandomizedDelaySec=7200
 Unit=feral-updater@%i.service
 
 [Install]
