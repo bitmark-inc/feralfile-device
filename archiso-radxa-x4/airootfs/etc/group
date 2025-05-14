@@ -3,4 +3,5 @@ wheel:x:10:feralfile
 audio:x:92:feralfile
 video:x:91:feralfile
 input:x:97:feralfile
+seat:x:989:feralfile
 feralfile:x:1000:

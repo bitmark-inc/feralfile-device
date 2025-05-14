@@ -1,0 +1,1 @@
+quiet splash plymouth.enable=1 plymouth.ignore-serial-consoles rd.udev.log_priority=3 vt.global_cursor_default=0 loglevel=3 audit=0 

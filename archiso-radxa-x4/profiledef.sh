@@ -35,4 +35,13 @@ file_permissions=(
   ["/root/boot-diagnostics.sh"]="0:0:755"
   ["/etc/systemd/system/boot-diagnostics.service"]="0:0:644"
   ["/usr/local/bin/collect-logs.sh"]="0:0:755"
+  ["/etc/seatd/seatd.conf.d/10-seat-group.conf"]="0:0:644"
+  ["/etc/systemd/system/seatd.service.d/override.conf"]="0:0:644"
+  ["/root/setup-boot-environment.sh"]="0:0:755"
+  ["/root/rebuild-plymouth.sh"]="0:0:755"
+  ["/etc/systemd/system/boot-setup.service"]="0:0:644"
+  ["/etc/modprobe.d/i915.conf"]="0:0:644"
+  ["/etc/modprobe.d/plymouth.conf"]="0:0:644"
+  ["/etc/dracut.conf.d/kms.conf"]="0:0:644"
+  ["/etc/kernel/cmdline"]="0:0:644"
 )

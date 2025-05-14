@@ -1,0 +1,12 @@
+[Unit]
+Description=FeralFile Boot Environment Setup
+Before=multi-user.target
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/setup-boot-environment.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target 
