@@ -22,4 +22,5 @@ file_permissions=(
   ["/home/feralfile/"]="1000:1000:755"
   ["/home/feralfile/scripts/feral-updater.sh"]="1000:1000:755"
   ["/home/feralfile/scripts/x4_archlinux.sh"]="1000:1000:755"
+  ["/usr/local/bin/websocat"]="0:0:755"
 )
