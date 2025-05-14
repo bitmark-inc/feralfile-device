@@ -21,4 +21,5 @@ file_permissions=(
   ["/root/install-to-disk.sh"]="0:0:755"
   ["/home/feralfile/"]="1000:1000:755"
   ["/home/feralfile/scripts/feral-updater.sh"]="1000:1000:755"
+  ["/home/feralfile/scripts/x4_archlinux.sh"]="1000:1000:755"
 )
