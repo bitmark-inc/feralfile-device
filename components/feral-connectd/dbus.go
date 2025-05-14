@@ -216,9 +216,7 @@ func (c *DBusClient) SendACK(payload DBusPayload) error {
 // So it should be called in a separate goroutine unless you want to block the main thread
 func (c *DBusClient) RetryableSend(ctx context.Context, payload DBusPayload) error {
 	bo := backoff.NewExponentialBackOff()
-	bo.InitialInterval = 2 * time.Second
-	bo.Multiplier = 2
-	bo.RandomizationFactor = 0.5
+	bo.InitialInterval = 5 * time.Second
 	bo.MaxElapsedTime = 30 * time.Second
 
 	// Create a channel to receive ACK
