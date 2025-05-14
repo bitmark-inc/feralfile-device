@@ -116,7 +116,12 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayl
 		}
 	default:
 		cmd := payload.Message.Command
-		if cmd != nil && cmd.CDPCmd() {
+		if cmd == nil {
+			m.logger.Warn("Received relayer message with no command", zap.Any("payload", payload))
+			return nil
+		}
+
+		if cmd.CDPCmd() {
 			p, err := payload.JSON()
 			if err != nil {
 				m.logger.Error("Failed to marshal payload", zap.Error(err))
@@ -132,7 +137,7 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayl
 			}
 
 			return m.relayer.Send(ctx, result)
-		} else if cmd != nil {
+		} else {
 			result, err := m.cmd.Execute(ctx,
 				Command{
 					Command:   *cmd,
@@ -148,8 +153,6 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayl
 					"messageID": payload.MessageID,
 					"message":   result,
 				})
-		} else {
-			m.logger.Warn("Unknown command", zap.Any("payload", payload))
 		}
 	}
 
