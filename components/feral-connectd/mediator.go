@@ -8,11 +8,12 @@ import (
 )
 
 type Mediator struct {
-	relayer *RelayerClient
-	dbus    *DBusClient
-	cdp     *CDPClient
-	cmd     *CommandHandler
-	logger  *zap.Logger
+	relayer      *RelayerClient
+	dbus         *DBusClient
+	cdp          *CDPClient
+	cmd          *CommandHandler
+	logger       *zap.Logger
+	connectivity *Connectivity
 }
 
 func NewMediator(
@@ -20,24 +21,28 @@ func NewMediator(
 	dbus *DBusClient,
 	cdp *CDPClient,
 	cmd *CommandHandler,
+	connectivity *Connectivity,
 	logger *zap.Logger) *Mediator {
 	return &Mediator{
-		relayer: relayer,
-		dbus:    dbus,
-		cdp:     cdp,
-		cmd:     cmd,
-		logger:  logger,
+		relayer:      relayer,
+		dbus:         dbus,
+		cdp:          cdp,
+		cmd:          cmd,
+		connectivity: connectivity,
+		logger:       logger,
 	}
 }
 
 func (m *Mediator) Start() {
 	m.dbus.OnBusSignal(m.handleDBusSignal)
 	m.relayer.OnRelayerMessage(m.handleRelayerMessage)
+	m.connectivity.OnConnectivityChange(m.handleConnectivityChange)
 }
 
 func (m *Mediator) Stop() {
 	m.dbus.RemoveBusSignal(m.handleDBusSignal)
 	m.relayer.RemoveRelayerMessage(m.handleRelayerMessage)
+	m.connectivity.RemoveConnectivityChange(m.handleConnectivityChange)
 }
 
 func (m *Mediator) handleDBusSignal(
@@ -157,4 +162,27 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayl
 	}
 
 	return nil
+}
+
+func (m *Mediator) handleConnectivityChange(ctx context.Context, connected bool) {
+	m.logger.Info("Connectivity changed", zap.Bool("connected", connected))
+
+	// Send the connectivity change to web app
+	_, err := m.cdp.SendCDPRequest(
+		CDP_METHOD_EVALUATE,
+		map[string]interface{}{
+			"expression": fmt.Sprintf("window.handleConnectivityChange(%t)", connected),
+		})
+	if err != nil {
+		m.logger.Error("Failed to send CDP request", zap.Error(err))
+	}
+
+	// Reconnect the relayer if it's not already connected
+	if connected && !m.relayer.IsConnected() {
+		err := m.relayer.RetryableConnect(ctx)
+		if err != nil {
+			m.logger.Error("Failed to reconnect to relayer", zap.Error(err))
+			panic(err)
+		}
+	}
 }

@@ -84,6 +84,12 @@ func NewRelayerClient(config *RelayerConfig, logger *zap.Logger) *RelayerClient 
 	}
 }
 
+func (r *RelayerClient) IsConnected() bool {
+	r.Lock()
+	defer r.Unlock()
+	return r.conn != nil
+}
+
 // RetryableConnect connects to the Relayer server and listens for messages
 // with exponential backoff
 func (r *RelayerClient) RetryableConnect(ctx context.Context) error {
@@ -268,8 +274,7 @@ func (r *RelayerClient) background(ctx context.Context) {
 					r.logger.Error("Failed to read message. Will attempt to reconnect shortly", zap.Error(err))
 					err := r.reconnect(ctx)
 					if err != nil {
-						r.logger.Error("Failed to reconnect to Relayer. Terminating", zap.Error(err))
-						panic(err)
+						r.logger.Error("Failed to reconnect to Relayer", zap.Error(err))
 					}
 					return
 				}
