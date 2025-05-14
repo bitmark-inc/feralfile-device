@@ -181,7 +181,13 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 		return nil, fmt.Errorf("CDP response type mismatch: %s != %s", result.Type, CDP_TYPE_STRING)
 	}
 
-	return result.Value, nil
+	// Unmarshal the result value
+	var v map[string]interface{}
+	if err := json.Unmarshal([]byte(result.Value.(string)), &v); err != nil {
+		return nil, fmt.Errorf("CDP unmarshal error: %w", err)
+	}
+
+	return v, nil
 }
 
 // Close closes the CDP connection
