@@ -58,6 +58,7 @@ pulseaudio-bluetooth
 intel-gpu-tools
 lm_sensors
 jq
+bc
 foot
 
 # Feralfile 
