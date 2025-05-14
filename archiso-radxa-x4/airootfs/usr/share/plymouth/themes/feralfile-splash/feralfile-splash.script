@@ -2,8 +2,8 @@
 Window.SetBackgroundTopColor(0, 0, 0);
 Window.SetBackgroundBottomColor(0, 0, 0);
 
-# Display the splash image directly (no animation)
-splash_image = Image("splash.jpg");
+# Explicitly specify the full path to the image
+splash_image = Image("/usr/share/plymouth/themes/feralfile-splash/splash.jpg");
 splash_sprite = Sprite(splash_image);
 
 # Calculate position to center the image
@@ -20,4 +20,16 @@ text_image = Image.Text(version_text, 1, 1, 1);  # white text
 text_sprite = Sprite(text_image);
 text_sprite.SetPosition(Window.GetWidth() / 2 - text_image.GetWidth() / 2, 
                        Window.GetHeight() - 30, 1);
-text_sprite.SetOpacity(1); 
+text_sprite.SetOpacity(1);
+
+# Add a message function to log status
+fun display_message(message) {
+    message_sprite = Sprite();
+    message_image = Image.Text(message, 1, 1, 1);
+    message_sprite.SetImage(message_image);
+    message_sprite.SetPosition(Window.GetWidth() / 2 - message_image.GetWidth() / 2,
+                             Window.GetHeight() / 2 + 50, 2);
+    message_sprite.SetOpacity(1);
+}
+
+Plymouth.SetMessageFunction(display_message); 

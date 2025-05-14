@@ -1,0 +1,2 @@
+# Grant permissions to DRI devices for all users
+SUBSYSTEM=="drm", GROUP="video", MODE="0666" 

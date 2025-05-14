@@ -44,4 +44,5 @@ file_permissions=(
   ["/etc/modprobe.d/plymouth.conf"]="0:0:644"
   ["/etc/dracut.conf.d/kms.conf"]="0:0:644"
   ["/etc/kernel/cmdline"]="0:0:644"
+  ["/etc/udev/rules.d/99-dri-permissions.rules"]="0:0:644"
 )

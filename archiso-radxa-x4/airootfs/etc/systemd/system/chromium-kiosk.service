@@ -1,8 +1,7 @@
 [Unit]
 Description=Chromium Kiosk Mode
-After=plymouth-quit.service seatd.service
-Wants=plymouth-quit.service seatd.service
-Conflicts=getty@tty1.service
+After=multi-user.target plymouth-quit.service
+Wants=plymouth-quit.service
 
 [Service]
 Type=simple
@@ -25,4 +24,4 @@ Restart=always
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
