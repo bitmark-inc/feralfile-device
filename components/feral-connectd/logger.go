@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -29,11 +30,6 @@ func New(debug bool) (*zap.Logger, error) {
 	config.EncoderConfig.CallerKey = "caller"
 	config.EncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
 
-	logFile, err := os.OpenFile(fp, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, err
-	}
-
 	// Create console encoder with colors
 	consoleEncoder := zapcore.NewConsoleEncoder(config.EncoderConfig)
 
@@ -42,10 +38,19 @@ func New(debug bool) (*zap.Logger, error) {
 	fileEncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder // No colors for file output
 	fileEncoder := zapcore.NewConsoleEncoder(fileEncoderConfig)
 
+	// Set up lumberjack for log rotation
+	logRotator := &lumberjack.Logger{
+		Filename:   fp,
+		MaxSize:    32,   // megabytes
+		MaxBackups: 3,    // number of backups to keep
+		MaxAge:     30,   // days to keep backups
+		Compress:   true, // compress backups
+	}
+
 	// Create core with both console and file outputs
 	core := zapcore.NewTee(
 		zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), config.Level),
-		zapcore.NewCore(fileEncoder, zapcore.AddSync(logFile), config.Level),
+		zapcore.NewCore(fileEncoder, zapcore.AddSync(logRotator), config.Level),
 	)
 
 	// Create the logger with the custom core

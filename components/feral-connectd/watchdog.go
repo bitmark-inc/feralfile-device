@@ -34,7 +34,6 @@ func (w *Watchdog) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			w.logger.Debug("Watchdog check...")
 			daemon.SdNotify(false, daemon.SdNotifyWatchdog)
 		case <-ctx.Done():
 			w.logger.Info("Stopping watchdog due to context cancellation")
