@@ -34,4 +34,5 @@ file_permissions=(
   ["/etc/initcpio/install/plymouth-drm"]="0:0:755"
   ["/root/boot-diagnostics.sh"]="0:0:755"
   ["/etc/systemd/system/boot-diagnostics.service"]="0:0:644"
+  ["/usr/local/bin/collect-logs.sh"]="0:0:755"
 )
