@@ -60,6 +60,7 @@ lm_sensors
 jq
 bc
 foot
+stress-ng
 
 # Feralfile 
 feral-connectd
