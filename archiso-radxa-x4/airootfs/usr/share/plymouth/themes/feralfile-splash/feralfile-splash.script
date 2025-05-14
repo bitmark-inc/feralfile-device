@@ -1,26 +1,28 @@
-# Simple Plymouth script that directly displays the image
+# Basic splash screen with image
 Window.SetBackgroundTopColor(0, 0, 0);
 Window.SetBackgroundBottomColor(0, 0, 0);
 
-# Explicitly specify the full path to the image
-splash_image = Image("/usr/share/plymouth/themes/feralfile-splash/splash.jpg");
-splash_sprite = Sprite(splash_image);
+# Create a simple colored background as fallback
+bg = Sprite();
+bg.SetZ(0);
+bg.SetPosition(0, 0, 0);
+bg.SetImage(Image.Rectangle(Window.GetWidth(), Window.GetHeight(), 0, 0, 0.2));  # Dark blue background as fallback
 
-# Calculate position to center the image
-x = Window.GetWidth() / 2 - splash_image.GetWidth() / 2;
-y = Window.GetHeight() / 2 - splash_image.GetHeight() / 2;
+# Hard-code absolute path and set directly visible
+logo.image = Image("/usr/share/plymouth/themes/feralfile-splash/splash.jpg");
+logo.sprite = Sprite(logo.image);
+logo.sprite.SetZ(10);
+logo.x = Window.GetWidth() / 2 - logo.image.GetWidth() / 2;
+logo.y = Window.GetHeight() / 2 - logo.image.GetHeight() / 2;
+logo.sprite.SetPosition(logo.x, logo.y, 10);
+logo.sprite.SetOpacity(1);
 
-# Set the image position and make it fully visible immediately
-splash_sprite.SetPosition(x, y, 0);
-splash_sprite.SetOpacity(1);
-
-# Add version text at the bottom
-version_text = "v0.0.1";
-text_image = Image.Text(version_text, 1, 1, 1);  # white text
-text_sprite = Sprite(text_image);
-text_sprite.SetPosition(Window.GetWidth() / 2 - text_image.GetWidth() / 2, 
-                       Window.GetHeight() - 30, 1);
-text_sprite.SetOpacity(1);
+# Add version text
+version = "v0.0.1";
+version_image = Image.Text(version, 1, 1, 1);  # white text
+version_sprite = Sprite(version_image);
+version_sprite.SetPosition(Window.GetWidth() / 2 - version_image.GetWidth() / 2, Window.GetHeight() - 20, 10);
+version_sprite.SetOpacity(1);
 
 # Add a message function to log status
 fun display_message(message) {
