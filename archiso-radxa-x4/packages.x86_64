@@ -61,6 +61,7 @@ jq
 bc
 foot
 stress-ng
+mesa-utils
 
 # Feralfile 
 feral-connectd
