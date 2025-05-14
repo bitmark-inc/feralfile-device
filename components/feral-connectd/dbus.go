@@ -152,6 +152,11 @@ func (c *DBusClient) RemoveBusSignal(f BusSignalHandler) {
 
 // handleSignalRecv handles a received signal that's not an ACK
 func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
+	if sig.Path == DBUS_PATH {
+		c.logger.Info("Skip self-generated signal", zap.String("name", sig.Name), zap.String("path", string(sig.Path)), zap.String("member", sig.Name))
+		return nil
+	}
+
 	i := strings.LastIndex(sig.Name, ".")
 	if i == -1 {
 		return fmt.Errorf("invalid signal name: %s", sig.Name)
