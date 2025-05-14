@@ -1,8 +1,8 @@
 #!/bin/bash
 build() {
-    # Add the DRM kernel modules
+    # Add the DRM kernel modules - priority load for Intel N100
     add_all_modules "/drivers/gpu/drm"
-    add_module i915
+    add_module i915 # Intel GPU - priority for N100
     add_module radeon
     add_module nouveau
     add_module amdgpu
@@ -13,6 +13,9 @@ build() {
     add_binary /usr/lib/libdrm_amdgpu.so
     add_binary /usr/lib/libdrm_radeon.so
     add_binary /usr/lib/libdrm_nouveau.so
+    
+    # Add additional utilities that might help with DRM/KMS
+    add_binary /usr/bin/modetest
     
     # Add Plymouth DRM plugin if it exists
     if [ -f /usr/lib/plymouth/renderers/drm.so ]; then

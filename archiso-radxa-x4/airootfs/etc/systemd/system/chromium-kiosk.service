@@ -1,7 +1,8 @@
 [Unit]
 Description=Chromium Kiosk Mode
-After=plymouth-quit.service
-Wants=plymouth-quit.service
+After=plymouth-quit.service seatd.service
+Wants=plymouth-quit.service seatd.service
+Conflicts=getty@tty1.service
 
 [Service]
 Type=simple

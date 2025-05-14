@@ -1,0 +1,12 @@
+[Unit]
+Description=Boot Graphics Diagnostics
+After=plymouth-quit.service
+Before=chromium-kiosk.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/boot-diagnostics.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target 

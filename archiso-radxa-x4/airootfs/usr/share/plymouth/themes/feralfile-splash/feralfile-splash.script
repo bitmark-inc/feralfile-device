@@ -7,8 +7,8 @@ splash_sprite = Sprite(splash_image);
 splash_sprite.SetPosition(Window.GetWidth() / 2 - splash_image.GetWidth() / 2,
                           Window.GetHeight() / 2 - splash_image.GetHeight() / 2, 1);
 
-# Set initial opacity
-splash_sprite.SetOpacity(0);
+# Set to fully visible immediately
+splash_sprite.SetOpacity(1);
 
 # Get version from environment or use default
 version_text = "v0.0.1";  # Default version shown in screenshot
@@ -21,38 +21,42 @@ version_label.SetColor(0.7, 0.85, 0.95);  # Light blue like in screenshot
 version_sprite.SetImage(version_label);
 version_sprite.SetPosition(Window.GetWidth() / 2 - version_label.GetWidth() / 2, 
                           Window.GetHeight() - 40, 2);
-version_sprite.SetOpacity(0);
+version_sprite.SetOpacity(1);
 
-# Fade in animation
-fade_duration = 0.5;
-start_time = 0;
-
-# Add debug text to see if script is running
+# Add debug text to track boot progress
 debug_sprite = Sprite();
-debug_text = Text("Loading...");
+debug_text = Text("Initializing system...");
+debug_text.SetFontSize(14);
+debug_text.SetColor(1, 1, 1);  # White color for visibility
 debug_sprite.SetImage(debug_text);
-debug_sprite.SetPosition(Window.GetWidth() / 2 - 50, Window.GetHeight() / 2 + splash_image.GetHeight() / 2 + 20, 10000);
+debug_sprite.SetPosition(Window.GetWidth() / 2 - 100, Window.GetHeight() / 2 + splash_image.GetHeight() / 2 + 20, 10000);
+debug_sprite.SetOpacity(1);
+
+# Track boot progress with dots
+progress_count = 0;
+progress_max = 5;
 
 fun refresh_callback() {
-    # Remove mode check to ensure it always runs
-    if (start_time == 0) {
-        start_time = Plymouth.GetTime();  # Using Plymouth.GetTime() instead of Time()
+    global.progress_count++;
+    if (global.progress_count > global.progress_max) {
+        global.progress_count = 0;
     }
     
-    time_elapsed = Plymouth.GetTime() - start_time;
-    
-    if (time_elapsed < fade_duration) {
-        opacity = time_elapsed / fade_duration;
-        splash_sprite.SetOpacity(opacity);
-        version_sprite.SetOpacity(opacity);
-    } else {
-        splash_sprite.SetOpacity(1);
-        version_sprite.SetOpacity(1);
+    dots = "";
+    for (i = 0; i < global.progress_count; i++) {
+        dots += ".";
     }
+    
+    new_text = "Initializing system" + dots;
+    debug_text.SetText(new_text);
 }
 
 Plymouth.SetRefreshFunction(refresh_callback);
+Plymouth.SetRefreshRate(1);  # Update every second
 
-# Fallback: Set opacity directly in case refresh doesn't work
-splash_sprite.SetOpacity(1);
-version_sprite.SetOpacity(1); 
+# Handle system messages
+fun display_message(message) {
+    debug_text.SetText(message);
+}
+
+Plymouth.SetMessageFunction(display_message); 

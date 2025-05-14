@@ -32,4 +32,6 @@ file_permissions=(
   ["/etc/profile.d/plymouth-setup.sh"]="0:0:755"
   ["/etc/initcpio/hooks/plymouth-drm"]="0:0:755"
   ["/etc/initcpio/install/plymouth-drm"]="0:0:755"
+  ["/root/boot-diagnostics.sh"]="0:0:755"
+  ["/etc/systemd/system/boot-diagnostics.service"]="0:0:644"
 )
