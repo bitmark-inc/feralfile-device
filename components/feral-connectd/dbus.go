@@ -159,11 +159,6 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 	iface := sig.Name[:i]
 	member := DBusMember(sig.Name[i+1:])
 
-	// Skip ACK signals
-	if member.IsACK() {
-		return nil
-	}
-
 	payload := DBusPayload{
 		Interface: iface,
 		Path:      sig.Path,
@@ -177,9 +172,11 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 	}
 
 	// Send ACK
-	err := c.SendACK(payload)
-	if err != nil {
-		c.logger.Warn("Failed to send ACK", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
+	if !member.IsACK() {
+		err := c.SendACK(payload)
+		if err != nil {
+			c.logger.Warn("Failed to send ACK", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
+		}
 	}
 
 	for _, handler := range c.busSignalHandlers {

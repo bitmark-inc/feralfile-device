@@ -48,6 +48,10 @@ func (m *Mediator) Stop() {
 func (m *Mediator) handleDBusSignal(
 	ctx context.Context,
 	payload DBusPayload) ([]interface{}, error) {
+	if payload.Member.IsACK() {
+		return nil, nil
+	}
+
 	m.logger.Info(
 		"Handle DBus signal",
 		zap.String("interface", payload.Interface),
