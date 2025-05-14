@@ -44,7 +44,7 @@ func (m *Mediator) handleDBusSignal(
 	ctx context.Context,
 	payload DBusPayload) ([]interface{}, error) {
 	m.logger.Info(
-		"Received DBus signal",
+		"Handle DBus signal",
 		zap.String("interface", payload.Interface),
 		zap.String("path", string(payload.Path)),
 		zap.String("member", payload.Member.String()),
@@ -67,6 +67,20 @@ func (m *Mediator) handleDBusSignal(
 
 		// Send the locationID and topicID to the setupd
 		relayer := GetState().Relayer
+		err = m.dbus.RetryableSend(ctx, DBusPayload{
+			Interface: DBUS_INTERFACE,
+			Path:      DBUS_PATH,
+			Member:    EVENT_CONNECTD_RELAYER_CONFIGURED,
+			Body: []interface{}{
+				relayer.LocationID,
+				relayer.TopicID,
+			},
+		})
+		if err != nil {
+			m.logger.Error("Failed to send DBus signal", zap.Error(err), zap.String("interface", DBUS_INTERFACE), zap.String("path", DBUS_PATH), zap.String("member", EVENT_CONNECTD_RELAYER_CONFIGURED.String()))
+			return nil, err
+		}
+
 		return []interface{}{
 			relayer.LocationID,
 			relayer.TopicID,

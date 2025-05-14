@@ -123,7 +123,7 @@ func (c *DBusClient) background() {
 					continue
 				}
 
-				c.logger.Info("Received signal", zap.String("interface", sig.Name))
+				c.logger.Info("Received DBus signal", zap.Any("signal", sig))
 				if err := c.handleSignalRecv(sig); err != nil {
 					c.logger.Error("Failed to handle signal", zap.Error(err))
 				}
@@ -176,6 +176,12 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 		return nil
 	}
 
+	// Send ACK
+	err := c.SendACK(payload)
+	if err != nil {
+		c.logger.Warn("Failed to send ACK", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
+	}
+
 	for _, handler := range c.busSignalHandlers {
 		p := payload
 		h := handler
@@ -183,17 +189,10 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 		// Run the handler in a separate goroutine to avoid blocking the main thread
 		go func(ctx context.Context, payload DBusPayload, handler BusSignalHandler) error {
 			// Handle signal
-			result, err := handler(ctx, payload)
+			_, err := handler(ctx, payload)
 			if err != nil {
 				c.logger.Warn("Failed to handle signal", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
-				return nil
-			}
-
-			// Send ACK with handler result
-			p.Body = result
-			err = c.ACK(p)
-			if err != nil {
-				c.logger.Warn("Failed to send ACK", zap.String("interface", iface), zap.String("path", string(sig.Path)), zap.String("member", member.String()), zap.Error(err))
+				return err
 			}
 
 			return nil
@@ -203,12 +202,12 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 	return nil
 }
 
-func (c *DBusClient) ACK(payload DBusPayload) error {
+func (c *DBusClient) SendACK(payload DBusPayload) error {
 	return c.Send(DBusPayload{
 		Interface: payload.Interface,
 		Path:      payload.Path,
 		Member:    payload.Member.ACK(),
-		Body:      payload.Body,
+		Body:      nil,
 	})
 }
 
