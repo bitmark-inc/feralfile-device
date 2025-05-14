@@ -12,51 +12,54 @@ use cdp::CDP;
 use std::error::Error;
 use std::sync::Arc;
 use tokio::signal;
-
+use tokio::task;
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize dependencies
     let chrome = Arc::new(CDP::connect(constant::CDP_URL).await?);
-    let c = Arc::new(Cache::new(constant::CACHE_FILEPATH));
+    let app_cache = Arc::new(Cache::new(constant::CACHE_FILEPATH));
     let ble = BLE::new();
 
-    // Set up wifi connected callback
-    {
-        let cache_cb = c.clone();
+    // Create wifi connected callback
+    let connect_wifi_cb: ble::ConnectWifiCallback = {
+        let cache_cb = app_cache.clone();
         let chrome_cb = chrome.clone();
-        ble.on_wifi_connected(Box::new(move |topic_id: &str, location_id: &str| {
-            use futures::executor::block_on;
+        Some(Box::new(move |topic_id: &str, location_id: &str| {
             cache_cb.set(cache::TOPIC_ID, topic_id);
             cache_cb.set(cache::LOCATION_ID, location_id);
             cache_cb.save(constant::CACHE_FILEPATH);
-            if let Err(e) = block_on(chrome_cb.navigate(constant::DAILY_URL)) {
-                println!("Error navigating to daily: {}", e);
-            }
+            let chrome_cb = chrome_cb.clone();
+            task::spawn(async move {
+                match chrome_cb.navigate(constant::DAILY_URL).await {
+                    Ok(_) => println!("Navigated to daily"),
+                    Err(e) => println!("Error navigating to daily: {}", e),
+                };
+            });
         }))
-        .await;
-    }
+    };
 
-    // Set up get info callback
-    {
-        let cache_cb = c.clone();
-        ble.on_get_info(Box::new(move || {
+    // Create get info callback
+    let get_info_cb: ble::GetInfoCallback = {
+        let cache_cb = app_cache.clone();
+        Some(Box::new(move || {
             cache_cb
                 .get(cache::TOPIC_ID)
                 .map(|topic_id| vec![topic_id.to_string()])
                 .unwrap_or_default()
         }))
-        .await;
-    }
+    };
 
     // Startup flow
-    if c.get(cache::TOPIC_ID).is_some() {
+    if app_cache.get(cache::TOPIC_ID).is_some() {
         chrome.navigate(constant::DAILY_URL).await?;
     } else {
-        match ble.start().await {
+        match ble.start(connect_wifi_cb, get_info_cb).await {
             Ok(_) => {
+                println!("BLE started");
                 let device_id = ble.get_device_id().await;
                 let qrcode_url = format!("{}{}", constant::QRCODE_URL_PREFIX, device_id);
                 chrome.navigate(&qrcode_url).await?;
+                println!("Navigated to {}", qrcode_url);
             }
             Err(e) => {
                 println!("Error starting BLE: {}", e);

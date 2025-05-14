@@ -26,8 +26,8 @@ use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-type ConnectWifiCallback = Option<Box<dyn Fn(&str, &str) + Send + Sync>>;
-type GetInfoCallback = Option<Box<dyn Fn() -> Vec<String> + Send + Sync>>;
+pub type ConnectWifiCallback = Option<Box<dyn Fn(&str, &str) + Send + Sync>>;
+pub type GetInfoCallback = Option<Box<dyn Fn() -> Vec<String> + Send + Sync>>;
 
 #[derive(Default)]
 struct BLEState {
@@ -35,8 +35,6 @@ struct BLEState {
     advertised: bool,
     adv_handle: Option<AdvertisementHandle>,
     app_handle: Option<ApplicationHandle>,
-    connect_wifi_cb: Arc<ConnectWifiCallback>,
-    get_info_cb: Arc<GetInfoCallback>,
 }
 
 pub struct BLE {
@@ -54,7 +52,11 @@ impl BLE {
         }
     }
 
-    pub async fn start(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn start(
+        &self,
+        connect_wifi_cb: ConnectWifiCallback,
+        get_info_cb: GetInfoCallback,
+    ) -> Result<(), Box<dyn Error>> {
         let mut st = self.state.lock().await;
         if st.advertised {
             return Ok(());
@@ -80,10 +82,9 @@ impl BLE {
         let svc = Service {
             uuid: constant::SERVICE_UUID,
             primary: true,
-            characteristics: vec![self.create_cmd_char().await],
+            characteristics: vec![self.create_cmd_char(connect_wifi_cb, get_info_cb).await],
             ..Default::default()
         };
-
         let app = Application {
             services: vec![svc],
             ..Default::default()
@@ -114,27 +115,18 @@ impl BLE {
         st.device_id.clone()
     }
 
-    pub async fn on_wifi_connected(&self, cb: Box<dyn Fn(&str, &str) + Send + Sync>) {
-        let mut st = self.state.lock().await;
-        st.connect_wifi_cb = Arc::new(Some(cb));
-    }
-
-    pub async fn on_get_info(&self, cb: Box<dyn Fn() -> Vec<String> + Send + Sync>) {
-        let mut st = self.state.lock().await;
-        st.get_info_cb = Arc::new(Some(cb));
-    }
-
-    async fn create_cmd_char(&self) -> Characteristic {
+    async fn create_cmd_char(
+        &self,
+        connect_wifi_cb: ConnectWifiCallback,
+        get_info_cb: GetInfoCallback,
+    ) -> Characteristic {
         // Shared storage for the notifier handle
         let notifier: Arc<Mutex<Option<CharacteristicNotifier>>> = Arc::new(Mutex::new(None));
-        // Clone for the write and notify closures
         let notifier_for_write = notifier.clone();
         let notifier_for_notify = notifier.clone();
 
-        let (connect_wifi_callback, get_info_callback) = {
-            let st = self.state.lock().await;
-            (st.connect_wifi_cb.clone(), st.get_info_cb.clone())
-        };
+        let connect_wifi_callback = Arc::new(connect_wifi_cb);
+        let get_info_callback = Arc::new(get_info_cb);
 
         Characteristic {
             uuid: constant::CMD_CHAR_UUID,
@@ -258,20 +250,25 @@ async fn handle_connect_wifi(
     let pass = &params[1];
 
     // Attempt connection; just log on failure
-    if let Err(e) = wifi_utils::connect(ssid, pass) {
-        eprintln!("Failed to connect to wifi \"{}\": {}", ssid, e);
-        return Ok(());
+    if cfg!(debug_assertions) {
+        println!("Skipping wifi connection in debug mode");
+        println!("Connecting to wifi \"{}\" with password \"{}\"", ssid, pass);
+    } else {
+        if let Err(e) = wifi_utils::connect(ssid, pass) {
+            eprintln!("Failed to connect to wifi \"{}\": {}", ssid, e);
+            return Ok(());
+        }
     }
 
     let relayer_info = match get_relayer_info() {
         Ok(info) => info,
         Err(e) => {
-            eprintln!("Replay‑server confirmation failed: {}", e);
+            eprintln!("Relay‑server confirmation failed: {}", e);
             return Ok(());
         }
     };
     println!(
-        "Replay‑server topic: {}, port: {}",
+        "Relay‑server topic: {}, location: {}",
         relayer_info[0], relayer_info[1]
     );
 
@@ -337,7 +334,7 @@ fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error>> {
         constant::DBUS_EVENT_WIFI_CONNECTED,
         "", // empty payload
     )?;
-    println!("Waiting for replay server topic");
+    println!("Waiting for relayer topic");
     let payload = dbus_utils::receive(
         constant::DBUS_CONNECTD_OBJECT,
         constant::DBUS_CONNECTD_INTERFACE,

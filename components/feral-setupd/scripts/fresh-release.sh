@@ -1,0 +1,1 @@
+rm -f ~/.state/setupd && clear && cargo run --release
