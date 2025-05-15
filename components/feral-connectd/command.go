@@ -59,8 +59,6 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 
 	var result interface{}
 	switch cmd.Command {
-	case RELAYER_CMD_CHECK_STATUS:
-		result, err = c.checkStatus()
 	case RELAYER_CMD_CONNECT:
 		result, err = c.connect(bytes)
 	case RELAYER_CMD_SHOW_PAIRING_QR_CODE:
@@ -70,26 +68,6 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 	}
 
 	return result, err
-}
-
-func (c *CommandHandler) checkStatus() (interface{}, error) {
-	type CheckStatusResp struct {
-		Device   *Device                `json:"device"`
-		Command  *Command               `json:"lastCDPCmd"`
-		CDPState map[string]interface{} `json:"cdpState"`
-	}
-
-	return &struct {
-		OK    bool             `json:"ok"`
-		State *CheckStatusResp `json:"state"`
-	}{
-		OK: true,
-		State: &CheckStatusResp{
-			Device:   GetState().ConnectedDevice,
-			Command:  c.lastCDPCmd,
-			CDPState: nil, // TODO: implement later after the prototype is done
-		},
-	}, nil
 }
 
 func (c *CommandHandler) connect(args []byte) (interface{}, error) {

@@ -24,13 +24,12 @@ const (
 type RelayerCmd string
 
 const (
-	RELAYER_CMD_CHECK_STATUS         RelayerCmd = "checkStatus"
 	RELAYER_CMD_CONNECT              RelayerCmd = "connect"
 	RELAYER_CMD_SHOW_PAIRING_QR_CODE RelayerCmd = "showPairingQRCode"
 )
 
 func (c RelayerCmd) CDPCmd() bool {
-	return c != RELAYER_CMD_CHECK_STATUS && c != RELAYER_CMD_CONNECT && c != RELAYER_CMD_SHOW_PAIRING_QR_CODE
+	return c != RELAYER_CMD_CONNECT && c != RELAYER_CMD_SHOW_PAIRING_QR_CODE
 }
 
 type RelayerPayload struct {
