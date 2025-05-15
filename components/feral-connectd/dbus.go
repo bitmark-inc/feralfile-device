@@ -70,6 +70,7 @@ type DBusClient struct {
 	doneChan          chan struct{}
 	logger            *zap.Logger
 	busSignalHandlers []BusSignalHandler
+	senderID          *string
 }
 
 func NewDBusClient(ctx context.Context, logger *zap.Logger, relayer *RelayerClient) *DBusClient {
@@ -152,7 +153,7 @@ func (c *DBusClient) RemoveBusSignal(f BusSignalHandler) {
 
 // handleSignalRecv handles a received signal that's not an ACK
 func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
-	if sig.Path == DBUS_PATH {
+	if c.senderID != nil && *c.senderID == sig.Sender {
 		c.logger.Info("Skip self-generated signal", zap.String("name", sig.Name), zap.String("path", string(sig.Path)), zap.String("member", sig.Name))
 		return nil
 	}
@@ -173,6 +174,14 @@ func (c *DBusClient) handleSignalRecv(sig *dbus.Signal) error {
 
 	// Skip system name acquired signals
 	if payload.IsSystemNameAcquired() {
+		if len(sig.Body) == 0 {
+			return fmt.Errorf("system name acquired signal has no body")
+		}
+		senderID, ok := sig.Body[0].(string)
+		if !ok {
+			return fmt.Errorf("system name acquired signal body doesn't contain a sender ID string")
+		}
+		c.senderID = &senderID
 		return nil
 	}
 
