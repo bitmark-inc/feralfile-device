@@ -3,7 +3,7 @@ Description=FeralFile Log Rotation Service
 After=network.target
 
 [Service]
-Type=oneshot
+Type=simple
 ExecStart=/home/feralfile/scripts/log-rotation.sh
 StandardOutput=append:/home/feralfile/.logs/log-rotation.log
 StandardError=append:/home/feralfile/.logs/log-rotation.log

@@ -10,6 +10,3 @@ StandardOutput=append:/home/feralfile/.logs/timesyncd.log
 StandardError=append:/home/feralfile/.logs/timesyncd.log
 Restart=on-failure
 RestartSec=10
-
-[Install]
-WantedBy=multi-user.target 
