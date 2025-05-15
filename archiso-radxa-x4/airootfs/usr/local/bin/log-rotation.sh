@@ -17,6 +17,8 @@ if [ ! -f "$LOG_CONFIG_FILE" ]; then
 # One entry per line, use | as separator
 /home/feralfile/.logs/chrome_debug.log|/home/feralfile/.logs/backup/chromium
 /home/feralfile/.logs/connectd.log|/home/feralfile/.logs/backup/connectd
+/home/feralfile/.logs/setupd.log|/home/feralfile/.logs/backup/setupd
+/home/feralfile/.logs/timesyncd.log|/home/feralfile/.logs/backup/timesyncd
 # Add more logs as needed
 EOL
 fi
