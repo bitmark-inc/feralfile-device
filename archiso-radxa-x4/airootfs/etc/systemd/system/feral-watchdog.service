@@ -1,0 +1,18 @@
+[Unit]
+Description=FeralFile Kiosk Watchdog Daemon
+After=chromium-kiosk.service network.target
+Requires=chromium-kiosk.service
+Wants=network.target
+ExecStartPre=/bin/sh -c 'while ! curl -s http://localhost:9222/json/version >/dev/null; do sleep 0.5; done'
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/feral-watchdog
+Restart=always
+RestartSec=5s
+WatchdogSec=30s
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
