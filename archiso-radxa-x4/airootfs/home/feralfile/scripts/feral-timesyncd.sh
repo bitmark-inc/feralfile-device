@@ -98,21 +98,14 @@ set_manual_time() {
     fi
 }
 
-# Main service loop
-main_loop() {
-    while true; do
-        if check_network; then
-            echo "Network is available. Attempting NTP sync."
-            sync_ntp
-        else
-            echo "Network is unavailable. Skipping NTP sync."
-            echo "ntp_synced=false" > "$STATUS_FILE"
-        fi
-        
-        # Sleep for 1 hour before checking again
-        sleep 3600
-    done
-}
+# Remove the main_loop function and replace with a single execution
+if check_network; then
+    echo "Network is available. Attempting NTP sync."
+    sync_ntp
+else
+    echo "Network is unavailable. Skipping NTP sync."
+    echo "ntp_synced=false" > "$STATUS_FILE"
+fi
 
 # Handle service commands
 case "$1" in
