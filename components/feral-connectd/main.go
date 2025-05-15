@@ -13,7 +13,7 @@ import (
 const (
 	WATCHDOG_INTERVAL = 15 * time.Second
 	SHUTDOWN_TIMEOUT  = 2 * time.Second
-	DEBUG             = true
+	DEBUG             = false
 )
 
 func main() {
