@@ -12,6 +12,7 @@ type Mediator struct {
 	dbus         *DBusClient
 	cdp          *CDPClient
 	cmd          *CommandHandler
+	profiler     *Profiler
 	logger       *zap.Logger
 	connectivity *Connectivity
 }
@@ -22,6 +23,7 @@ func NewMediator(
 	cdp *CDPClient,
 	cmd *CommandHandler,
 	connectivity *Connectivity,
+	profiler *Profiler,
 	logger *zap.Logger) *Mediator {
 	return &Mediator{
 		relayer:      relayer,
@@ -29,6 +31,7 @@ func NewMediator(
 		cdp:          cdp,
 		cmd:          cmd,
 		connectivity: connectivity,
+		profiler:     profiler,
 		logger:       logger,
 	}
 }
@@ -37,12 +40,14 @@ func (m *Mediator) Start() {
 	m.dbus.OnBusSignal(m.handleDBusSignal)
 	m.relayer.OnRelayerMessage(m.handleRelayerMessage)
 	m.connectivity.OnConnectivityChange(m.handleConnectivityChange)
+	m.profiler.OnProfile(m.handleProfile)
 }
 
 func (m *Mediator) Stop() {
-	m.dbus.RemoveBusSignal(m.handleDBusSignal)
-	m.relayer.RemoveRelayerMessage(m.handleRelayerMessage)
+	m.profiler.RemoveProfileHandler(m.handleProfile)
 	m.connectivity.RemoveConnectivityChange(m.handleConnectivityChange)
+	m.relayer.RemoveRelayerMessage(m.handleRelayerMessage)
+	m.dbus.RemoveBusSignal(m.handleDBusSignal)
 }
 
 func (m *Mediator) handleDBusSignal(
@@ -189,4 +194,8 @@ func (m *Mediator) handleConnectivityChange(ctx context.Context, connected bool)
 			panic(err)
 		}
 	}
+}
+
+func (m *Mediator) handleProfile(profile *Profile) {
+	// TODO broadcast dbus signal
 }

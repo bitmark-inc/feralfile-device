@@ -26,10 +26,11 @@ type RelayerCmd string
 const (
 	RELAYER_CMD_CONNECT              RelayerCmd = "connect"
 	RELAYER_CMD_SHOW_PAIRING_QR_CODE RelayerCmd = "showPairingQRCode"
+	RELAYER_CMD_PROFILE              RelayerCmd = "deviceMetrics"
 )
 
 func (c RelayerCmd) CDPCmd() bool {
-	return c != RELAYER_CMD_CONNECT && c != RELAYER_CMD_SHOW_PAIRING_QR_CODE
+	return c != RELAYER_CMD_CONNECT && c != RELAYER_CMD_SHOW_PAIRING_QR_CODE && c != RELAYER_CMD_PROFILE
 }
 
 type RelayerPayload struct {

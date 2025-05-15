@@ -26,18 +26,20 @@ type Device struct {
 }
 
 type CommandHandler struct {
-	cdp    *CDPClient
-	dbus   *DBusClient
-	logger *zap.Logger
+	cdp      *CDPClient
+	dbus     *DBusClient
+	profiler *Profiler
+	logger   *zap.Logger
 
 	lastCDPCmd *Command
 }
 
-func NewCommandHandler(cdp *CDPClient, dbus *DBusClient, logger *zap.Logger) *CommandHandler {
+func NewCommandHandler(cdp *CDPClient, dbus *DBusClient, profiler *Profiler, logger *zap.Logger) *CommandHandler {
 	return &CommandHandler{
-		cdp:    cdp,
-		dbus:   dbus,
-		logger: logger,
+		cdp:      cdp,
+		dbus:     dbus,
+		profiler: profiler,
+		logger:   logger,
 	}
 }
 
@@ -63,6 +65,8 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 		result, err = c.connect(bytes)
 	case RELAYER_CMD_SHOW_PAIRING_QR_CODE:
 		result, err = c.showPairingQRCode(ctx, bytes)
+	case RELAYER_CMD_PROFILE:
+		result = c.profiler.LastProfile()
 	default:
 		return nil, fmt.Errorf("invalid command: %s", cmd)
 	}
