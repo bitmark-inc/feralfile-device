@@ -133,7 +133,7 @@ func GetState() *State {
 
 func GetStateFile() string {
 	fp := STATE_FILE
-	if DEBUG {
+	if debug {
 		fp = DEBUG_STATE_FILE
 	}
 	return fp

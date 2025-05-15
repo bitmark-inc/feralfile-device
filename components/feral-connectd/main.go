@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,12 +14,17 @@ import (
 const (
 	WATCHDOG_INTERVAL = 15 * time.Second
 	SHUTDOWN_TIMEOUT  = 2 * time.Second
-	DEBUG             = false
 )
 
+var debug = false
+
 func main() {
+	// Read from options
+	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
+	flag.Parse()
+
 	// Initialize logger with debug enabled for development
-	logger, err := New(DEBUG)
+	logger, err := New(debug)
 	if err != nil {
 		panic("Failed to initialize logger: " + err.Error())
 	}
@@ -82,13 +88,11 @@ func main() {
 
 	// Initialize DBus client
 	dbusClient := NewDBusClient(ctx, logger, relayerClient)
-	if !DEBUG {
-		err = dbusClient.Start()
-		if err != nil {
-			logger.Fatal("DBus init failed", zap.Error(err))
-		}
-		defer dbusClient.Stop()
+	err = dbusClient.Start()
+	if err != nil {
+		logger.Fatal("DBus init failed", zap.Error(err))
 	}
+	defer dbusClient.Stop()
 
 	// Initialize Connectivity
 	connectivity := NewConnectivity(ctx, logger)

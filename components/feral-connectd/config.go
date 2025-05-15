@@ -66,7 +66,7 @@ func GetConfig() *Config {
 
 func GetConfigFile() string {
 	fp := CONFIG_FILE
-	if DEBUG {
+	if debug {
 		fp = DEBUG_CONFIG_FILE
 	}
 	return fp
