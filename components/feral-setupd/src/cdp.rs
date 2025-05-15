@@ -51,7 +51,7 @@ impl CDP {
 
     /// Asynchronously navigate the page to the given URL via CDP.
     pub async fn navigate(&self, url: &str) -> Result<(), Box<dyn Error>> {
-        println!("Navigating to {}", url);
+        println!("CDP: Navigating to {}", url);
         self.send_cmd("Page.navigate", json!({ "url": url }))
             .await?;
         Ok(())
@@ -83,6 +83,7 @@ impl CDP {
                         if let Some(evt) = resp.get("method").and_then(|v| v.as_str()) {
                             match evt {
                                 "Page.loadEventFired" | "Page.frameStoppedLoading" => {
+                                    println!("CDP: Response for page navigation: {}", evt);
                                     return Ok(resp.get("result").cloned().unwrap_or(Value::Null));
                                 }
                                 _ => {}

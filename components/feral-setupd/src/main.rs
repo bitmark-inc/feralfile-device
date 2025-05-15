@@ -11,67 +11,94 @@ use cache::Cache;
 use cdp::CDP;
 use std::error::Error;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::signal;
 use tokio::task;
-#[tokio::main(flavor = "current_thread")]
+
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize dependencies
     let chrome = Arc::new(CDP::connect(constant::CDP_URL).await?);
     let app_cache = Arc::new(Cache::new(constant::CACHE_FILEPATH));
-    let ble = BLE::new();
+    let ble_service = Arc::new(BLE::new());
 
-    // Create wifi connected callback
-    let connect_wifi_cb: ble::ConnectWifiCallback = {
-        let cache_cb = app_cache.clone();
-        let chrome_cb = chrome.clone();
-        Some(Box::new(move |topic_id: &str, location_id: &str| {
-            cache_cb.set(cache::TOPIC_ID, topic_id);
-            cache_cb.set(cache::LOCATION_ID, location_id);
-            cache_cb.save(constant::CACHE_FILEPATH);
-            let chrome_cb = chrome_cb.clone();
-            task::spawn(async move {
-                match chrome_cb.navigate(constant::DAILY_URL).await {
-                    Ok(_) => println!("Navigated to daily"),
-                    Err(e) => println!("Error navigating to daily: {}", e),
-                };
-            });
-        }))
-    };
-
-    // Create get info callback
-    let get_info_cb: ble::GetInfoCallback = {
-        let cache_cb = app_cache.clone();
-        Some(Box::new(move || {
-            cache_cb
-                .get(cache::TOPIC_ID)
-                .map(|topic_id| vec![topic_id.to_string()])
-                .unwrap_or_default()
-        }))
-    };
-
-    // Startup flow
-    if app_cache.get(cache::TOPIC_ID).is_some() {
-        chrome.navigate(constant::DAILY_URL).await?;
-    } else {
-        match ble.start(connect_wifi_cb, get_info_cb).await {
-            Ok(_) => {
-                println!("BLE started");
-                let device_id = ble.get_device_id().await;
-                let qrcode_url = format!("{}{}", constant::QRCODE_URL_PREFIX, device_id);
-                chrome.navigate(&qrcode_url).await?;
-                println!("Navigated to {}", qrcode_url);
-            }
-            Err(e) => {
-                println!("Error starting BLE: {}", e);
-                return Err(e);
-            }
+    // Start bluetooth advertising with callbacks
+    let connect_wifi_cb = create_wifi_connected_cb(app_cache.clone(), chrome.clone());
+    let get_info_cb = create_get_info_cb(app_cache.clone());
+    match ble_service.start(connect_wifi_cb, get_info_cb).await {
+        Ok(_) => println!("MAIN: Bluetooth advertising started successfully"),
+        Err(e) => {
+            println!("MAIN: Error starting Bluetooth advertising: {}", e);
+            return Err(e);
         }
     }
 
-    // TODO: Should listen for events to switch between QR code and daily
+    // Startup flow:
+    // Show daily if we have internet & a topic id
+    // Show QR code if we don't have either
+    if app_cache.get(cache::TOPIC_ID).is_some() {
+        match chrome.navigate(constant::DAILY_URL).await {
+            Ok(_) => println!("MAIN: Navigated to {}", constant::DAILY_URL),
+            Err(e) => println!("MAIN: Error navigating to daily: {}", e),
+        };
+    } else {
+        let device_id = ble_service.get_device_id().await;
+        let qrcode_url = format!("{}{}", constant::QRCODE_URL_PREFIX, device_id);
+        match chrome.navigate(&qrcode_url).await {
+            Ok(_) => println!("MAIN: Navigated to {}", qrcode_url),
+            Err(e) => println!("MAIN: Error navigating to qrcode: {}", e),
+        };
+    }
+
+    let qrcode_switch_cb = create_qrcode_switch_cb(chrome.clone());
+    let stop_dbus_listener = Arc::new(AtomicBool::new(false));
+    dbus_utils::listen(
+        constant::DBUS_CONNECTD_OBJECT,
+        constant::DBUS_CONNECTD_INTERFACE,
+        constant::DBUS_EVENT_QRCODE_SWITCH,
+        stop_dbus_listener.clone(),
+        qrcode_switch_cb,
+    );
 
     // Wait for Ctrl+C or shutdown event
     signal::ctrl_c().await?; // for a grateful exit (drop the adv handle)
-    ble.stop().await?;
+    stop_dbus_listener.store(true, Ordering::Relaxed);
+    ble_service.stop().await?;
     Ok(())
+}
+
+fn create_wifi_connected_cb(app_cache: Arc<Cache>, chromium: Arc<CDP>) -> ble::ConnectWifiCallback {
+    Some(Box::new(move |topic_id: &str, location_id: &str| {
+        app_cache.set(cache::TOPIC_ID, topic_id);
+        app_cache.set(cache::LOCATION_ID, location_id);
+        app_cache.save(constant::CACHE_FILEPATH);
+        let chromium = chromium.clone();
+        task::spawn(async move {
+            match chromium.navigate(constant::DAILY_URL).await {
+                Ok(_) => println!("MAIN: Navigated to daily"),
+                Err(e) => println!("MAIN: Error navigating to daily: {}", e),
+            };
+        });
+    }))
+}
+
+fn create_get_info_cb(app_cache: Arc<Cache>) -> ble::GetInfoCallback {
+    Some(Box::new(move || {
+        app_cache
+            .get(cache::TOPIC_ID)
+            .map(|topic_id| vec![topic_id.to_string()])
+            .unwrap_or_default()
+    }))
+}
+
+fn create_qrcode_switch_cb(chromium: Arc<CDP>) -> dbus_utils::ListenCallback {
+    Box::new(move |_payloads| {
+        let chromium = chromium.clone();
+        task::spawn(async move {
+            match chromium.navigate(constant::DAILY_URL).await {
+                Ok(_) => println!("MAIN: Navigated to daily"),
+                Err(e) => println!("MAIN: Error navigating to daily: {}", e),
+            };
+        });
+    })
 }

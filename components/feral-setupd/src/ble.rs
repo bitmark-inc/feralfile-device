@@ -25,6 +25,7 @@ use futures_util::future::FutureExt;
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::task;
 
 pub type ConnectWifiCallback = Option<Box<dyn Fn(&str, &str) + Send + Sync>>;
 pub type GetInfoCallback = Option<Box<dyn Fn() -> Vec<String> + Send + Sync>>;
@@ -66,7 +67,11 @@ impl BLE {
         let session = Session::new().await?;
         let adapter = session.default_adapter().await?;
         adapter.set_powered(true).await?;
-        println!("Adapter {} powered on for {}", adapter.name(), st.device_id);
+        println!(
+            "BLE: Adapter {} powered on for {}",
+            adapter.name(),
+            st.device_id
+        );
 
         // Start advertising our service UUID
         let adv = Advertisement {
@@ -76,7 +81,7 @@ impl BLE {
             ..Default::default()
         };
         st.adv_handle = Some(adapter.advertise(adv).await?);
-        println!("Advertising GATT service {}", constant::SERVICE_UUID);
+        println!("BLE: Advertising GATT service {}", constant::SERVICE_UUID);
 
         // Group into a GATT service and register it
         let svc = Service {
@@ -90,7 +95,7 @@ impl BLE {
             ..Default::default()
         };
         st.app_handle = Some(adapter.serve_gatt_application(app).await?);
-        println!("GATT app registered; awaiting writes…");
+        println!("BLE: GATT app registered; awaiting writes…");
 
         st.advertised = true;
         Ok(())
@@ -147,7 +152,7 @@ impl BLE {
                 write: true,
                 write_without_response: false,
                 method: CharacteristicWriteMethod::Fun(Box::new(move |data, _req| {
-                    println!("Received bluetooth data {:?}", data);
+                    println!("BLE: Received bluetooth data {:?}", data);
                     let notifier = notifier_for_write.clone();
                     let connect_wifi_callback = connect_wifi_callback.clone();
                     let get_info_callback = get_info_callback.clone();
@@ -155,17 +160,17 @@ impl BLE {
                         let payload = encoding::parse_payload(&data);
                         // No values, or malformed payload
                         if payload.is_none() {
-                            eprintln!("Received malformed payload");
+                            eprintln!("BLE: Received malformed payload");
                             return Ok::<(), ReqError>(());
                         }
                         let vals = payload.unwrap();
                         // Not enough values, or malformed payload
                         if vals.len() < 2 {
-                            eprintln!("Received payload with only {} values", vals.len());
+                            eprintln!("BLE: Received payload with only {} values", vals.len());
                             return Ok::<(), ReqError>(());
                         }
                         // Enough values, parse command
-                        println!("Payload: {:?}", vals);
+                        println!("BLE: Payload: {:?}", vals);
                         let cmd = vals[0].clone();
                         let reply_id = vals[1].clone();
                         let params = vals[2..].to_vec();
@@ -184,7 +189,7 @@ impl BLE {
                                 handle_get_info(notifier, reply_id, get_info_callback).await
                             }
                             _ => {
-                                eprintln!("Unknown command: {}", cmd);
+                                eprintln!("BLE: Unknown command: {}", cmd);
                                 Ok::<(), ReqError>(())
                             }
                         }
@@ -206,17 +211,17 @@ async fn handle_scan_wifi(
     let ssids = match wifi_utils::list_ssids() {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("Failed to scan wifi: {}", e);
+            eprintln!("BLE: Failed to scan wifi: {}", e);
             return Ok(());
         }
     };
-    println!("Found SSIDs \n{:?}", ssids);
+    println!("BLE: Found SSIDs \n{:?}", ssids);
 
     // Build BLE reply payload
     let mut reply = Vec::with_capacity(ssids.len() + 1);
     reply.push(reply_id.clone());
     reply.extend(ssids);
-    println!("Reply: {:?}", reply);
+    println!("BLE: Reply: {:?}", reply);
     let payload = encoding::encode_payload(&reply);
 
     // Notify the central (if notifier is already registered)
@@ -225,11 +230,11 @@ async fn handle_scan_wifi(
         match notifier.notify(payload).await {
             Ok(_) => (),
             Err(e) => {
-                eprintln!("Failed to notify central after scanning wifi: {}", e);
+                eprintln!("BLE: Failed to notify central after scanning wifi: {}", e);
             }
         }
     } else {
-        eprintln!("Notifier not yet available; skipping reply");
+        eprintln!("BLE: Notifier not yet available; skipping reply");
     }
     Ok(())
 }
@@ -242,7 +247,10 @@ async fn handle_connect_wifi(
 ) -> Result<(), ReqError> {
     // Expect at least SSID and password
     if params.len() < 2 {
-        eprintln!("Received wifi payload with only {} values", params.len());
+        eprintln!(
+            "BLE: Received wifi payload with only {} values",
+            params.len()
+        );
         return Ok(());
     }
 
@@ -251,24 +259,27 @@ async fn handle_connect_wifi(
 
     // Attempt connection; just log on failure
     if cfg!(debug_assertions) {
-        println!("Skipping wifi connection in debug mode");
-        println!("Connecting to wifi \"{}\" with password \"{}\"", ssid, pass);
+        println!("BLE: Skipping wifi connection in debug mode");
+        println!(
+            "BLE: Connecting to wifi \"{}\" with password \"{}\"",
+            ssid, pass
+        );
     } else {
         if let Err(e) = wifi_utils::connect(ssid, pass) {
-            eprintln!("Failed to connect to wifi \"{}\": {}", ssid, e);
+            eprintln!("BLE: Failed to connect to wifi \"{}\": {}", ssid, e);
             return Ok(());
         }
     }
 
-    let relayer_info = match get_relayer_info() {
+    let relayer_info = match get_relayer_info().await {
         Ok(info) => info,
         Err(e) => {
-            eprintln!("Relay‑server confirmation failed: {}", e);
+            eprintln!("BLE: Relay‑server confirmation failed: {}", e);
             return Ok(());
         }
     };
     println!(
-        "Relay‑server topic: {}, location: {}",
+        "BLE: Relay‑server topic: {}, location: {}",
         relayer_info[0], relayer_info[1]
     );
 
@@ -287,11 +298,14 @@ async fn handle_connect_wifi(
         match notifier.notify(payload).await {
             Ok(_) => (),
             Err(e) => {
-                eprintln!("Failed to notify central after connecting to wifi: {}", e);
+                eprintln!(
+                    "BLE: Failed to notify central after connecting to wifi: {}",
+                    e
+                );
             }
         }
     } else {
-        eprintln!("Notifier not yet available; skipping reply");
+        eprintln!("BLE: Notifier not yet available; skipping reply");
     }
 
     Ok(())
@@ -317,31 +331,35 @@ async fn handle_get_info(
         match notifier.notify(payload).await {
             Ok(_) => (),
             Err(e) => {
-                eprintln!("Failed to notify central after getting info: {}", e);
+                eprintln!("BLE: Failed to notify central after getting info: {}", e);
             }
         }
     } else {
-        eprintln!("Notifier not yet available; skipping reply");
+        eprintln!("BLE: Notifier not yet available; skipping reply");
     }
     Ok(())
 }
 
-fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error>> {
-    println!("Sending wifi connected event");
-    dbus_utils::send(
-        constant::DBUS_SETUPD_OBJECT,
-        constant::DBUS_SETUPD_INTERFACE,
-        constant::DBUS_EVENT_WIFI_CONNECTED,
-        "", // empty payload
-    )?;
-    println!("Waiting for relayer topic");
-    let payload = dbus_utils::receive(
-        constant::DBUS_CONNECTD_OBJECT,
-        constant::DBUS_CONNECTD_INTERFACE,
-        constant::DBUS_EVENT_RELAYER_CONFIGURED,
-        constant::DBUS_CONNECTD_TIMEOUT,
-    )?;
-    println!("Received payload: {:?}", payload);
+async fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    println!("BLE: Sending wifi connected event");
+    task::spawn_blocking(|| {
+        dbus_utils::send(
+            constant::DBUS_SETUPD_OBJECT,
+            constant::DBUS_SETUPD_INTERFACE,
+            constant::DBUS_EVENT_WIFI_CONNECTED,
+            "", // empty payload
+        )
+    })
+    .await??;
 
-    Ok(payload)
+    println!("BLE: Waiting for relayer topic");
+    task::spawn_blocking(|| {
+        dbus_utils::receive(
+            constant::DBUS_CONNECTD_OBJECT,
+            constant::DBUS_CONNECTD_INTERFACE,
+            constant::DBUS_EVENT_RELAYER_CONFIGURED,
+            constant::DBUS_CONNECTD_TIMEOUT,
+        )
+    })
+    .await?
 }

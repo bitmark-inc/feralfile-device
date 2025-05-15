@@ -2,9 +2,13 @@ use dbus::blocking::Connection;
 use dbus::channel::Sender;
 use dbus::message::Message;
 use std::error::Error;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::constant;
+
+pub type ListenCallback = Box<dyn Fn(Vec<String>) + Send + Sync>;
 
 /// Sends a signal and waits for an acknowledgement from the same object/interface
 /// whose member name is the original `member` plus `_ack`.
@@ -15,7 +19,7 @@ pub fn send(
     interface: &str,
     member: &str,
     payload: &str,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let conn = Connection::new_session()?;
 
     // Listen for the expected ack
@@ -79,7 +83,7 @@ pub fn receive(
     interface: &str,
     member: &str,
     timeout_ms: u64,
-) -> Result<Vec<String>, Box<dyn Error>> {
+) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
     let conn = Connection::new_session()?;
     let rule = format!(
         "type='signal',interface='{}',member='{}',path='{}'",
@@ -90,35 +94,99 @@ pub fn receive(
 
     let end_time = Instant::now() + Duration::from_millis(timeout_ms);
     while Instant::now() < end_time {
-        println!("DBUS: Waiting for '{}' signal", member);
-        let msg_opt = conn
-            .channel()
-            .blocking_pop_message(end_time - Instant::now())?;
-
-        println!("DBUS: Received signal: {:?}", msg_opt);
-        if let Some(msg) = msg_opt {
-            if let Some(path) = msg.path() {
-                if path.to_string() != object_path {
-                    println!("DBUS: Ignoring signal from wrong object: {}", path);
-                } else if let Ok((a, b)) = msg.read2::<String, String>() {
-                    // Send acknowledgement
-                    println!(
-                        "DBUS: Sending ack signal '{}_ack' to {}, {}",
-                        member, object_path, interface
-                    );
-                    if let Ok(mut ack_msg) =
-                        Message::new_signal(object_path, interface, &format!("{}_ack", member))
-                    {
-                        ack_msg = ack_msg.append1("");
-                        if conn.send(ack_msg).is_err() {
-                            eprintln!("DBUS: Failed to send ack signal '{}_ack'", member);
-                        }
-                    }
-                    return Ok(vec![a, b]);
-                }
-            }
+        let time_left = end_time - Instant::now();
+        if let Ok(payloads) = receive_internal(&conn, object_path, interface, member, time_left) {
+            return Ok(payloads);
         }
     }
 
     Err(format!("Timed out after {} ms waiting for '{}'", timeout_ms, member).into())
+}
+
+/// Waits up to `duration` milliseconds for a signal, immediately emits
+/// a `<member>_ack` signal back if received the right signal and returns
+/// the payload of the received message.
+/// If the signal doesn't match the expected object path or member, an error is returned.
+fn receive_internal(
+    conn: &Connection,
+    object_path: &str,
+    interface: &str,
+    member: &str,
+    duration: Duration,
+) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    let msg_opt = conn.channel().blocking_pop_message(duration)?;
+
+    let msg = msg_opt.ok_or(format!("DBUS: Do not receive any signal"))?;
+    let r_object_path = msg
+        .path()
+        .map(|p| p.to_string())
+        .ok_or(format!("DBUS: Received signal with no path: {:?}", msg))?;
+    let r_member = msg
+        .member()
+        .map(|m| m.to_string())
+        .ok_or(format!("DBUS: Received signal with no member: {:?}", msg))?;
+
+    if r_object_path != object_path {
+        return Err(format!(
+            "DBUS: Received signal from wrong object: {} (expected {})",
+            r_object_path, object_path
+        )
+        .into());
+    }
+    if r_member != member {
+        return Err(format!(
+            "DBUS: Received signal with wrong member: {} (expected {})",
+            r_member, member
+        )
+        .into());
+    }
+
+    let (a, b) = msg.read2::<String, String>()?;
+    // Send acknowledgement
+    println!(
+        "DBUS: Sending ack signal '{}_ack' to {}, {}",
+        member, object_path, interface
+    );
+    let mut ack_msg = Message::new_signal(object_path, interface, &format!("{}_ack", member))?;
+    ack_msg = ack_msg.append1("");
+    if conn.send(ack_msg).is_err() {
+        // Failed to send ack signal doesn't matter, just log an error
+        eprintln!("DBUS: Failed to send ack signal '{}_ack'", member);
+    }
+
+    Ok(vec![a, b])
+}
+
+pub fn listen(
+    object_path: &str,
+    interface: &str,
+    member: &str,
+    stop: Arc<AtomicBool>,
+    cb: ListenCallback,
+) {
+    let object_path = object_path.to_string();
+    let interface = interface.to_string();
+    let member = member.to_string();
+    std::thread::spawn(move || {
+        let conn = Connection::new_session().expect("DBUS: failed to create connection");
+        let rule = format!(
+            "type='signal',interface='{}',member='{}',path='{}'",
+            interface, member, object_path
+        );
+        conn.add_match_no_cb(&rule)
+            .expect("DBUS: failed to add match");
+
+        println!("DBUS: Listening for '{}' signal", member);
+        while !stop.load(Ordering::Relaxed) {
+            if let Ok(payloads) = receive_internal(
+                &conn,
+                &object_path,
+                &interface,
+                &member,
+                Duration::from_millis(constant::DBUS_LISTEN_WAKE_UP_INTERVAL),
+            ) {
+                cb(payloads);
+            }
+        }
+    });
 }
