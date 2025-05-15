@@ -3,8 +3,7 @@
 # FeralFile Time Synchronization Service
 # This script handles:
 # 1. NTP synchronization when online
-# 2. Setting timezone from external commands
-# 3. Manual time setting when offline
+# 2. Setting timezone and time manually when offline
 
 # Configuration
 NTP_CONF="/etc/systemd/timesyncd.conf"
@@ -52,14 +51,16 @@ sync_ntp() {
     return 1
 }
 
-# Function to set timezone
-set_timezone() {
-    if [ -z "$1" ]; then
-        echo "No timezone specified"
+# Function to set timezone and time
+set_time() {
+    # First parameter is timezone, second is time
+    if [ -z "$1" ] || [ -z "$2" ]; then
+        echo "Usage: set-time TIMEZONE 'YYYY-MM-DD HH:MM:SS'"
         return 1
     fi
     
     timezone="$1"
+    time_str="$2"
     
     # Verify timezone exists
     if [ ! -f "$ZONEINFO_PATH/$timezone" ]; then
@@ -70,20 +71,7 @@ set_timezone() {
     # Set timezone
     echo "$timezone" > "$TIMEZONE_FILE"
     ln -sf "$ZONEINFO_PATH/$timezone" "$LOCALTIME_LINK"
-    
     echo "Timezone set to $timezone"
-    return 0
-}
-
-# Function to set system time manually
-set_manual_time() {
-    # Format: YYYY-MM-DD HH:MM:SS
-    if [ -z "$1" ]; then
-        echo "No time specified"
-        return 1
-    fi
-    
-    time_str="$1"
     
     # Set system time
     if date -s "$time_str" >/dev/null 2>&1; then
@@ -98,7 +86,7 @@ set_manual_time() {
     fi
 }
 
-# Remove the main_loop function and replace with a single execution
+# Run NTP sync if network is available
 if check_network; then
     echo "Network is available. Attempting NTP sync."
     sync_ntp
@@ -109,16 +97,12 @@ fi
 
 # Handle service commands
 case "$1" in
-    "set-timezone")
-        set_timezone "$2"
-        exit $?
-        ;;
     "set-time")
-        set_manual_time "$2"
+        set_time "$2" "$3"
         exit $?
         ;;
     *)
-        # If no arguments, run the main service loop
-        main_loop
+        # Default behavior - already ran the NTP sync check above
+        exit 0
         ;;
 esac
