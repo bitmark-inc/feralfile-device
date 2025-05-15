@@ -17,7 +17,11 @@ ExecStart=/usr/bin/cage -- /usr/bin/chromium \
 --disable-features=TranslateUI \
 --autoplay-policy=no-user-gesture-required \
 --allow-file-access-from-files \
+--enable-logging=stderr \
+--v=1 \
 file:///opt/feral/ui/launcher/index.html?device_id=ffx1&step=qr
+StandardOutput=append:/home/feralfile/.logs/chromium.log
+StandardError=append:/home/feralfile/.logs/chromium.log
 Restart=always
 RestartSec=5
 
