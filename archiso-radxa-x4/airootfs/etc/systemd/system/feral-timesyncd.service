@@ -1,0 +1,13 @@
+[Unit]
+Description=FeralFile Time Synchronization Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/feral-timesyncd.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target 

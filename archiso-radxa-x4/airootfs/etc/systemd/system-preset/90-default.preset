@@ -4,3 +4,4 @@ enable NetworkManager.service
 enable chromium-kiosk.service
 enable feral-setupd.service
 enable feral-connectd.service
+enable feral-timesyncd.service
