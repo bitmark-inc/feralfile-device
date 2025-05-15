@@ -2,6 +2,8 @@ use uuid::Uuid;
 
 // Functional configuration
 pub const CACHE_FILEPATH: &str = "/home/feralfile/.state/setupd";
+pub const TIMEZONE_CMD: &str = "/home/feralfile/scripts/feral-timesyncd.sh";
+pub const TIMEZONE_INSTRUCTION: &str = "set-time";
 
 // Bluetooth configuration
 pub const SERVICE_UUID: Uuid = Uuid::from_u128(0xf7826da64fa24e988024bc5b71e0893e_u128);
@@ -9,6 +11,7 @@ pub const CMD_CHAR_UUID: Uuid = Uuid::from_u128(0x6e400002b5a3f393e0a9e50e24dcca
 pub const CMD_CONNECT_WIFI: &str = "connect_wifi";
 pub const CMD_SCAN_WIFI: &str = "scan_wifi";
 pub const CMD_GET_INFO: &str = "get_info";
+pub const CMD_SET_TIME: &str = "set_time";
 pub const MAX_SSIDS: usize = 9;
 pub const MD5_LENGTH: usize = 8; // Used for conversion to device ID
 pub const DEVICE_ID_PREFIX: &str = "FF-X1-";

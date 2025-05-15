@@ -23,6 +23,7 @@ use bluer::{
 };
 use futures_util::future::FutureExt;
 use std::error::Error;
+use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task;
@@ -188,6 +189,9 @@ impl BLE {
                             constant::CMD_GET_INFO => {
                                 handle_get_info(notifier, reply_id, get_info_callback).await
                             }
+                            constant::CMD_SET_TIME => {
+                                handle_set_time(notifier, reply_id, params).await
+                            }
                             _ => {
                                 eprintln!("BLE: Unknown command: {}", cmd);
                                 Ok::<(), ReqError>(())
@@ -279,7 +283,7 @@ async fn handle_connect_wifi(
         }
     };
     println!(
-        "BLE: Relay‑server topic: {}, location: {}",
+        "BLE: Relay‑server location: {}, topic: {}",
         relayer_info[0], relayer_info[1]
     );
 
@@ -298,10 +302,7 @@ async fn handle_connect_wifi(
         match notifier.notify(payload).await {
             Ok(_) => (),
             Err(e) => {
-                eprintln!(
-                    "BLE: Failed to notify central after connecting to wifi: {}",
-                    e
-                );
+                eprintln!("BLE: Failed to send relayer info: {}", e);
             }
         }
     } else {
@@ -340,6 +341,41 @@ async fn handle_get_info(
     Ok(())
 }
 
+async fn handle_set_time(
+    _notifier: Arc<Mutex<Option<CharacteristicNotifier>>>,
+    _reply_id: String,
+    params: Vec<String>,
+) -> Result<(), ReqError> {
+    if params.len() < 2 {
+        eprintln!(
+            "BLE: Received timezone payload with only {} values",
+            params.len()
+        );
+        return Ok(());
+    }
+    match task::spawn_blocking(move || {
+        let timezone = &params[0];
+        let time = &params[1];
+        if Command::new(constant::TIMEZONE_CMD)
+            .args(&[constant::TIMEZONE_INSTRUCTION, timezone, time])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+        {
+            Ok::<(), Box<dyn Error + Send + Sync>>(())
+        } else {
+            Err("Failed to set time".into())
+        }
+    })
+    .await
+    {
+        Err(e) => {
+            eprintln!("BLE: Failed to start time setting thread: {}", e);
+        }
+        _ => (),
+    };
+    Ok(())
+}
 async fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
     println!("BLE: Sending wifi connected event");
     task::spawn_blocking(|| {
