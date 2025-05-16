@@ -104,7 +104,6 @@ func (p *Profiler) run() {
 			p.logger.Info("Profiler stopped because context was cancelled")
 			return
 		case <-ticker.C:
-			p.logger.Debug("Profiling system")
 			profile, err := p.profile()
 			if err != nil {
 				p.logger.Error("Failed to profile system", zap.Error(err))
