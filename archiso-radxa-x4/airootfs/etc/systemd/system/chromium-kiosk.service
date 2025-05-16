@@ -15,6 +15,7 @@ ExecStart=/usr/bin/cage -- /usr/bin/chromium \
 --disable-translate \
 --disable-infobars \
 --disable-features=TranslateUI \
+--disable-extensions \
 --autoplay-policy=no-user-gesture-required \
 --allow-file-access-from-files \
 --enable-logging=stderr \
