@@ -21,6 +21,7 @@ use crate::constant;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Target {
+    r#type: Option<String>,
     web_socket_debugger_url: Option<String>,
 }
 
@@ -107,7 +108,13 @@ impl CDP {
         let targets: Vec<Target> = reqwest::get(cdp_url).await?.json().await?;
         let ws_url = targets
             .into_iter()
-            .filter_map(|t| t.web_socket_debugger_url)
+            .filter_map(|t| {
+                if t.r#type == Some("page".to_string()) {
+                    t.web_socket_debugger_url
+                } else {
+                    None
+                }
+            })
             .next()
             .ok_or("CDP: No WebSocket URL found")?;
         Ok(ws_url)
