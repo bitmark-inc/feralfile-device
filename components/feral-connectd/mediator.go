@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/feral-file/godbus"
 	"go.uber.org/zap"
@@ -13,7 +14,6 @@ type Mediator struct {
 	dbus         *godbus.DBusClient
 	cdp          *CDPClient
 	cmd          *CommandHandler
-	profiler     *Profiler
 	logger       *zap.Logger
 	connectivity *Connectivity
 }
@@ -24,7 +24,6 @@ func NewMediator(
 	cdp *CDPClient,
 	cmd *CommandHandler,
 	connectivity *Connectivity,
-	profiler *Profiler,
 	logger *zap.Logger) *Mediator {
 	return &Mediator{
 		relayer:      relayer,
@@ -32,7 +31,6 @@ func NewMediator(
 		cdp:          cdp,
 		cmd:          cmd,
 		connectivity: connectivity,
-		profiler:     profiler,
 		logger:       logger,
 	}
 }
@@ -41,11 +39,9 @@ func (m *Mediator) Start() {
 	m.dbus.OnBusSignal(m.handleDBusSignal)
 	m.relayer.OnRelayerMessage(m.handleRelayerMessage)
 	m.connectivity.OnConnectivityChange(m.handleConnectivityChange)
-	m.profiler.OnProfile(m.handleProfile)
 }
 
 func (m *Mediator) Stop() {
-	m.profiler.RemoveProfileHandler(m.handleProfile)
 	m.connectivity.RemoveConnectivityChange(m.handleConnectivityChange)
 	m.relayer.RemoveRelayerMessage(m.handleRelayerMessage)
 	m.dbus.RemoveBusSignal(m.handleDBusSignal)
@@ -101,6 +97,20 @@ func (m *Mediator) handleDBusSignal(
 			relayer.TopicID,
 		}, nil
 
+	case DBUS_SYS_MONITORD_EVENT_SYSMETRICS:
+		if len(payload.Body) != 1 {
+			m.logger.Error("Invalid number of arguments", zap.Int("expected", 1), zap.Int("actual", len(payload.Body)))
+			return nil, fmt.Errorf("invalid number of arguments")
+		}
+
+		body, ok := payload.Body[0].([]byte)
+		if !ok {
+			m.logger.Error("Invalid body type", zap.String("expected", "[]byte"), zap.String("actual", reflect.TypeOf(payload.Body[0]).String()))
+			return nil, fmt.Errorf("invalid body type")
+		}
+
+		m.logger.Debug("Received sysmetrics", zap.String("metrics", string(body)))
+		m.cmd.saveLastSysMetrics(body)
 	default:
 		m.logger.Warn("Unknown signal", zap.String("member", payload.Member.String()))
 	}
@@ -195,8 +205,4 @@ func (m *Mediator) handleConnectivityChange(ctx context.Context, connected bool)
 			panic(err)
 		}
 	}
-}
-
-func (m *Mediator) handleProfile(profile *Profile) {
-	// TODO broadcast dbus signal
 }

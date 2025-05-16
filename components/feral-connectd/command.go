@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/feral-file/godbus"
 	"go.uber.org/zap"
@@ -27,21 +28,26 @@ type Device struct {
 }
 
 type CommandHandler struct {
-	cdp      *CDPClient
-	dbus     *godbus.DBusClient
-	profiler *Profiler
-	logger   *zap.Logger
+	sync.Mutex
+	cdp    *CDPClient
+	dbus   *godbus.DBusClient
+	logger *zap.Logger
 
-	lastCDPCmd *Command
+	lastSysMetrics []byte
 }
 
-func NewCommandHandler(cdp *CDPClient, dbus *godbus.DBusClient, profiler *Profiler, logger *zap.Logger) *CommandHandler {
+func NewCommandHandler(cdp *CDPClient, dbus *godbus.DBusClient, logger *zap.Logger) *CommandHandler {
 	return &CommandHandler{
-		cdp:      cdp,
-		dbus:     dbus,
-		profiler: profiler,
-		logger:   logger,
+		cdp:    cdp,
+		dbus:   dbus,
+		logger: logger,
 	}
+}
+
+func (c *CommandHandler) saveLastSysMetrics(metrics []byte) {
+	c.Lock()
+	defer c.Unlock()
+	c.lastSysMetrics = metrics
 }
 
 func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{}, error) {
@@ -49,11 +55,6 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 
 	var err error
 	var bytes []byte
-	defer func() {
-		if err == nil && cmd.Command.CDPCmd() {
-			c.lastCDPCmd = &cmd
-		}
-	}()
 
 	bytes, err = json.Marshal(cmd.Arguments)
 	if err != nil {
@@ -66,8 +67,10 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 		result, err = c.connect(bytes)
 	case RELAYER_CMD_SHOW_PAIRING_QR_CODE:
 		result, err = c.showPairingQRCode(ctx, bytes)
-	case RELAYER_CMD_PROFILE:
-		result = c.profiler.LastProfile()
+	case RELAYER_CMD_SYS_METRICS:
+		c.Lock()
+		defer c.Unlock()
+		return c.lastSysMetrics, nil
 	default:
 		return nil, fmt.Errorf("invalid command: %s", cmd)
 	}
