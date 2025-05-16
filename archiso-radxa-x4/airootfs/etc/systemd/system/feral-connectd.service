@@ -4,7 +4,7 @@ After=chromium-kiosk.service network.target
 Requires=chromium-kiosk.service
 Wants=network.target
 # Add a check for CDP readiness
-ExecStartPre=/bin/sh -c 'while ! curl -s http://127.0.0.1:9222/json | grep -q "webSocketDebuggerUrl"; do sleep 0.5; done'
+ExecStartPre=/bin/sh -c 'while ! curl -s http://127.0.0.1:9222/json | grep -q "\"type\": \"page\""; do sleep 0.5; done'
 
 [Service]
 Type=simple
