@@ -28,6 +28,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task;
 
+pub type BTConnectedCallback = Option<Box<dyn Fn() + Send + Sync>>;
 pub type ConnectWifiCallback = Option<Box<dyn Fn(&str, &str) + Send + Sync>>;
 pub type GetInfoCallback = Option<Box<dyn Fn() -> Vec<String> + Send + Sync>>;
 
@@ -56,6 +57,7 @@ impl BLE {
 
     pub async fn start(
         &self,
+        bt_connected_cb: BTConnectedCallback,
         connect_wifi_cb: ConnectWifiCallback,
         get_info_cb: GetInfoCallback,
     ) -> Result<(), Box<dyn Error>> {
@@ -88,7 +90,10 @@ impl BLE {
         let svc = Service {
             uuid: constant::SERVICE_UUID,
             primary: true,
-            characteristics: vec![self.create_cmd_char(connect_wifi_cb, get_info_cb).await],
+            characteristics: vec![
+                self.create_cmd_char(bt_connected_cb, connect_wifi_cb, get_info_cb)
+                    .await,
+            ],
             ..Default::default()
         };
         let app = Application {
@@ -123,6 +128,7 @@ impl BLE {
 
     async fn create_cmd_char(
         &self,
+        bt_connected_cb: BTConnectedCallback,
         connect_wifi_cb: ConnectWifiCallback,
         get_info_cb: GetInfoCallback,
     ) -> Characteristic {
@@ -131,6 +137,7 @@ impl BLE {
         let notifier_for_write = notifier.clone();
         let notifier_for_notify = notifier.clone();
 
+        let bt_connected_callback = Arc::new(bt_connected_cb);
         let connect_wifi_callback = Arc::new(connect_wifi_cb);
         let get_info_callback = Arc::new(get_info_cb);
 
@@ -141,9 +148,13 @@ impl BLE {
                 notify: true,
                 method: CharacteristicNotifyMethod::Fun(Box::new(move |notifier| {
                     let handle = notifier_for_notify.clone();
+                    let bt_connected_callback = bt_connected_callback.clone();
                     async move {
                         // Store the notifier for later use in the write callback
                         *handle.lock().await = Some(notifier);
+                        if let Some(cb) = bt_connected_callback.as_ref() {
+                            cb();
+                        }
                     }
                     .boxed()
                 })),
@@ -389,7 +400,7 @@ async fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error + Send + Sync>>
     .await??;
 
     println!("BLE: Waiting for relayer topic");
-    task::spawn_blocking(|| {
+    let msg = task::spawn_blocking(|| {
         dbus_utils::receive(
             constant::DBUS_CONNECTD_OBJECT,
             constant::DBUS_CONNECTD_INTERFACE,
@@ -397,5 +408,7 @@ async fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error + Send + Sync>>
             constant::DBUS_CONNECTD_TIMEOUT,
         )
     })
-    .await?
+    .await??;
+    let (a, b) = msg.read2::<String, String>()?;
+    Ok(vec![a, b])
 }
