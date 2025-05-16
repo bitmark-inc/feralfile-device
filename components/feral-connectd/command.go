@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/feral-file/godbus"
 	"go.uber.org/zap"
 )
 
@@ -27,10 +28,11 @@ type Device struct {
 }
 
 type CommandHandler struct {
-	cdp        *CDPClient
-	dbus       *DBusClient
-	profiler   *Profiler
-	logger     *zap.Logger
+	cdp      *CDPClient
+	dbus     *godbus.DBusClient
+	profiler *Profiler
+	logger   *zap.Logger
+
 	lastCDPCmd *Command
 
 	// Mouse position tracking
@@ -41,7 +43,7 @@ type CommandHandler struct {
 	screenInitialized bool
 }
 
-func NewCommandHandler(cdp *CDPClient, dbus *DBusClient, profiler *Profiler, logger *zap.Logger) *CommandHandler {
+func NewCommandHandler(cdp *CDPClient, dbus *godbus.DBusClient, profiler *Profiler, logger *zap.Logger) *CommandHandler {
 	return &CommandHandler{
 		cdp:      cdp,
 		dbus:     dbus,
@@ -116,12 +118,13 @@ func (c *CommandHandler) showPairingQRCode(ctx context.Context, args []byte) (in
 		return nil, fmt.Errorf("invalid arguments: %s", err)
 	}
 
-	err = c.dbus.RetryableSend(ctx, DBusPayload{
-		Interface: DBUS_INTERFACE,
-		Path:      DBUS_PATH,
-		Member:    EVENT_SETUPD_SHOW_PAIRING_QR_CODE,
-		Body:      []interface{}{cmdArgs.Show},
-	})
+	err = c.dbus.RetryableSend(ctx,
+		godbus.DBusPayload{
+			Interface: DBUS_INTERFACE,
+			Path:      DBUS_PATH,
+			Member:    DBUS_SETUPD_EVENT_SHOW_PAIRING_QR_CODE,
+			Body:      []interface{}{cmdArgs.Show},
+		})
 	return CmdOK, nil
 }
 

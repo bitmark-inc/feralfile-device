@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/feral-file/godbus"
 	"go.uber.org/zap"
 )
 
 type Mediator struct {
 	relayer      *RelayerClient
-	dbus         *DBusClient
+	dbus         *godbus.DBusClient
 	cdp          *CDPClient
 	cmd          *CommandHandler
 	profiler     *Profiler
@@ -19,7 +20,7 @@ type Mediator struct {
 
 func NewMediator(
 	relayer *RelayerClient,
-	dbus *DBusClient,
+	dbus *godbus.DBusClient,
 	cdp *CDPClient,
 	cmd *CommandHandler,
 	connectivity *Connectivity,
@@ -52,21 +53,21 @@ func (m *Mediator) Stop() {
 
 func (m *Mediator) handleDBusSignal(
 	ctx context.Context,
-	payload DBusPayload) ([]interface{}, error) {
+	payload godbus.DBusPayload) ([]interface{}, error) {
 	if payload.Member.IsACK() {
 		return nil, nil
 	}
 
 	m.logger.Info(
 		"Handle DBus signal",
-		zap.String("interface", payload.Interface),
-		zap.String("path", string(payload.Path)),
+		zap.String("interface", payload.Interface.String()),
+		zap.String("path", payload.Path.String()),
 		zap.String("member", payload.Member.String()),
 		zap.Any("body", payload.Body),
 	)
 
 	switch payload.Member {
-	case EVENT_SETUPD_WIFI_CONNECTED:
+	case DBUS_SETUPD_EVENT_WIFI_CONNECTED:
 		// Connect to the relayer
 		err := m.relayer.RetryableConnect(ctx)
 		if err != nil {
@@ -81,17 +82,17 @@ func (m *Mediator) handleDBusSignal(
 
 		// Send the locationID and topicID to the setupd
 		relayer := GetState().Relayer
-		err = m.dbus.RetryableSend(ctx, DBusPayload{
+		err = m.dbus.RetryableSend(ctx, godbus.DBusPayload{
 			Interface: DBUS_INTERFACE,
 			Path:      DBUS_PATH,
-			Member:    EVENT_CONNECTD_RELAYER_CONFIGURED,
+			Member:    DBUS_SETUPD_EVENT_RELAYER_CONFIGURED,
 			Body: []interface{}{
 				relayer.LocationID,
 				relayer.TopicID,
 			},
 		})
 		if err != nil {
-			m.logger.Error("Failed to send DBus signal", zap.Error(err), zap.String("interface", DBUS_INTERFACE), zap.String("path", DBUS_PATH), zap.String("member", EVENT_CONNECTD_RELAYER_CONFIGURED.String()))
+			m.logger.Error("Failed to send DBus signal", zap.Error(err), zap.String("interface", DBUS_INTERFACE.String()), zap.String("path", DBUS_PATH.String()), zap.String("member", DBUS_SETUPD_EVENT_RELAYER_CONFIGURED.String()))
 			return nil, err
 		}
 
