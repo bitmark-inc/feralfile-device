@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
-	"strconv"
 
 	"go.uber.org/zap"
 )
@@ -139,11 +137,33 @@ func (c *CommandHandler) handleKeyboardEvent(ctx context.Context, args []byte) (
 
 	c.logger.Info("Keyboard event", zap.Int("code", cmdArgs.Code), zap.String("key", keyName))
 
-	cmd := exec.CommandContext(ctx, "ydotool", "key", keyName)
-	output, err := cmd.CombinedOutput()
+	// Prepare CDP command to dispatch a key event
+	keyEventParams := map[string]interface{}{
+		"type":                  "keyDown",
+		"windowsVirtualKeyCode": cmdArgs.Code,
+		"key":                   keyName,
+		"text":                  keyName,
+		"unmodifiedText":        keyName,
+		"nativeVirtualKeyCode":  cmdArgs.Code,
+	}
+
+	// Send key directly via CDP
+	result, err := c.cdp.SendCDPRequest("Input.dispatchKeyEvent", keyEventParams)
 	if err != nil {
-		c.logger.Error("Failed to send keyboard event", zap.Error(err), zap.ByteString("output", output))
+		c.logger.Error("Failed to send key via CDP", zap.Error(err))
 		return nil, fmt.Errorf("failed to send keyboard event: %s", err)
+	}
+	c.logger.Info("KeyDown result", zap.Any("result", result))
+
+	// For keys that need keyUp events as well (like letters)
+	if cmdArgs.Code >= 32 {
+		keyEventParams["type"] = "keyUp"
+		upResult, err := c.cdp.SendCDPRequest("Input.dispatchKeyEvent", keyEventParams)
+		if err != nil {
+			c.logger.Error("Failed to send keyUp via CDP", zap.Error(err))
+		} else {
+			c.logger.Info("KeyUp result", zap.Any("result", upResult))
+		}
 	}
 
 	return CmdOK, nil
@@ -160,22 +180,36 @@ func (c *CommandHandler) handleMouseDragEvent(ctx context.Context, args []byte) 
 
 	err := json.Unmarshal(args, &cursorArgs)
 	if err == nil && len(cursorArgs.CursorOffsets) > 0 {
-		// Handle cursor offsets format (relative movements)
-		for _, movement := range cursorArgs.CursorOffsets {
-			moveX := int(movement.DX * 3)
-			moveY := int(movement.DY * 3)
+		// Use relative movements based on cursor offsets
+		var x, y float64 = 100, 100 // Default starting position
 
-			cmd := exec.CommandContext(ctx, "ydotool", "mousemove_relative", "--",
-				strconv.Itoa(moveX), strconv.Itoa(moveY))
-			if err := cmd.Run(); err != nil {
-				c.logger.Error("Failed to move mouse relatively", zap.Error(err))
+		// Apply movements sequentially
+		for _, movement := range cursorArgs.CursorOffsets {
+			x += movement.DX * 3
+			y += movement.DY * 3
+
+			// Send mouseMoved event
+			moveParams := map[string]interface{}{
+				"type":       "mouseMoved",
+				"x":          x,
+				"y":          y,
+				"button":     "none",
+				"buttons":    0,
+				"clickCount": 0,
+			}
+
+			result, err := c.cdp.SendCDPRequest("Input.dispatchMouseEvent", moveParams)
+			if err != nil {
+				c.logger.Error("Failed to send mouse move via CDP", zap.Error(err))
 				return nil, fmt.Errorf("failed to move mouse: %s", err)
 			}
+			c.logger.Info("MouseMove result", zap.Any("result", result))
 		}
+
 		return CmdOK, nil
 	}
 
-	// Standard drag event
+	// Standard drag event with absolute coordinates
 	var dragArgs struct {
 		StartX int `json:"startX"`
 		StartY int `json:"startY"`
@@ -187,42 +221,118 @@ func (c *CommandHandler) handleMouseDragEvent(ctx context.Context, args []byte) 
 		return nil, fmt.Errorf("invalid arguments: %s", err)
 	}
 
-	// Move to start position
-	cmd := exec.CommandContext(ctx, "ydotool", "mousemove",
-		strconv.Itoa(dragArgs.StartX), strconv.Itoa(dragArgs.StartY))
-	if err := cmd.Run(); err != nil {
+	// 1. Move to start position
+	moveParams := map[string]interface{}{
+		"type":       "mouseMoved",
+		"x":          float64(dragArgs.StartX),
+		"y":          float64(dragArgs.StartY),
+		"button":     "none",
+		"buttons":    0,
+		"clickCount": 0,
+	}
+
+	result, err := c.cdp.SendCDPRequest("Input.dispatchMouseEvent", moveParams)
+	if err != nil {
+		c.logger.Error("Failed to move mouse to start position via CDP", zap.Error(err))
 		return nil, fmt.Errorf("failed to move to start position: %s", err)
 	}
+	c.logger.Info("MouseMove to start result", zap.Any("result", result))
 
-	// Press mouse button
-	cmd = exec.CommandContext(ctx, "ydotool", "mousedown", "1")
-	if err := cmd.Run(); err != nil {
+	// 2. Press mouse button down
+	downParams := map[string]interface{}{
+		"type":       "mousePressed",
+		"x":          float64(dragArgs.StartX),
+		"y":          float64(dragArgs.StartY),
+		"button":     "left",
+		"buttons":    1,
+		"clickCount": 1,
+	}
+
+	result, err = c.cdp.SendCDPRequest("Input.dispatchMouseEvent", downParams)
+	if err != nil {
+		c.logger.Error("Failed to press mouse button via CDP", zap.Error(err))
 		return nil, fmt.Errorf("failed to press mouse button: %s", err)
 	}
+	c.logger.Info("MouseDown result", zap.Any("result", result))
 
-	// Move to end position
-	cmd = exec.CommandContext(ctx, "ydotool", "mousemove",
-		strconv.Itoa(dragArgs.EndX), strconv.Itoa(dragArgs.EndY))
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to move to end position: %s", err)
+	// 3. Move to end position
+	dragParams := map[string]interface{}{
+		"type":       "mouseMoved",
+		"x":          float64(dragArgs.EndX),
+		"y":          float64(dragArgs.EndY),
+		"button":     "left",
+		"buttons":    1,
+		"clickCount": 0,
 	}
 
-	// Release mouse button
-	cmd = exec.CommandContext(ctx, "ydotool", "mouseup", "1")
-	if err := cmd.Run(); err != nil {
+	result, err = c.cdp.SendCDPRequest("Input.dispatchMouseEvent", dragParams)
+	if err != nil {
+		c.logger.Error("Failed to drag mouse via CDP", zap.Error(err))
+		return nil, fmt.Errorf("failed to drag mouse: %s", err)
+	}
+	c.logger.Info("MouseDrag result", zap.Any("result", result))
+
+	// 4. Release mouse button
+	upParams := map[string]interface{}{
+		"type":       "mouseReleased",
+		"x":          float64(dragArgs.EndX),
+		"y":          float64(dragArgs.EndY),
+		"button":     "left",
+		"buttons":    0,
+		"clickCount": 1,
+	}
+
+	result, err = c.cdp.SendCDPRequest("Input.dispatchMouseEvent", upParams)
+	if err != nil {
+		c.logger.Error("Failed to release mouse button via CDP", zap.Error(err))
 		return nil, fmt.Errorf("failed to release mouse button: %s", err)
 	}
+	c.logger.Info("MouseUp result", zap.Any("result", result))
 
 	return CmdOK, nil
 }
 
 func (c *CommandHandler) handleMouseTapEvent(ctx context.Context, args []byte) (interface{}, error) {
-	// Just click at the current position
-	cmd := exec.CommandContext(ctx, "ydotool", "click", "1")
-	if err := cmd.Run(); err != nil {
-		c.logger.Error("Failed to click", zap.Error(err))
-		return nil, fmt.Errorf("failed to click: %s", err)
+	// Fixed position for click (center of screen)
+	x, y := 100, 100
+	button := "left"
+
+	c.logger.Info("Mouse tap event")
+
+	// 1. Press mouse button
+	downParams := map[string]interface{}{
+		"type":       "mousePressed",
+		"x":          float64(x),
+		"y":          float64(y),
+		"button":     button,
+		"buttons":    1,
+		"clickCount": 1,
 	}
+
+	result, err := c.cdp.SendCDPRequest("Input.dispatchMouseEvent", downParams)
+	if err != nil {
+		c.logger.Error("Failed to press mouse button via CDP", zap.Error(err))
+		return nil, fmt.Errorf("failed to press mouse button: %s", err)
+	}
+	c.logger.Info("MouseDown result", zap.Any("result", result))
+
+	// 2. Release mouse button
+	upParams := map[string]interface{}{
+		"type":       "mouseReleased",
+		"x":          float64(x),
+		"y":          float64(y),
+		"button":     button,
+		"buttons":    0,
+		"clickCount": 1,
+	}
+
+	result, err = c.cdp.SendCDPRequest("Input.dispatchMouseEvent", upParams)
+	if err != nil {
+		c.logger.Error("Failed to release mouse button via CDP", zap.Error(err))
+		return nil, fmt.Errorf("failed to release mouse button: %s", err)
+	}
+	c.logger.Info("MouseUp result", zap.Any("result", result))
+
 	return CmdOK, nil
 }
 
