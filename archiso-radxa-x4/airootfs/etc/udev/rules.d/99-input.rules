@@ -1,2 +1,0 @@
-# Give feralfile user access to /dev/uinput
-KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput" 

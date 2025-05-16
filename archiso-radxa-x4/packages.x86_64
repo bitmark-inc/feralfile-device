@@ -18,7 +18,6 @@ mkinitcpio
 mkinitcpio-archiso
 arch-install-scripts
 polkit
-ydotool
 
 # Boot support
 intel-ucode
