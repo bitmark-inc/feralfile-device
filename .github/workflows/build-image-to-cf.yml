@@ -43,6 +43,19 @@ jobs:
       description: 'Feral File Setup Service'
       maintainer: 'Feral File'
 
+  build-feral-sys-monitord:
+    name: Build Feral System Monitord
+    uses: ./.github/workflows/build-components.yaml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
+    with:
+      component: feral-sys-monitord
+      version: ${{ github.event.inputs.version }}
+      description: 'Feral File System Monitord'
+      maintainer: 'Feral File'
+
   build-feralfile-pacman-repo:
     name: Build Feralfile pacman repo
     needs: [build-feral-connectd, build-feral-setupd]

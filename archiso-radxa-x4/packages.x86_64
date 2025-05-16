@@ -58,3 +58,4 @@ lm_sensors
 # Feralfile 
 feral-connectd
 feral-setupd
+feral-sys-monitord
