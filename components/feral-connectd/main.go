@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/feral-file/godbus"
+	"github.com/godbus/dbus/v5"
 	"go.uber.org/zap"
 )
 
@@ -87,7 +89,8 @@ func main() {
 	}
 
 	// Initialize DBus client
-	dbusClient := NewDBusClient(ctx, logger, relayerClient)
+	mo := dbus.WithMatchPathNamespace(dbus.ObjectPath("/com/feralfile"))
+	dbusClient := godbus.NewDBusClient(ctx, logger, mo)
 	err = dbusClient.Start()
 	if err != nil {
 		logger.Fatal("DBus init failed", zap.Error(err))
