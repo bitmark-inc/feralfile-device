@@ -166,7 +166,7 @@ func (m *CDPMonitor) restartChromium() {
 
 	// Reset the last successful response time to force a new successful check
 	// before evaluating hang state again
-	m.lastSuccessfulResp = time.Time{}
+	m.lastSuccessfulResp = time.Now()
 }
 
 // shouldTriggerReboot determines if we should trigger a system reboot
