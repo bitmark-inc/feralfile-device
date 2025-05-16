@@ -27,10 +27,18 @@ const (
 	RELAYER_CMD_CONNECT              RelayerCmd = "connect"
 	RELAYER_CMD_SHOW_PAIRING_QR_CODE RelayerCmd = "showPairingQRCode"
 	RELAYER_CMD_PROFILE              RelayerCmd = "deviceMetrics"
+	RELAYER_CMD_KEYBOARD_EVENT       RelayerCmd = "sendKeyboardEvent"
+	RELAYER_CMD_MOUSE_DRAG_EVENT     RelayerCmd = "dragGesture"
+	RELAYER_CMD_MOUSE_TAP_EVENT      RelayerCmd = "tapGesture"
 )
 
 func (c RelayerCmd) CDPCmd() bool {
-	return c != RELAYER_CMD_CONNECT && c != RELAYER_CMD_SHOW_PAIRING_QR_CODE && c != RELAYER_CMD_PROFILE
+	return c != RELAYER_CMD_CONNECT &&
+		c != RELAYER_CMD_SHOW_PAIRING_QR_CODE &&
+		c != RELAYER_CMD_PROFILE &&
+		c != RELAYER_CMD_KEYBOARD_EVENT &&
+		c != RELAYER_CMD_MOUSE_DRAG_EVENT &&
+		c != RELAYER_CMD_MOUSE_TAP_EVENT
 }
 
 type RelayerPayload struct {
