@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+
 	"github.com/feral-file/godbus"
 	"go.uber.org/zap"
 )
@@ -33,12 +35,19 @@ func (p *Mediator) Stop() {
 func (p *Mediator) handleSysMetrics(metrics *SysMetrics) {
 	p.logger.Debug("Received metrics", zap.Any("metrics", metrics))
 
+	// Marshal the metrics to a byte slice
+	metricsBytes, err := json.Marshal(metrics)
+	if err != nil {
+		p.logger.Error("Failed to marshal metrics", zap.Error(err))
+		return
+	}
+
 	// Send a DBus signal
-	err := p.dbus.Send(godbus.DBusPayload{
+	err = p.dbus.Send(godbus.DBusPayload{
 		Interface: DBUS_INTERFACE,
 		Path:      DBUS_PATH,
 		Member:    DBUS_EVENT_SYSMETRICS,
-		Body:      []interface{}{metrics},
+		Body:      []interface{}{metricsBytes},
 	})
 	if err != nil {
 		p.logger.Error("Failed to send DBus signal", zap.Error(err))

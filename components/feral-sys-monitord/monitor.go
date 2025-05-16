@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	MONITOR_INTERVAL = 1 * time.Second
+	MONITOR_INTERVAL = 2 * time.Second
 )
 
 type CPUMetrics struct {
