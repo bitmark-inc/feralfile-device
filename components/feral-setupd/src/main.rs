@@ -6,6 +6,7 @@ mod dbus_utils;
 mod encoding;
 mod wifi_utils;
 
+use crate::wifi_utils::SSIDsCacher;
 use ble::BLE;
 use cache::Cache;
 use cdp::CDP;
@@ -21,6 +22,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let chrome = Arc::new(CDP::connect(constant::CDP_URL).await?);
     let app_cache = Arc::new(Cache::new(constant::CACHE_FILEPATH));
     let ble_service = Arc::new(BLE::new());
+    let ssids_cacher = Arc::new(SSIDsCacher::new());
     let device_id = ble_service.get_device_id().await;
 
     // Start bluetooth advertising with callbacks
@@ -28,7 +30,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let get_info_cb = create_get_info_cb(app_cache.clone());
     let bt_connected_cb = create_bluetooth_connected_cb(app_cache.clone(), chrome.clone());
     match ble_service
-        .start(bt_connected_cb, connect_wifi_cb, get_info_cb)
+        .start(
+            bt_connected_cb,
+            connect_wifi_cb,
+            get_info_cb,
+            ssids_cacher.clone(),
+        )
         .await
     {
         Ok(_) => println!("MAIN: Bluetooth advertising started successfully"),
@@ -49,7 +56,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } else {
         let qrcode_url = build_qrcode_url(&device_id, &app_cache);
         match chrome.navigate(&qrcode_url).await {
-            Ok(_) => println!("MAIN: Navigated to {}", qrcode_url),
+            Ok(_) => {
+                println!("MAIN: Navigated to {}", qrcode_url);
+                println!("MAIN: Triggering SSIDs refresh");
+                ssids_cacher.trigger_refresh();
+            }
             Err(e) => println!("MAIN: Error navigating to qrcode: {}", e),
         };
     }

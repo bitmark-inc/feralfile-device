@@ -1,8 +1,99 @@
 use std::collections::HashSet;
 use std::error::Error;
 use std::process::Command;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, Notify};
+use tokio::task;
 
 use crate::constant;
+
+struct State {
+    cached_ssids: Vec<String>,
+    expired_at: Option<Instant>,
+    refreshing: bool,
+}
+
+pub struct SSIDsCacher {
+    state: Arc<Mutex<State>>,
+    notify: Arc<Notify>,
+}
+
+impl SSIDsCacher {
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(State {
+                cached_ssids: Vec::with_capacity(constant::MAX_SSIDS),
+                expired_at: None,
+                refreshing: false,
+            })),
+            notify: Arc::new(Notify::new()),
+        }
+    }
+
+    /// Refresh and forget
+    pub fn trigger_refresh(&self) {
+        let state = Arc::clone(&self.state);
+        let notify = Arc::clone(&self.notify);
+
+        task::spawn(async move {
+            {
+                let mut st = state.lock().await;
+                if st.refreshing {
+                    // someone else is doing it, we don't need to do anything
+                    return;
+                }
+                // We need to set the flag to avoid concurrent refreshing
+                st.refreshing = true;
+            }
+
+            println!("SSIDsCacher: refreshing...");
+            let res = list_ssids().await;
+
+            {
+                let mut st = state.lock().await;
+                if let Ok(ssids) = res {
+                    st.cached_ssids = ssids;
+                    st.expired_at =
+                        Some(Instant::now() + Duration::from_millis(constant::SSID_CACHE_TTL));
+                }
+                st.refreshing = false;
+            }
+
+            // wake everyone waiting in `get()`
+            notify.notify_waiters();
+        });
+    }
+
+    /// Get SSIDs, waiting only if a refresh is currently in progress or required.
+    pub async fn get(&self) -> Result<Vec<String>, Box<dyn Error>> {
+        loop {
+            {
+                let st = self.state.lock().await;
+
+                // Fast path: fresh cache
+                if let Some(exp) = st.expired_at {
+                    if exp > Instant::now() {
+                        println!("SSIDsCacher: returning cached SSIDs");
+                        return Ok(st.cached_ssids.clone());
+                    }
+                }
+                println!("SSIDsCacher: no cached or expired SSIDs");
+
+                // If no refresh is underway, kick one off.
+                if !st.refreshing {
+                    println!("SSIDsCacher: triggering refresh");
+                    drop(st); // release lock before spawning
+                    self.trigger_refresh();
+                }
+                // else: someone else is refreshing → fall through to wait
+            }
+
+            // Wait until the background task signals completion.
+            self.notify.notified().await;
+        }
+    }
+}
 
 pub fn connect(ssid: &str, pass: &str) -> Result<(), Box<dyn Error>> {
     // delete any existing connection, don't care if it fails
@@ -40,11 +131,14 @@ fn delete(ssid: &str) -> Result<(), Box<dyn Error>> {
     }
 }
 
-pub fn list_ssids() -> Result<Vec<String>, Box<dyn Error>> {
+pub async fn list_ssids() -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
     // Run nmcli in terse mode to get only SSID fields
-    let output = Command::new("nmcli")
-        .args(&["-t", "-f", "SSID", "device", "wifi", "list"])
-        .output()?;
+    let output = task::spawn_blocking(|| {
+        Command::new("nmcli")
+            .args(&["-t", "-f", "SSID", "device", "wifi", "list"])
+            .output()
+    })
+    .await??;
 
     // Parse stdout lines, filtering out empty entries
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -65,6 +159,5 @@ pub fn list_ssids() -> Result<Vec<String>, Box<dyn Error>> {
             }
         }
     }
-
     Ok(ssids)
 }

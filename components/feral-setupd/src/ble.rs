@@ -2,7 +2,7 @@ use crate::constant;
 use crate::dbus_utils;
 use crate::encoding;
 use crate::wifi_utils;
-
+use crate::wifi_utils::SSIDsCacher;
 use bluer::{
     Session,
     adv::Advertisement,
@@ -25,6 +25,7 @@ use futures_util::future::FutureExt;
 use std::error::Error;
 use std::process::Command;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::Mutex;
 use tokio::task;
 
@@ -60,6 +61,7 @@ impl BLE {
         bt_connected_cb: BTConnectedCallback,
         connect_wifi_cb: ConnectWifiCallback,
         get_info_cb: GetInfoCallback,
+        ssids_cacher: Arc<SSIDsCacher>,
     ) -> Result<(), Box<dyn Error>> {
         let mut st = self.state.lock().await;
         if st.advertised {
@@ -91,7 +93,7 @@ impl BLE {
             uuid: constant::SERVICE_UUID,
             primary: true,
             characteristics: vec![
-                self.create_cmd_char(bt_connected_cb, connect_wifi_cb, get_info_cb)
+                self.create_cmd_char(bt_connected_cb, connect_wifi_cb, get_info_cb, ssids_cacher)
                     .await,
             ],
             ..Default::default()
@@ -131,6 +133,7 @@ impl BLE {
         bt_connected_cb: BTConnectedCallback,
         connect_wifi_cb: ConnectWifiCallback,
         get_info_cb: GetInfoCallback,
+        ssids_cacher: Arc<SSIDsCacher>,
     ) -> Characteristic {
         // Shared storage for the notifier handle
         let notifier: Arc<Mutex<Option<CharacteristicNotifier>>> = Arc::new(Mutex::new(None));
@@ -140,7 +143,6 @@ impl BLE {
         let bt_connected_callback = Arc::new(bt_connected_cb);
         let connect_wifi_callback = Arc::new(connect_wifi_cb);
         let get_info_callback = Arc::new(get_info_cb);
-
         Characteristic {
             uuid: constant::CMD_CHAR_UUID,
             // Enable notifications on this characteristic
@@ -168,6 +170,7 @@ impl BLE {
                     let notifier = notifier_for_write.clone();
                     let connect_wifi_callback = connect_wifi_callback.clone();
                     let get_info_callback = get_info_callback.clone();
+                    let ssids_cacher = ssids_cacher.clone();
                     async move {
                         let payload = encoding::parse_payload(&data);
                         // No values, or malformed payload
@@ -187,7 +190,9 @@ impl BLE {
                         let reply_id = vals[1].clone();
                         let params = vals[2..].to_vec();
                         match cmd.as_str() {
-                            constant::CMD_SCAN_WIFI => handle_scan_wifi(notifier, reply_id).await,
+                            constant::CMD_SCAN_WIFI => {
+                                handle_scan_wifi(notifier, reply_id, ssids_cacher).await
+                            }
                             constant::CMD_CONNECT_WIFI => {
                                 handle_connect_wifi(
                                     notifier,
@@ -221,16 +226,22 @@ impl BLE {
 async fn handle_scan_wifi(
     notifier: Arc<Mutex<Option<CharacteristicNotifier>>>,
     reply_id: String,
+    ssids_cacher: Arc<SSIDsCacher>,
 ) -> Result<(), ReqError> {
     // Scan available SSIDs using the helper
-    let ssids = match wifi_utils::list_ssids() {
+    let start_time = Instant::now();
+    let ssids = match ssids_cacher.get().await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("BLE: Failed to scan wifi: {}", e);
             return Ok(());
         }
     };
-    println!("BLE: Found SSIDs \n{:?}", ssids);
+    println!(
+        "BLE: Found SSIDs \n{:?} in {:?} ms",
+        ssids,
+        start_time.elapsed().as_millis()
+    );
 
     // Build BLE reply payload
     let mut reply = Vec::with_capacity(ssids.len() + 1);
