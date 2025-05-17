@@ -7,6 +7,7 @@ require (
 	github.com/feral-file/godbus v0.0.1
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	go.uber.org/zap v1.27.0
+	golang.org/x/sync v0.14.0
 )
 
 require (

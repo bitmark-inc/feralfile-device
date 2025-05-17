@@ -97,16 +97,11 @@ func main() {
 	}
 	defer dbusClient.Stop()
 
-	// Initialize Connectivity
-	connectivity := NewConnectivity(ctx, logger)
-	connectivity.Start()
-	defer connectivity.Stop()
-
 	// Initialize command handler
 	cmd := NewCommandHandler(cdpClient, dbusClient, logger)
 
 	// Initialize Mediator
-	mediator := NewMediator(relayerClient, dbusClient, cdpClient, cmd, connectivity, logger)
+	mediator := NewMediator(relayerClient, dbusClient, cdpClient, cmd, logger)
 	mediator.Start()
 	defer mediator.Stop()
 

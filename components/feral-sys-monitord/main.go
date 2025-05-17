@@ -68,8 +68,13 @@ func main() {
 	monitor.Start()
 	defer monitor.Stop()
 
+	// Initialize Connectivity
+	connectivity := NewConnectivity(ctx, logger)
+	connectivity.Start()
+	defer connectivity.Stop()
+
 	// Initialize Mediator
-	mediator := NewMediator(dbusClient, monitor, logger)
+	mediator := NewMediator(dbusClient, monitor, connectivity, logger)
 	mediator.Start()
 	defer mediator.Stop()
 
