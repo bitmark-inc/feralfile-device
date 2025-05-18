@@ -45,8 +45,9 @@ func (p MemoryMetrics) CapacityPercent() float64 {
 }
 
 type ScreenMetrics struct {
-	Width  int `json:"width"`
-	Height int `json:"height"`
+	Width       int     `json:"width"`
+	Height      int     `json:"height"`
+	RefreshRate float64 `json:"refresh_rate"`
 }
 
 type SysMetrics struct {
@@ -439,10 +440,11 @@ func (p *Monitor) monitorScreen() (ScreenMetrics, error) {
 	for _, line := range lines {
 		if strings.Contains(line, "current") {
 			fields := strings.Fields(line)
-			if len(fields) < 1 {
+			if len(fields) < 3 {
 				return metrics, fmt.Errorf("unexpected format in wlr-randr output")
 			}
 
+			// resolution
 			dimensions := strings.Split(fields[0], "x")
 			if len(dimensions) != 2 {
 				return metrics, fmt.Errorf("unexpected format in wlr-randr output")
@@ -455,6 +457,13 @@ func (p *Monitor) monitorScreen() (ScreenMetrics, error) {
 			if err != nil {
 				return metrics, err
 			}
+
+			// refresh rate
+			refreshRate, err := strconv.ParseFloat(fields[2], 64)
+			if err != nil {
+				return metrics, err
+			}
+			metrics.RefreshRate = refreshRate
 
 			break
 		}

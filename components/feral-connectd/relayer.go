@@ -279,6 +279,8 @@ func (r *RelayerClient) background(ctx context.Context) {
 					return
 				}
 
+				r.logger.Info("Received message", zap.ByteString("message", msg))
+
 				// Unmarshal payload
 				var payload RelayerPayload
 				if err := json.Unmarshal(msg, &payload); err != nil {

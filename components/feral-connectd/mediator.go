@@ -49,14 +49,6 @@ func (m *Mediator) handleDBusSignal(
 		return nil, nil
 	}
 
-	m.logger.Info(
-		"Handle DBus signal",
-		zap.String("interface", payload.Interface.String()),
-		zap.String("path", payload.Path.String()),
-		zap.String("member", payload.Member.String()),
-		zap.Any("body", payload.Body),
-	)
-
 	switch payload.Member {
 	case DBUS_SETUPD_EVENT_WIFI_CONNECTED:
 		// Connect to the relayer
@@ -146,8 +138,6 @@ func (m *Mediator) handleDBusSignal(
 }
 
 func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayload) error {
-	m.logger.Info("Received relayer message", zap.Any("payload", payload))
-
 	switch payload.MessageID {
 	case RELAYER_MESSAGE_ID_SYSTEM:
 		locationID := payload.Message.LocationID
