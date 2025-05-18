@@ -3,19 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/feral-file/godbus"
 	"go.uber.org/zap"
 )
 
 type Mediator struct {
-	relayer      *RelayerClient
-	dbus         *godbus.DBusClient
-	cdp          *CDPClient
-	cmd          *CommandHandler
-	profiler     *Profiler
-	logger       *zap.Logger
-	connectivity *Connectivity
+	relayer *RelayerClient
+	dbus    *godbus.DBusClient
+	cdp     *CDPClient
+	cmd     *CommandHandler
+	logger  *zap.Logger
 }
 
 func NewMediator(
@@ -23,30 +22,22 @@ func NewMediator(
 	dbus *godbus.DBusClient,
 	cdp *CDPClient,
 	cmd *CommandHandler,
-	connectivity *Connectivity,
-	profiler *Profiler,
 	logger *zap.Logger) *Mediator {
 	return &Mediator{
-		relayer:      relayer,
-		dbus:         dbus,
-		cdp:          cdp,
-		cmd:          cmd,
-		connectivity: connectivity,
-		profiler:     profiler,
-		logger:       logger,
+		relayer: relayer,
+		dbus:    dbus,
+		cdp:     cdp,
+		cmd:     cmd,
+		logger:  logger,
 	}
 }
 
 func (m *Mediator) Start() {
 	m.dbus.OnBusSignal(m.handleDBusSignal)
 	m.relayer.OnRelayerMessage(m.handleRelayerMessage)
-	m.connectivity.OnConnectivityChange(m.handleConnectivityChange)
-	m.profiler.OnProfile(m.handleProfile)
 }
 
 func (m *Mediator) Stop() {
-	m.profiler.RemoveProfileHandler(m.handleProfile)
-	m.connectivity.RemoveConnectivityChange(m.handleConnectivityChange)
 	m.relayer.RemoveRelayerMessage(m.handleRelayerMessage)
 	m.dbus.RemoveBusSignal(m.handleDBusSignal)
 }
@@ -57,14 +48,6 @@ func (m *Mediator) handleDBusSignal(
 	if payload.Member.IsACK() {
 		return nil, nil
 	}
-
-	m.logger.Info(
-		"Handle DBus signal",
-		zap.String("interface", payload.Interface.String()),
-		zap.String("path", payload.Path.String()),
-		zap.String("member", payload.Member.String()),
-		zap.Any("body", payload.Body),
-	)
 
 	switch payload.Member {
 	case DBUS_SETUPD_EVENT_WIFI_CONNECTED:
@@ -81,14 +64,14 @@ func (m *Mediator) handleDBusSignal(
 		}
 
 		// Send the locationID and topicID to the setupd
-		relayer := GetState().Relayer
+		relayerConf := GetState().Relayer
 		err = m.dbus.RetryableSend(ctx, godbus.DBusPayload{
 			Interface: DBUS_INTERFACE,
 			Path:      DBUS_PATH,
 			Member:    DBUS_SETUPD_EVENT_RELAYER_CONFIGURED,
 			Body: []interface{}{
-				relayer.LocationID,
-				relayer.TopicID,
+				relayerConf.LocationID,
+				relayerConf.TopicID,
 			},
 		})
 		if err != nil {
@@ -97,9 +80,55 @@ func (m *Mediator) handleDBusSignal(
 		}
 
 		return []interface{}{
-			relayer.LocationID,
-			relayer.TopicID,
+			relayerConf.LocationID,
+			relayerConf.TopicID,
 		}, nil
+
+	case DBUS_SYS_MONITORD_EVENT_SYSMETRICS:
+		if len(payload.Body) != 1 {
+			m.logger.Error("Invalid number of arguments", zap.Int("expected", 1), zap.Int("actual", len(payload.Body)))
+			return nil, fmt.Errorf("invalid number of arguments")
+		}
+
+		body, ok := payload.Body[0].([]byte)
+		if !ok {
+			m.logger.Error("Invalid body type", zap.String("expected", "[]byte"), zap.String("actual", reflect.TypeOf(payload.Body[0]).String()))
+			return nil, fmt.Errorf("invalid body type")
+		}
+
+		m.logger.Debug("Received sysmetrics", zap.String("metrics", string(body)))
+		m.cmd.saveLastSysMetrics(body)
+
+	case DBUS_SYS_MONITORD_EVENT_CONNECTIVITY_CHANGE:
+		if len(payload.Body) != 1 {
+			m.logger.Error("Invalid number of arguments", zap.Int("expected", 1), zap.Int("actual", len(payload.Body)))
+			return nil, fmt.Errorf("invalid number of arguments")
+		}
+
+		connected, ok := payload.Body[0].(bool)
+		if !ok {
+			m.logger.Error("Invalid body type", zap.String("expected", "bool"), zap.String("actual", reflect.TypeOf(payload.Body[0]).String()))
+			return nil, fmt.Errorf("invalid body type")
+		}
+
+		// Send the connectivity change to web app
+		_, err := m.cdp.SendCDPRequest(
+			CDP_METHOD_EVALUATE,
+			map[string]interface{}{
+				"expression": fmt.Sprintf("window.handleConnectivityChange(%t)", connected),
+			})
+		if err != nil {
+			m.logger.Error("Failed to send CDP request", zap.Error(err))
+		}
+
+		// Reconnect the relayer if it's not already connected
+		if connected && !m.relayer.IsConnected() {
+			err := m.relayer.RetryableConnect(ctx)
+			if err != nil {
+				m.logger.Error("Failed to reconnect to relayer", zap.Error(err))
+				panic(err)
+			}
+		}
 
 	default:
 		m.logger.Warn("Unknown signal", zap.String("member", payload.Member.String()))
@@ -109,8 +138,6 @@ func (m *Mediator) handleDBusSignal(
 }
 
 func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayload) error {
-	m.logger.Info("Received relayer message", zap.Any("payload", payload))
-
 	switch payload.MessageID {
 	case RELAYER_MESSAGE_ID_SYSTEM:
 		locationID := payload.Message.LocationID
@@ -172,31 +199,4 @@ func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayl
 	}
 
 	return nil
-}
-
-func (m *Mediator) handleConnectivityChange(ctx context.Context, connected bool) {
-	m.logger.Info("Connectivity changed", zap.Bool("connected", connected))
-
-	// Send the connectivity change to web app
-	_, err := m.cdp.SendCDPRequest(
-		CDP_METHOD_EVALUATE,
-		map[string]interface{}{
-			"expression": fmt.Sprintf("window.handleConnectivityChange(%t)", connected),
-		})
-	if err != nil {
-		m.logger.Error("Failed to send CDP request", zap.Error(err))
-	}
-
-	// Reconnect the relayer if it's not already connected
-	if connected && !m.relayer.IsConnected() {
-		err := m.relayer.RetryableConnect(ctx)
-		if err != nil {
-			m.logger.Error("Failed to reconnect to relayer", zap.Error(err))
-			panic(err)
-		}
-	}
-}
-
-func (m *Mediator) handleProfile(profile *Profile) {
-	// TODO broadcast dbus signal
 }

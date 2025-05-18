@@ -1,0 +1,17 @@
+[Unit]
+Description=Feral File System Monitord
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=feralfile
+Group=feralfile
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+ExecStartPre=/bin/sleep 1
+ExecStart=/usr/bin/feral-sys-monitord
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

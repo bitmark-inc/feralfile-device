@@ -30,6 +30,7 @@ const (
 	RELAYER_CMD_KEYBOARD_EVENT       RelayerCmd = "sendKeyboardEvent"
 	RELAYER_CMD_MOUSE_DRAG_EVENT     RelayerCmd = "dragGesture"
 	RELAYER_CMD_MOUSE_TAP_EVENT      RelayerCmd = "tapGesture"
+	RELAYER_CMD_SYS_METRICS          RelayerCmd = "deviceMetrics"
 )
 
 func (c RelayerCmd) CDPCmd() bool {
@@ -286,6 +287,8 @@ func (r *RelayerClient) background(ctx context.Context) {
 					}
 					return
 				}
+
+				r.logger.Info("Received message", zap.ByteString("message", msg))
 
 				// Unmarshal payload
 				var payload RelayerPayload
