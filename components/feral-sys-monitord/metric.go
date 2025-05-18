@@ -50,12 +50,20 @@ type ScreenMetrics struct {
 	RefreshRate float64 `json:"refresh_rate"`
 }
 
+type DiskMetrics struct {
+	TotalCapacity     float64            `json:"total_capacity"`
+	UsedCapacity      float64            `json:"used_capacity"`
+	AvailableCapacity float64            `json:"available_capacity"`
+	Breakdown         map[string]float64 `json:"breakdown"`
+}
+
 type SysMetrics struct {
 	CPU    CPUMetrics    `json:"cpu"`
 	GPU    GPUMetrics    `json:"gpu"`
 	Memory MemoryMetrics `json:"memory"`
 	Screen ScreenMetrics `json:"screen"`
 	Uptime float64       `json:"uptime"`
+	Disk   DiskMetrics   `json:"disk"`
 }
 
 type MonitorHandler func(metrics *SysMetrics)
@@ -159,6 +167,13 @@ func (p *Monitor) monitor() (*SysMetrics, error) {
 		return nil, err
 	}
 	metrics.Uptime = uptimeMetrics
+
+	// Disk metrics
+	diskMetrics, err := p.monitorDisk()
+	if err != nil {
+		return nil, err
+	}
+	metrics.Disk = diskMetrics
 
 	return metrics, nil
 }
@@ -468,6 +483,87 @@ func (p *Monitor) monitorScreen() (ScreenMetrics, error) {
 			break
 		}
 	}
+	return metrics, nil
+}
+
+func (p *Monitor) monitorDisk() (DiskMetrics, error) {
+	metrics := DiskMetrics{}
+
+	// Get total/used capacity
+	total, used, available, err := p.getDiskStats()
+	if err != nil {
+		return metrics, err
+	}
+	metrics.TotalCapacity = total
+	metrics.UsedCapacity = used
+	metrics.AvailableCapacity = available
+
+	// Get breakdown
+	breakdown, err := p.getDiskBreakdown()
+	if err != nil {
+		return metrics, err
+	}
+	metrics.Breakdown = breakdown
+
+	return metrics, nil
+}
+
+func (p *Monitor) getDiskStats() (total, used, available float64, err error) {
+	cmd, err := exec.Command("df", "-k", "/").Output()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	lines := strings.Split(string(cmd), "\n")
+	if len(lines) < 2 {
+		return 0, 0, 0, fmt.Errorf("unexpected format in df output")
+	}
+
+	fields := strings.Fields(lines[1])
+	if len(fields) < 5 {
+		return 0, 0, 0, fmt.Errorf("unexpected format in df output")
+	}
+
+	total, err = strconv.ParseFloat(fields[1], 64)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	used, err = strconv.ParseFloat(fields[2], 64)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	available, err = strconv.ParseFloat(fields[3], 64)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	return total, used, available, nil
+}
+
+func (p *Monitor) getDiskBreakdown() (map[string]float64, error) {
+	cmd, err := exec.Command("bash", "-c", "du -s /* 2>/dev/null || true").Output()
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(string(cmd), "\n")
+	metrics := make(map[string]float64)
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		total, err := strconv.ParseFloat(fields[0], 64)
+		if err != nil {
+			return nil, err
+		}
+
+		metrics[fields[1]] = total
+	}
+
 	return metrics, nil
 }
 
