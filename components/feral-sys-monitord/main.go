@@ -9,10 +9,6 @@ import (
 	"time"
 
 	"github.com/feral-file/godbus"
-<<<<<<< HEAD
-	"github.com/godbus/dbus/v5"
-=======
->>>>>>> add-sys-monitord
 	"go.uber.org/zap"
 )
 
@@ -60,12 +56,7 @@ func main() {
 	defer watchdog.Stop()
 
 	// Initialize DBus client
-<<<<<<< HEAD
-	mo := dbus.WithMatchPathNamespace(dbus.ObjectPath("/com/feralfile"))
-	dbusClient := godbus.NewDBusClient(ctx, logger, mo)
-=======
 	dbusClient := godbus.NewDBusClient(ctx, logger)
->>>>>>> add-sys-monitord
 	err = dbusClient.Start()
 	if err != nil {
 		logger.Fatal("DBus init failed", zap.Error(err))
@@ -77,10 +68,6 @@ func main() {
 	monitor.Start()
 	defer monitor.Stop()
 
-<<<<<<< HEAD
-	// Initialize Mediator
-	mediator := NewMediator(dbusClient, monitor, logger)
-=======
 	// Initialize Connectivity
 	connectivity := NewConnectivity(ctx, logger)
 	connectivity.Start()
@@ -88,7 +75,6 @@ func main() {
 
 	// Initialize Mediator
 	mediator := NewMediator(dbusClient, monitor, connectivity, logger)
->>>>>>> add-sys-monitord
 	mediator.Start()
 	defer mediator.Stop()
 
