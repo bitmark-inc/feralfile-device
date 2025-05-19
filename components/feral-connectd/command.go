@@ -42,6 +42,7 @@ type CommandHandler struct {
 	screenWidth       float64
 	screenHeight      float64
 	screenInitialized bool
+	movingScaleFactor float64
 }
 
 func NewCommandHandler(cdp *CDPClient, dbus *godbus.DBusClient, logger *zap.Logger) *CommandHandler {
@@ -215,6 +216,7 @@ func (c *CommandHandler) initializeScreenDimensions(ctx context.Context) error {
 	c.cursorPositionX = c.screenWidth / 2
 	c.cursorPositionY = c.screenHeight / 2
 	c.screenInitialized = true
+	c.movingScaleFactor = c.screenWidth / 1920
 
 	c.logger.Info("Screen dimensions initialized",
 		zap.Float64("width", c.screenWidth),
@@ -250,8 +252,8 @@ func (c *CommandHandler) handleMouseMoveEvent(ctx context.Context, args []byte) 
 
 	for _, offset := range cursorArgs.CursorOffsets {
 		// Update cursor position with the relative offset
-		c.cursorPositionX += offset.DX
-		c.cursorPositionY += offset.DY
+		c.cursorPositionX += (offset.DX * c.movingScaleFactor)
+		c.cursorPositionY += (offset.DY * c.movingScaleFactor)
 
 		// Ensure position stays within screen bounds
 		c.cursorPositionX = math.Max(0, math.Min(c.cursorPositionX, c.screenWidth))
