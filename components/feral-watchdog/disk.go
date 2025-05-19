@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -35,7 +36,7 @@ func NewDiskHandler(logger *zap.Logger, commandHandler *CommandHandler) *DiskHan
 	}
 }
 
-func (c *DiskHandler) checkDiskUsage(metrics *SysMetrics) {
+func (c *DiskHandler) checkDiskUsage(ctx context.Context, metrics *SysMetrics) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -56,16 +57,16 @@ func (c *DiskHandler) checkDiskUsage(metrics *SysMetrics) {
 	if diskUsage > DISK_CRITICAL_THRESHOLD {
 		if c.isCleaned {
 			c.logger.Error("DISK: Rebooting, usage remains critical after cleanup.", zap.Float64("usage_percent", diskUsage))
-			c.commandHandler.rebootSystem()
+			c.commandHandler.rebootSystem(ctx)
 		} else {
-			c.cleanupDiskSpace(diskUsage)
+			c.cleanupDiskSpace(ctx, diskUsage)
 		}
 
 		return
 	}
 
 	if diskUsage > DISK_WARNING_THRESHOLD {
-		c.cleanupDiskSpace(diskUsage)
+		c.cleanupDiskSpace(ctx, diskUsage)
 		return
 	}
 
@@ -75,11 +76,11 @@ func (c *DiskHandler) checkDiskUsage(metrics *SysMetrics) {
 
 }
 
-func (c *DiskHandler) cleanupDiskSpace(diskUsage float64) {
+func (c *DiskHandler) cleanupDiskSpace(ctx context.Context, diskUsage float64) {
 	c.logger.Warn("DISK: usage high",
 		zap.Float64("usage_percent", diskUsage),
 		zap.Float64("threshold", DISK_WARNING_THRESHOLD))
-	c.commandHandler.cleanupDiskSpace()
+	c.commandHandler.cleanupDiskSpace(ctx)
 	c.isCleaned = true
 	c.diskCleanupCooldown = time.Now().Add(DISK_MONITOR_COOLDOWN)
 }

@@ -65,9 +65,10 @@ func main() {
 	// Initialize resource monitors
 	ramHandler := NewMemoryHandler(logger, commandHandler)
 	diskHandler := NewDiskHandler(logger, commandHandler)
+	gpuHandler := NewGPUHandler(logger, commandHandler)
 
 	// Initialize mediator
-	mediator := NewMediator(dbusClient, diskHandler, ramHandler, logger)
+	mediator := NewMediator(dbusClient, diskHandler, ramHandler, gpuHandler, logger)
 	mediator.Start()
 	defer mediator.Stop()
 

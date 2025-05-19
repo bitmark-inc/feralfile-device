@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os/exec"
 	"sync"
 
@@ -22,7 +23,7 @@ func NewCommandHandler(logger *zap.Logger) *CommandHandler {
 }
 
 // restartKiosk attempts to restart the chromium-kiosk service
-func (c *CommandHandler) restartKiosk() {
+func (c *CommandHandler) restartKiosk(ctx context.Context) {
 	c.mu.Lock()
 	if c.isRestartingKiosk {
 		c.mu.Unlock()
@@ -38,7 +39,7 @@ func (c *CommandHandler) restartKiosk() {
 		c.mu.Unlock()
 	}()
 
-	cmd := exec.Command("sudo", "systemctl", "restart", "chromium-kiosk.service")
+	cmd := exec.CommandContext(ctx, "sudo", "systemctl", "restart", "chromium-kiosk.service")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logger.Error("Failed to restart chromium-kiosk service",
 			zap.Error(err),
@@ -49,11 +50,11 @@ func (c *CommandHandler) restartKiosk() {
 }
 
 // rebootSystem initiates a system reboot
-func (c *CommandHandler) rebootSystem() {
+func (c *CommandHandler) rebootSystem(ctx context.Context) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	cmd := exec.Command("sudo", "systemctl", "reboot")
+	cmd := exec.CommandContext(ctx, "sudo", "systemctl", "reboot")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logger.Error("Failed to reboot system",
 			zap.Error(err),
@@ -61,7 +62,7 @@ func (c *CommandHandler) rebootSystem() {
 	}
 }
 
-func (c *CommandHandler) cleanupDiskSpace() {
+func (c *CommandHandler) cleanupDiskSpace(ctx context.Context) {
 	c.mu.Lock()
 	if c.isCleaningDisk {
 		c.mu.Unlock()
@@ -78,7 +79,7 @@ func (c *CommandHandler) cleanupDiskSpace() {
 	}()
 
 	// Cleanup temp folder
-	cmd := exec.Command("sudo", "find", TEMP_FOLDER_PATH, "-depth", "-delete")
+	cmd := exec.CommandContext(ctx, "sudo", "find", TEMP_FOLDER_PATH, "-depth", "-delete")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logger.Error("Failed to cleanup temp folder",
 			zap.Error(err),
@@ -86,7 +87,7 @@ func (c *CommandHandler) cleanupDiskSpace() {
 	}
 
 	// Clean pacman cache
-	cmd = exec.Command("sudo", "pacman", "-Sc", "--noconfirm")
+	cmd = exec.CommandContext(ctx, "sudo", "pacman", "-Sc", "--noconfirm")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logger.Error("Failed to clean pacman cache",
 			zap.Error(err),

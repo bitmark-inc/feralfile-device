@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	DBUS_SYS_MONITORD_EVENT_SYSMETRICS godbus.Member = "sysmetrics"
+	DBUS_SYS_MONITORD_EVENT_SYSMETRICS  godbus.Member = "sysmetrics"
+	DBUS_SYS_MONITORD_EVENT_GPU_HANGING godbus.Member = "gpu_hanging"
 )
 
 type CPUMetrics struct {
@@ -79,18 +80,21 @@ type Mediator struct {
 	logger              *zap.Logger
 	diskHandler         *DiskHandler
 	memoryHandler       *MemoryHandler
+	gpuHandler          *GPUHandler
 }
 
 func NewMediator(
 	dbus *godbus.DBusClient,
 	disk *DiskHandler,
 	ram *MemoryHandler,
+	gpu *GPUHandler,
 	logger *zap.Logger) *Mediator {
 	return &Mediator{
 		dbus:          dbus,
 		logger:        logger,
 		diskHandler:   disk,
 		memoryHandler: ram,
+		gpuHandler:    gpu,
 	}
 }
 
@@ -110,6 +114,9 @@ func (m *Mediator) handleDBusSignal(
 	}
 
 	switch payload.Member {
+	case DBUS_SYS_MONITORD_EVENT_GPU_HANGING:
+		m.gpuHandler.restartGPU(ctx)
+		return nil, nil
 	case DBUS_SYS_MONITORD_EVENT_SYSMETRICS:
 		if len(payload.Body) != 1 {
 			m.logger.Error("Invalid number of arguments", zap.Int("expected", 1), zap.Int("actual", len(payload.Body)))
@@ -136,13 +143,13 @@ func (m *Mediator) handleDBusSignal(
 		}
 
 		// Process metrics for system health monitoring
-		m.ProcessMetrics(&metrics)
+		m.ProcessMetrics(ctx, &metrics)
 	}
 
 	return nil, nil
 }
 
-func (m *Mediator) ProcessMetrics(metrics *SysMetrics) {
+func (m *Mediator) ProcessMetrics(ctx context.Context, metrics *SysMetrics) {
 	m.mu.Lock()
 	if m.isProcessingMetrics {
 		m.mu.Unlock()
@@ -159,8 +166,8 @@ func (m *Mediator) ProcessMetrics(metrics *SysMetrics) {
 	}()
 
 	// Check memory usage
-	m.memoryHandler.checkMemoryUsage(metrics)
+	m.memoryHandler.checkMemoryUsage(ctx, metrics)
 
 	// Check disk usage
-	m.diskHandler.checkDiskUsage(metrics)
+	m.diskHandler.checkDiskUsage(ctx, metrics)
 }

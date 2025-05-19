@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -36,7 +37,7 @@ func NewMemoryHandler(logger *zap.Logger, commandHandler *CommandHandler) *Memor
 	}
 }
 
-func (c *MemoryHandler) checkMemoryUsage(metrics *SysMetrics) {
+func (c *MemoryHandler) checkMemoryUsage(ctx context.Context, metrics *SysMetrics) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -89,10 +90,10 @@ func (c *MemoryHandler) checkMemoryUsage(metrics *SysMetrics) {
 
 	if !c.lastKioskRestart.IsZero() && time.Since(c.lastKioskRestart) < RAM_REBOOT_DURATION_THRESHOLD {
 		c.logger.Error("RAM: Rebooting. Usage remains critical after kiosk restart.")
-		c.commandHandler.rebootSystem()
+		c.commandHandler.rebootSystem(ctx)
 	} else {
 		c.logger.Error("RAM: Restarting kiosk")
-		c.commandHandler.restartKiosk()
+		c.commandHandler.restartKiosk(ctx)
 		c.lastKioskRestart = time.Now()
 		c.memoryMonitorCoolDown = time.Now().Add(RAM_RESTART_KIOSK_COOLDOWN)
 		c.resetMonitoring()
