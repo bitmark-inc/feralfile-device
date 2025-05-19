@@ -78,7 +78,7 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 	case RELAYER_CMD_KEYBOARD_EVENT:
 		result, err = c.handleKeyboardEvent(ctx, bytes)
 	case RELAYER_CMD_MOUSE_DRAG_EVENT:
-		result, err = c.handleMouseDragEvent(ctx, bytes)
+		result, err = c.handleMouseMoveEvent(ctx, bytes)
 	case RELAYER_CMD_MOUSE_TAP_EVENT:
 		result, err = c.handleMouseTapEvent(ctx, bytes)
 	case RELAYER_CMD_SYS_METRICS:
@@ -225,13 +225,13 @@ func (c *CommandHandler) initializeScreenDimensions(ctx context.Context) error {
 	return nil
 }
 
-func (c *CommandHandler) handleMouseDragEvent(ctx context.Context, args []byte) (interface{}, error) {
+func (c *CommandHandler) handleMouseMoveEvent(ctx context.Context, args []byte) (interface{}, error) {
 	// Initialize screen dimensions if not done already
 	if err := c.initializeScreenDimensions(ctx); err != nil {
 		return nil, err
 	}
 
-	// Try to parse as cursor offsets format first
+	// Parse cursor offsets
 	var cursorArgs struct {
 		CursorOffsets []struct {
 			DX float64 `json:"dx"`
@@ -240,123 +240,41 @@ func (c *CommandHandler) handleMouseDragEvent(ctx context.Context, args []byte) 
 	}
 
 	err := json.Unmarshal(args, &cursorArgs)
-	if err == nil && len(cursorArgs.CursorOffsets) > 0 {
-		// Handle cursor offsets format (relative movements)
-		for _, movement := range cursorArgs.CursorOffsets {
-			// Scale the movements and update current position
-			c.cursorPositionX += movement.DX * 3
-			c.cursorPositionY += movement.DY * 3
-
-			// Ensure position stays within screen bounds
-			c.cursorPositionX = math.Max(0, math.Min(c.cursorPositionX, c.screenWidth))
-			c.cursorPositionY = math.Max(0, math.Min(c.cursorPositionY, c.screenHeight))
-
-			c.logger.Info("Mouse moved",
-				zap.Float64("newX", c.cursorPositionX),
-				zap.Float64("newY", c.cursorPositionY))
-
-			// Send mouseMoved event
-			moveParams := map[string]interface{}{
-				"type":       "mouseMoved",
-				"x":          c.cursorPositionX,
-				"y":          c.cursorPositionY,
-				"button":     "none",
-				"buttons":    0,
-				"clickCount": 0,
-			}
-
-			_, err := c.cdp.SendCDPRequest("Input.dispatchMouseEvent", moveParams)
-			if err != nil {
-				c.logger.Error("Failed to move mouse via CDP", zap.Error(err))
-				return nil, fmt.Errorf("failed to move mouse: %s", err)
-			}
-		}
-
-		return CmdOK, nil
-	}
-
-	// Standard drag event with absolute coordinates
-	var dragArgs struct {
-		StartX int `json:"startX"`
-		StartY int `json:"startY"`
-		EndX   int `json:"endX"`
-		EndY   int `json:"endY"`
-	}
-
-	if err := json.Unmarshal(args, &dragArgs); err != nil {
+	if err != nil {
 		return nil, fmt.Errorf("invalid arguments: %s", err)
 	}
 
-	// Update the cached position to the start position
-	c.cursorPositionX = float64(dragArgs.StartX)
-	c.cursorPositionY = float64(dragArgs.StartY)
+	// Handle cursor offsets (relative movements)
+	for _, movement := range cursorArgs.CursorOffsets {
+		// Scale the movements and update current position
+		c.cursorPositionX += movement.DX * 3
+		c.cursorPositionY += movement.DY * 3
 
-	// 1. Move to start position
-	moveParams := map[string]interface{}{
-		"type":       "mouseMoved",
-		"x":          c.cursorPositionX,
-		"y":          c.cursorPositionY,
-		"button":     "none",
-		"buttons":    0,
-		"clickCount": 0,
-	}
+		// Ensure position stays within screen bounds
+		c.cursorPositionX = math.Max(0, math.Min(c.cursorPositionX, c.screenWidth))
+		c.cursorPositionY = math.Max(0, math.Min(c.cursorPositionY, c.screenHeight))
 
-	_, err = c.cdp.SendCDPRequest("Input.dispatchMouseEvent", moveParams)
-	if err != nil {
-		c.logger.Error("Failed to move mouse to start position via CDP", zap.Error(err))
-		return nil, fmt.Errorf("failed to move to start position: %s", err)
-	}
+		c.logger.Info("Mouse moved",
+			zap.Float64("dx", movement.DX),
+			zap.Float64("dy", movement.DY),
+			zap.Float64("newX", c.cursorPositionX),
+			zap.Float64("newY", c.cursorPositionY))
 
-	// 2. Press mouse button down
-	downParams := map[string]interface{}{
-		"type":       "mousePressed",
-		"x":          c.cursorPositionX,
-		"y":          c.cursorPositionY,
-		"button":     "left",
-		"buttons":    1,
-		"clickCount": 1,
-	}
+		// Send mouseMoved event
+		moveParams := map[string]interface{}{
+			"type":       "mouseMoved",
+			"x":          c.cursorPositionX,
+			"y":          c.cursorPositionY,
+			"button":     "none",
+			"buttons":    0,
+			"clickCount": 0,
+		}
 
-	_, err = c.cdp.SendCDPRequest("Input.dispatchMouseEvent", downParams)
-	if err != nil {
-		c.logger.Error("Failed to press mouse button via CDP", zap.Error(err))
-		return nil, fmt.Errorf("failed to press mouse button: %s", err)
-	}
-
-	// Update cached position to end position
-	c.cursorPositionX = float64(dragArgs.EndX)
-	c.cursorPositionY = float64(dragArgs.EndY)
-
-	// 3. Move to end position
-	dragParams := map[string]interface{}{
-		"type":       "mouseMoved",
-		"x":          c.cursorPositionX,
-		"y":          c.cursorPositionY,
-		"button":     "left",
-		"buttons":    1,
-		"clickCount": 0,
-	}
-
-	_, err = c.cdp.SendCDPRequest("Input.dispatchMouseEvent", dragParams)
-	if err != nil {
-		c.logger.Error("Failed to drag mouse via CDP", zap.Error(err))
-		return nil, fmt.Errorf("failed to drag mouse: %s", err)
-	}
-
-	// 4. Release mouse button
-	upParams := map[string]interface{}{
-		"type":       "mouseReleased",
-		"x":          c.cursorPositionX,
-		"y":          c.cursorPositionY,
-		"button":     "left",
-		"buttons":    0,
-		"clickCount": 1,
-	}
-
-	_, err = c.cdp.SendCDPRequest("Input.dispatchMouseEvent", upParams)
-	if err != nil {
-		c.logger.Error("Failed to release mouse button via CDP", zap.Error(err))
-		return nil, fmt.Errorf("failed to release mouse button: %s", err)
+		_, err := c.cdp.SendCDPRequest("Input.dispatchMouseEvent", moveParams)
+		if err != nil {
+			c.logger.Error("Failed to move mouse via CDP", zap.Error(err))
+			return nil, fmt.Errorf("failed to move mouse: %s", err)
+		}
 	}
 
 	return CmdOK, nil
