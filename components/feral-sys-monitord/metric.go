@@ -59,12 +59,13 @@ type DiskMetrics struct {
 }
 
 type SysMetrics struct {
-	CPU    CPUMetrics    `json:"cpu"`
-	GPU    GPUMetrics    `json:"gpu"`
-	Memory MemoryMetrics `json:"memory"`
-	Screen ScreenMetrics `json:"screen"`
-	Uptime float64       `json:"uptime"`
-	Disk   DiskMetrics   `json:"disk"`
+	CPU       CPUMetrics    `json:"cpu"`
+	GPU       GPUMetrics    `json:"gpu"`
+	Memory    MemoryMetrics `json:"memory"`
+	Screen    ScreenMetrics `json:"screen"`
+	Uptime    float64       `json:"uptime"`
+	Disk      DiskMetrics   `json:"disk"`
+	Timestamp time.Time     `json:"timestamp"`
 }
 
 type MonitorHandler func(metrics *SysMetrics)
@@ -127,11 +128,12 @@ func (p *Monitor) run() {
 
 func (p *Monitor) monitor() (*SysMetrics, error) {
 	metrics := &SysMetrics{
-		CPU:    CPUMetrics{},
-		GPU:    GPUMetrics{},
-		Memory: MemoryMetrics{},
-		Screen: ScreenMetrics{},
-		Uptime: 0,
+		CPU:       CPUMetrics{},
+		GPU:       GPUMetrics{},
+		Memory:    MemoryMetrics{},
+		Screen:    ScreenMetrics{},
+		Uptime:    0,
+		Timestamp: time.Now(),
 	}
 
 	// CPU metrics
