@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 
 	"go.uber.org/zap"
 )
@@ -67,6 +68,8 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 		result, err = c.showPairingQRCode(ctx, bytes)
 	case RELAYER_CMD_PROFILE:
 		result = c.profiler.LastProfile()
+	case RELAYER_CMD_SHUTDOWN:
+		result, err = c.shutdown(ctx)
 	default:
 		return nil, fmt.Errorf("invalid command: %s", cmd)
 	}
@@ -109,5 +112,16 @@ func (c *CommandHandler) showPairingQRCode(ctx context.Context, args []byte) (in
 		Member:    EVENT_SETUPD_SHOW_PAIRING_QR_CODE,
 		Body:      []interface{}{cmdArgs.Show},
 	})
+	return CmdOK, nil
+}
+
+func (c *CommandHandler) shutdown(ctx context.Context) (interface{}, error) {
+	c.logger.Info("Executing shutdown command")
+
+	cmd := exec.CommandContext(ctx, "shutdown", "-h", "now")
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to execute shutdown command: %s", err)
+	}
+
 	return CmdOK, nil
 }
