@@ -233,6 +233,7 @@ func (c *CommandHandler) handleMouseMoveEvent(ctx context.Context, args []byte) 
 
 	// Parse cursor offsets
 	var cursorArgs struct {
+		MessageID     string `json:"messageID"`
 		CursorOffsets []struct {
 			DX float64 `json:"dx"`
 			DY float64 `json:"dy"`
@@ -244,23 +245,56 @@ func (c *CommandHandler) handleMouseMoveEvent(ctx context.Context, args []byte) 
 		return nil, fmt.Errorf("invalid arguments: %s", err)
 	}
 
-	// Handle cursor offsets (relative movements)
-	for _, movement := range cursorArgs.CursorOffsets {
-		// Scale the movements and update current position
-		c.cursorPositionX += movement.DX * 3
-		c.cursorPositionY += movement.DY * 3
+	// Convert relative positions to absolute positions
+	absolutePositions := make([]map[string]float64, 0, len(cursorArgs.CursorOffsets))
+
+	for _, offset := range cursorArgs.CursorOffsets {
+		// Update cursor position with the relative offset
+		c.cursorPositionX += offset.DX
+		c.cursorPositionY += offset.DY
 
 		// Ensure position stays within screen bounds
 		c.cursorPositionX = math.Max(0, math.Min(c.cursorPositionX, c.screenWidth))
 		c.cursorPositionY = math.Max(0, math.Min(c.cursorPositionY, c.screenHeight))
 
-		c.logger.Info("Mouse moved",
-			zap.Float64("dx", movement.DX),
-			zap.Float64("dy", movement.DY),
-			zap.Float64("newX", c.cursorPositionX),
-			zap.Float64("newY", c.cursorPositionY))
+		// Add to absolute positions array
+		absolutePositions = append(absolutePositions, map[string]float64{
+			"x": c.cursorPositionX,
+			"y": c.cursorPositionY,
+		})
+	}
 
-		// Send mouseMoved event
+	// Skip if there are no positions
+	if len(absolutePositions) == 0 {
+		return CmdOK, nil
+	}
+
+	// 1. Pass the entire array of absolute positions to JavaScript via CDP
+	positionsJSON, err := json.Marshal(map[string]interface{}{
+		"messageID": cursorArgs.MessageID,
+		"message": map[string]interface{}{
+			"command": "cursorUpdate",
+			"request": map[string]interface{}{
+				"positions": absolutePositions,
+			},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal positions: %s", err)
+	}
+
+	// Call JavaScript function to process all positions
+	_, err = c.cdp.SendCDPRequest(CDP_METHOD_EVALUATE, map[string]interface{}{
+		"expression": fmt.Sprintf("window.handleCDPRequest(%s)", string(positionsJSON)),
+	})
+	if err != nil {
+		c.logger.Error("Failed to execute JavaScript cursor positions", zap.Error(err))
+		return nil, fmt.Errorf("failed to process cursor positions: %s", err)
+	}
+
+	// 2. Send the final mouse event to actually move the cursor
+	if len(absolutePositions) > 0 {
+		// Get the last position for the final mouseMoved event
 		moveParams := map[string]interface{}{
 			"type":       "mouseMoved",
 			"x":          c.cursorPositionX,
@@ -270,11 +304,15 @@ func (c *CommandHandler) handleMouseMoveEvent(ctx context.Context, args []byte) 
 			"clickCount": 0,
 		}
 
-		_, err := c.cdp.SendCDPRequest("Input.dispatchMouseEvent", moveParams)
+		_, err = c.cdp.SendCDPRequest("Input.dispatchMouseEvent", moveParams)
 		if err != nil {
 			c.logger.Error("Failed to move mouse via CDP", zap.Error(err))
 			return nil, fmt.Errorf("failed to move mouse: %s", err)
 		}
+
+		c.logger.Info("Mouse moved to final position",
+			zap.Float64("x", c.cursorPositionX),
+			zap.Float64("y", c.cursorPositionY))
 	}
 
 	return CmdOK, nil
