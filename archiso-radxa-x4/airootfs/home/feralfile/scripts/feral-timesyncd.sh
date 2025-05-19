@@ -6,12 +6,14 @@
 # 2. Setting timezone and time manually when offline
 
 # Configuration
-STATUS_DIR="/var/lib/feral-timesyncd"
+STATUS_DIR="/home/feralfile/scripts/feral-timesyncd"
 STATUS_FILE="$STATUS_DIR/status"
+TIMEZONE_FILE="$STATUS_DIR/timezone"
 
 # Create status directory with appropriate permissions
 mkdir -p "$STATUS_DIR" 2>/dev/null || true
 touch "$STATUS_FILE" 2>/dev/null || true
+touch "$TIMEZONE_FILE" 2>/dev/null || true
 chmod -R 755 "$STATUS_DIR" 2>/dev/null || true
 
 # Ensure systemd-timesyncd is enabled
@@ -51,37 +53,66 @@ sync_ntp() {
 
 # Function to set timezone and time
 set_time() {
-    # First parameter is timezone, second is time
-    if [ -z "$1" ] || [ -z "$2" ]; then
-        echo "Usage: set-time TIMEZONE 'YYYY-MM-DD HH:MM:SS'"
+    # First parameter is timezone, second is date, third is time
+    if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ]; then
+        echo "Usage: set-time TIMEZONE YYYY-MM-DD HH:MM:SS"
         return 1
     fi
     
     timezone="$1"
-    time_str="$2"
+    date_str="$2"
+    time_str="$3"
     
-    # Set timezone using timedatectl
-    if timedatectl set-timezone "$timezone"; then
+    # Combine date and time
+    datetime_str="$date_str $time_str"
+    
+    # Try to set timezone using timedatectl
+    if timedatectl set-timezone "$timezone" 2>/dev/null; then
         echo "Timezone set to $timezone"
+        echo "timezone_set=true" > "$STATUS_FILE" 2>/dev/null || true
     else
-        echo "Failed to set timezone"
-        return 1
+        echo "Warning: Could not set timezone. Saving for later sync..."
+        echo "$timezone" > "$TIMEZONE_FILE" 2>/dev/null || true
+        echo "timezone_set=false" > "$STATUS_FILE" 2>/dev/null || true
     fi
     
-    # Set system time using timedatectl
-    if timedatectl set-time "$time_str"; then
-        echo "System time set to $time_str"
+    # Try timedatectl first
+    if timedatectl set-time "$datetime_str" 2>/dev/null; then
+        echo "System time set to $datetime_str using timedatectl"
         echo "manual_time_set=true" > "$STATUS_FILE" 2>/dev/null || true
         return 0
-    else
-        echo "Failed to set system time. Invalid format. Use: YYYY-MM-DD HH:MM:SS"
-        return 1
     fi
+    
+    # Fallback to date command if timedatectl fails
+    if date -s "$datetime_str" 2>/dev/null; then
+        echo "System time set to $datetime_str using date command"
+        echo "manual_time_set=true" > "$STATUS_FILE" 2>/dev/null || true
+        return 0
+    fi
+    
+    echo "Failed to set system time using both timedatectl and date command"
+    return 1
+}
+
+# Function to apply saved timezone if network is available
+apply_saved_timezone() {
+    if [ -f "$TIMEZONE_FILE" ]; then
+        saved_timezone=$(cat "$TIMEZONE_FILE")
+        if timedatectl set-timezone "$saved_timezone" 2>/dev/null; then
+            echo "Successfully applied saved timezone: $saved_timezone"
+            echo "timezone_set=true" > "$STATUS_FILE" 2>/dev/null || true
+            rm -f "$TIMEZONE_FILE" 2>/dev/null || true
+            return 0
+        fi
+    fi
+    return 1
 }
 
 # Run NTP sync if network is available
 if check_network; then
     echo "Network is available. Attempting NTP sync."
+    # Try to apply any saved timezone first
+    apply_saved_timezone
     sync_ntp
 else
     echo "Network is unavailable. Skipping NTP sync."
@@ -91,7 +122,7 @@ fi
 # Handle service commands
 case "$1" in
     "set-time")
-        set_time "$2" "$3"
+        set_time "$2" "$3" "$4"
         exit $?
         ;;
     *)
