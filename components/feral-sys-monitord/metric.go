@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -249,8 +250,11 @@ func (p *Monitor) getCPUFrequency() (current, max float64, err error) {
 // getCPUTemperature tries to get the CPU temperature from lm-sensors
 func (p *Monitor) getCPUTemperature() (current, max float64, err error) {
 	cmd := exec.Command("sensors", "-u")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get CPU temperature", zap.String("stderr", stderr.String()), zap.Error(err))
 		return 0, 0, err
 	}
 
@@ -318,8 +322,13 @@ func (p *Monitor) monitorGPU() (GPUMetrics, error) {
 func (p *Monitor) getIntelGPUFreq() (current, max float64, err error) {
 	// Get the current frequency
 	cmd := exec.Command("timeout", "1s", "sudo", "intel_gpu_top", "-J", "-s", "1000")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 124 {
+		if err != nil {
+			p.logger.Error("Failed to get Intel GPU frequency", zap.String("stderr", stderr.String()), zap.Error(err))
+		}
 		return 0, 0, err
 	}
 
@@ -345,8 +354,10 @@ func (p *Monitor) getIntelGPUFreq() (current, max float64, err error) {
 
 	// Discover the card name using `ls /sys/class/drm/`
 	cmd = exec.Command("ls", "/sys/class/drm/")
+	cmd.Stderr = &stderr
 	output, err = cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get Intel GPU frequency", zap.String("stderr", stderr.String()), zap.Error(err))
 		return 0, 0, err
 	}
 	lines := strings.Split(string(output), "\n")
@@ -361,8 +372,10 @@ func (p *Monitor) getIntelGPUFreq() (current, max float64, err error) {
 
 	// Get the max frequency
 	cmd = exec.Command("cat", "/sys/class/drm/"+card+"/gt_max_freq_mhz")
+	cmd.Stderr = &stderr
 	output, err = cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get Intel GPU frequency", zap.String("stderr", stderr.String()), zap.Error(err))
 		return 0, 0, err
 	}
 	max, err = strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
@@ -446,8 +459,11 @@ func (p *Monitor) monitorScreen() (ScreenMetrics, error) {
 	metrics := ScreenMetrics{}
 
 	cmd := exec.Command("wlr-randr")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get screen metrics", zap.String("stderr", stderr.String()), zap.Error(err))
 		return metrics, err
 	}
 
@@ -509,12 +525,16 @@ func (p *Monitor) monitorDisk() (DiskMetrics, error) {
 }
 
 func (p *Monitor) getDiskStats() (total, used, available float64, err error) {
-	cmd, err := exec.Command("df", "-k", "/").Output()
+	cmd := exec.Command("df", "-k", "/")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get disk stats", zap.String("stderr", stderr.String()), zap.Error(err))
 		return 0, 0, 0, err
 	}
 
-	lines := strings.Split(string(cmd), "\n")
+	lines := strings.Split(string(output), "\n")
 	if len(lines) < 2 {
 		return 0, 0, 0, fmt.Errorf("unexpected format in df output")
 	}
@@ -543,12 +563,16 @@ func (p *Monitor) getDiskStats() (total, used, available float64, err error) {
 }
 
 func (p *Monitor) getDiskBreakdown() (map[string]float64, error) {
-	cmd, err := exec.Command("bash", "-c", "du -s /* 2>/dev/null || true").Output()
+	cmd := exec.Command("bash", "-c", "du -s /* 2>/dev/null || true")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get disk breakdown", zap.String("stderr", stderr.String()), zap.Error(err))
 		return nil, err
 	}
 
-	lines := strings.Split(string(cmd), "\n")
+	lines := strings.Split(string(output), "\n")
 	metrics := make(map[string]float64)
 	for _, line := range lines {
 		fields := strings.Fields(line)

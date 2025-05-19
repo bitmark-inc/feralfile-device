@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	LOG_FILE       = "/home/feralfile/.logs/profilerd.log"
-	DEBUG_LOG_FILE = "./profilerd.log"
+	LOG_FILE       = "/home/feralfile/.logs/sys-monitord.log"
+	DEBUG_LOG_FILE = "./sys-monitord.log"
 )
 
 func New(debug bool) (*zap.Logger, error) {
