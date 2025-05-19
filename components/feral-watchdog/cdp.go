@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os/exec"
 	"sync"
 	"time"
 
@@ -30,10 +29,11 @@ type CDPMonitor struct {
 	logger             *zap.Logger
 	restartHistory     []time.Time
 	lastSuccessfulResp time.Time
+	commandHandler     *CommandHandler
 }
 
 // NewCDPMonitor creates a new CDP monitor instance
-func NewCDPMonitor(cdpConfig *CDPConfig, logger *zap.Logger) *CDPMonitor {
+func NewCDPMonitor(cdpConfig *CDPConfig, logger *zap.Logger, commandHandler *CommandHandler) *CDPMonitor {
 	return &CDPMonitor{
 		cdpConfig: cdpConfig,
 		client: &http.Client{
@@ -42,6 +42,7 @@ func NewCDPMonitor(cdpConfig *CDPConfig, logger *zap.Logger) *CDPMonitor {
 		logger:             logger,
 		restartHistory:     make([]time.Time, 0, CDP_RESTART_HISTORY_SIZE),
 		lastSuccessfulResp: time.Time{},
+		commandHandler:     commandHandler,
 	}
 }
 
@@ -61,7 +62,7 @@ func (m *CDPMonitor) Start(ctx context.Context) {
 			m.logger.Info("CDP: Monitor shutting down")
 			return
 		case <-ticker.C:
-			if err := m.check(); err != nil {
+			if err := m.check(ctx); err != nil {
 				m.logger.Warn("CDP: Health check failed", zap.Error(err))
 			}
 		}
@@ -69,12 +70,12 @@ func (m *CDPMonitor) Start(ctx context.Context) {
 }
 
 // check performs a single CDP health check
-func (m *CDPMonitor) check() error {
+func (m *CDPMonitor) check(ctx context.Context) error {
 	m.logger.Debug("CDP: Checking CDP health", zap.String("endpoint", m.cdpConfig.Endpoint))
 	versionURL := fmt.Sprintf("%s/json/version", m.cdpConfig.Endpoint)
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), CDP_REQUEST_TIMEOUT)
+	ctx, cancel := context.WithTimeout(ctx, CDP_REQUEST_TIMEOUT)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, versionURL, nil)
@@ -86,14 +87,14 @@ func (m *CDPMonitor) check() error {
 
 	// Check for response and connection errors
 	if err != nil {
-		m.checkHangState()
+		m.checkHangState(ctx)
 		return fmt.Errorf("CDP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		m.checkHangState()
+		m.checkHangState(ctx)
 		return fmt.Errorf("CDP returned non-200 status: %d", resp.StatusCode)
 	}
 
@@ -113,7 +114,7 @@ func (m *CDPMonitor) check() error {
 }
 
 // checkHangState checks if Chromium is hung and needs to be restarted
-func (m *CDPMonitor) checkHangState() {
+func (m *CDPMonitor) checkHangState(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -125,12 +126,12 @@ func (m *CDPMonitor) checkHangState() {
 			zap.Duration("threshold", CDP_HANG_THRESHOLD))
 
 		// Restart Chromium kiosk service
-		m.restartChromium()
+		m.restartChromium(ctx)
 	}
 }
 
 // restartChromium restarts the Chromium kiosk service
-func (m *CDPMonitor) restartChromium() {
+func (m *CDPMonitor) restartChromium(ctx context.Context) {
 	m.logger.Warn("CDP: Restarting chromium-kiosk.service")
 	var lastRestartHistory time.Time
 	if len(m.restartHistory) > 0 {
@@ -150,19 +151,12 @@ func (m *CDPMonitor) restartChromium() {
 	// Check if we need to trigger a reboot
 	if m.shouldTriggerReboot(lastRestartHistory) {
 		m.logger.Error("CDP: Too many chromium restarts in a short period, triggering system reboot")
-		m.rebootSystem()
+		m.commandHandler.rebootSystem(ctx)
 		return
 	}
 
 	// Execute the restart command
-	cmd := exec.Command("sudo", "systemctl", "restart", "chromium-kiosk.service")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		m.logger.Error("CDP: Failed to restart chromium-kiosk.service",
-			zap.Error(err),
-			zap.ByteString("output", output))
-	} else {
-		m.logger.Info("CDP: Successfully restarted chromium-kiosk.service")
-	}
+	m.commandHandler.restartKiosk(ctx)
 
 	// Reset the last successful response time to force a new successful check
 	// before evaluating hang state again
@@ -178,16 +172,4 @@ func (m *CDPMonitor) shouldTriggerReboot(lastRestartHistory time.Time) bool {
 
 	// If the oldest of the recent restarts is within the window, we need to reboot
 	return time.Since(lastRestartHistory) <= CDP_MAX_RESTARTS_WINDOW
-}
-
-// rebootSystem triggers a system reboot
-func (m *CDPMonitor) rebootSystem() {
-	m.logger.Error("CDP: Initiating system reboot due to CDP escalation policy")
-
-	cmd := exec.Command("sudo", "systemctl", "reboot")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		m.logger.Error("CDP: Failed to reboot system",
-			zap.Error(err),
-			zap.ByteString("output", output))
-	}
 }
