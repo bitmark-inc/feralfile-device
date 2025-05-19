@@ -4,6 +4,8 @@ use uuid::Uuid;
 pub const CACHE_FILEPATH: &str = "/home/feralfile/.state/setupd";
 pub const TIMEZONE_CMD: &str = "/home/feralfile/scripts/feral-timesyncd.sh";
 pub const TIMEZONE_INSTRUCTION: &str = "set-time";
+pub const SSID_CACHE_TTL: u64 = 5 * 60 * 1000; // 5 minutes
+pub const BLE_SHUTDOWN_DELAY: u64 = 1000; // 1 second
 
 // Bluetooth configuration
 pub const SERVICE_UUID: Uuid = Uuid::from_u128(0xf7826da64fa24e988024bc5b71e0893e_u128);
@@ -34,4 +36,4 @@ pub const DBUS_EVENT_QRCODE_SWITCH: &str = "show_pairing_qr_code";
 pub const DBUS_CONNECTD_TIMEOUT: u64 = 30 * 1000; // 30 seconds
 pub const DBUS_MAX_RETRIES: usize = 6;
 pub const DBUS_ACK_TIMEOUT: u64 = 5 * 1000; // 5 seconds
-pub const DBUS_LISTEN_WAKE_UP_INTERVAL: u64 = 500; // 500 ms
+pub const DBUS_LISTEN_WAKE_UP_INTERVAL: u64 = 1000; // 1 second

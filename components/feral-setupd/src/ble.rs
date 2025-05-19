@@ -2,7 +2,7 @@ use crate::constant;
 use crate::dbus_utils;
 use crate::encoding;
 use crate::wifi_utils;
-
+use crate::wifi_utils::SSIDsCacher;
 use bluer::{
     Session,
     adv::Advertisement,
@@ -25,9 +25,11 @@ use futures_util::future::FutureExt;
 use std::error::Error;
 use std::process::Command;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::Mutex;
 use tokio::task;
 
+pub type BTConnectedCallback = Option<Box<dyn Fn() + Send + Sync>>;
 pub type ConnectWifiCallback = Option<Box<dyn Fn(&str, &str) + Send + Sync>>;
 pub type GetInfoCallback = Option<Box<dyn Fn() -> Vec<String> + Send + Sync>>;
 
@@ -56,8 +58,10 @@ impl BLE {
 
     pub async fn start(
         &self,
+        bt_connected_cb: BTConnectedCallback,
         connect_wifi_cb: ConnectWifiCallback,
         get_info_cb: GetInfoCallback,
+        ssids_cacher: Arc<SSIDsCacher>,
     ) -> Result<(), Box<dyn Error>> {
         let mut st = self.state.lock().await;
         if st.advertised {
@@ -88,7 +92,10 @@ impl BLE {
         let svc = Service {
             uuid: constant::SERVICE_UUID,
             primary: true,
-            characteristics: vec![self.create_cmd_char(connect_wifi_cb, get_info_cb).await],
+            characteristics: vec![
+                self.create_cmd_char(bt_connected_cb, connect_wifi_cb, get_info_cb, ssids_cacher)
+                    .await,
+            ],
             ..Default::default()
         };
         let app = Application {
@@ -111,8 +118,16 @@ impl BLE {
             st.advertised = false;
             (st.adv_handle.take(), st.app_handle.take())
         };
-        drop(adv);
         drop(app);
+        if adv.is_some() {
+            drop(adv);
+            // BlueRust needs a delay to ask bluez to stop advertising
+            tokio::time::sleep(std::time::Duration::from_millis(
+                constant::BLE_SHUTDOWN_DELAY,
+            ))
+            .await;
+        }
+
         Ok(())
     }
 
@@ -123,17 +138,19 @@ impl BLE {
 
     async fn create_cmd_char(
         &self,
+        bt_connected_cb: BTConnectedCallback,
         connect_wifi_cb: ConnectWifiCallback,
         get_info_cb: GetInfoCallback,
+        ssids_cacher: Arc<SSIDsCacher>,
     ) -> Characteristic {
         // Shared storage for the notifier handle
         let notifier: Arc<Mutex<Option<CharacteristicNotifier>>> = Arc::new(Mutex::new(None));
         let notifier_for_write = notifier.clone();
         let notifier_for_notify = notifier.clone();
 
+        let bt_connected_callback = Arc::new(bt_connected_cb);
         let connect_wifi_callback = Arc::new(connect_wifi_cb);
         let get_info_callback = Arc::new(get_info_cb);
-
         Characteristic {
             uuid: constant::CMD_CHAR_UUID,
             // Enable notifications on this characteristic
@@ -141,9 +158,13 @@ impl BLE {
                 notify: true,
                 method: CharacteristicNotifyMethod::Fun(Box::new(move |notifier| {
                     let handle = notifier_for_notify.clone();
+                    let bt_connected_callback = bt_connected_callback.clone();
                     async move {
                         // Store the notifier for later use in the write callback
                         *handle.lock().await = Some(notifier);
+                        if let Some(cb) = bt_connected_callback.as_ref() {
+                            cb();
+                        }
                     }
                     .boxed()
                 })),
@@ -157,6 +178,7 @@ impl BLE {
                     let notifier = notifier_for_write.clone();
                     let connect_wifi_callback = connect_wifi_callback.clone();
                     let get_info_callback = get_info_callback.clone();
+                    let ssids_cacher = ssids_cacher.clone();
                     async move {
                         let payload = encoding::parse_payload(&data);
                         // No values, or malformed payload
@@ -176,7 +198,9 @@ impl BLE {
                         let reply_id = vals[1].clone();
                         let params = vals[2..].to_vec();
                         match cmd.as_str() {
-                            constant::CMD_SCAN_WIFI => handle_scan_wifi(notifier, reply_id).await,
+                            constant::CMD_SCAN_WIFI => {
+                                handle_scan_wifi(notifier, reply_id, ssids_cacher).await
+                            }
                             constant::CMD_CONNECT_WIFI => {
                                 handle_connect_wifi(
                                     notifier,
@@ -210,16 +234,22 @@ impl BLE {
 async fn handle_scan_wifi(
     notifier: Arc<Mutex<Option<CharacteristicNotifier>>>,
     reply_id: String,
+    ssids_cacher: Arc<SSIDsCacher>,
 ) -> Result<(), ReqError> {
     // Scan available SSIDs using the helper
-    let ssids = match wifi_utils::list_ssids() {
+    let start_time = Instant::now();
+    let ssids = match ssids_cacher.get().await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("BLE: Failed to scan wifi: {}", e);
             return Ok(());
         }
     };
-    println!("BLE: Found SSIDs \n{:?}", ssids);
+    println!(
+        "BLE: Found SSIDs \n{:?} in {:?} ms",
+        ssids,
+        start_time.elapsed().as_millis()
+    );
 
     // Build BLE reply payload
     let mut reply = Vec::with_capacity(ssids.len() + 1);
@@ -346,6 +376,7 @@ async fn handle_set_time(
     _reply_id: String,
     params: Vec<String>,
 ) -> Result<(), ReqError> {
+    println!("BLE: Setting time");
     if params.len() < 2 {
         eprintln!(
             "BLE: Received timezone payload with only {} values",
@@ -356,16 +387,30 @@ async fn handle_set_time(
     match task::spawn_blocking(move || {
         let timezone = &params[0];
         let time = &params[1];
-        if Command::new(constant::TIMEZONE_CMD)
+        let result = Command::new(constant::TIMEZONE_CMD)
             .args(&[constant::TIMEZONE_INSTRUCTION, timezone, time])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-        {
+            .output();
+        println!("BLE: Result: {:?}", result);
+        if result.is_ok() {
+            println!("BLE: Time set successfully");
             Ok::<(), Box<dyn Error + Send + Sync>>(())
         } else {
+            println!("BLE: Failed to set time");
             Err("Failed to set time".into())
         }
+
+        // if Command::new(constant::TIMEZONE_CMD)
+        //     .args(&[constant::TIMEZONE_INSTRUCTION, timezone, time])
+        //     .status()
+        //     .map(|s| s.success())
+        //     .unwrap_or(false)
+        // {
+        //     println!("BLE: Time set successfully");
+        //     Ok::<(), Box<dyn Error + Send + Sync>>(())
+        // } else {
+        //     println!("BLE: Failed to set time");
+        //     Err("Failed to set time".into())
+        // }
     })
     .await
     {
@@ -389,7 +434,7 @@ async fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error + Send + Sync>>
     .await??;
 
     println!("BLE: Waiting for relayer topic");
-    task::spawn_blocking(|| {
+    let msg = task::spawn_blocking(|| {
         dbus_utils::receive(
             constant::DBUS_CONNECTD_OBJECT,
             constant::DBUS_CONNECTD_INTERFACE,
@@ -397,5 +442,7 @@ async fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error + Send + Sync>>
             constant::DBUS_CONNECTD_TIMEOUT,
         )
     })
-    .await?
+    .await??;
+    let (a, b) = msg.read2::<String, String>()?;
+    Ok(vec![a, b])
 }

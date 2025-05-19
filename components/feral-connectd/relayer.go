@@ -27,23 +27,21 @@ const (
 	RELAYER_CMD_CONNECT              RelayerCmd = "connect"
 	RELAYER_CMD_SHOW_PAIRING_QR_CODE RelayerCmd = "showPairingQRCode"
 	RELAYER_CMD_PROFILE              RelayerCmd = "deviceMetrics"
+	RELAYER_CMD_KEYBOARD_EVENT       RelayerCmd = "sendKeyboardEvent"
+	RELAYER_CMD_MOUSE_DRAG_EVENT     RelayerCmd = "dragGesture"
+	RELAYER_CMD_MOUSE_TAP_EVENT      RelayerCmd = "tapGesture"
+	RELAYER_CMD_SYS_METRICS          RelayerCmd = "deviceMetrics"
 	RELAYER_CMD_SHUTDOWN             RelayerCmd = "shutdown"
 )
 
 func (c RelayerCmd) CDPCmd() bool {
-	nonCDPCmds := []RelayerCmd{
-		RELAYER_CMD_CONNECT,
-		RELAYER_CMD_SHOW_PAIRING_QR_CODE,
-		RELAYER_CMD_PROFILE,
-		RELAYER_CMD_SHUTDOWN,
-	}
-
-	for _, cmd := range nonCDPCmds {
-		if c == cmd {
-			return false
-		}
-	}
-	return true
+	return c != RELAYER_CMD_CONNECT &&
+		c != RELAYER_CMD_SHOW_PAIRING_QR_CODE &&
+		c != RELAYER_CMD_PROFILE &&
+		c != RELAYER_CMD_KEYBOARD_EVENT &&
+		c != RELAYER_CMD_MOUSE_DRAG_EVENT &&
+		c != RELAYER_CMD_MOUSE_TAP_EVENT &&
+		c != RELAYER_CMD_SHUTDOWN
 }
 
 type RelayerPayload struct {
@@ -291,6 +289,8 @@ func (r *RelayerClient) background(ctx context.Context) {
 					}
 					return
 				}
+
+				r.logger.Info("Received message", zap.ByteString("message", msg))
 
 				// Unmarshal payload
 				var payload RelayerPayload

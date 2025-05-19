@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/feral-file/godbus"
-	"github.com/godbus/dbus/v5"
 	"go.uber.org/zap"
 )
 
@@ -51,57 +50,31 @@ func main() {
 		os.Exit(1)
 	}()
 
-	// Load configuration
-	config, err := LoadConfig(logger)
-	if err != nil {
-		logger.Fatal("Failed to load configuration", zap.Error(err))
-	}
-
-	// Load state
-	state, err := LoadState(logger)
-	if err != nil {
-		logger.Fatal("Failed to load state", zap.Error(err))
-	}
-
-	// Initialize CDP client
-	cdpClient := NewCDPClient(config.CDPConfig, logger)
-	err = cdpClient.InitCDP(ctx)
-	if err != nil {
-		logger.Fatal("CDP init failed", zap.Error(err))
-	}
-	defer cdpClient.Close()
-
 	// Start watchdog in a goroutine
 	watchdog := NewWatchdog(WATCHDOG_INTERVAL, logger)
 	go watchdog.Start(ctx)
 	defer watchdog.Stop()
 
-	// Initialize Relayer client
-	relayerClient := NewRelayerClient(config.RelayerConfig, logger)
-	defer relayerClient.Close()
-
-	// Connect to Relayer if ready
-	if state.RelayerChanReady() {
-		err = relayerClient.RetryableConnect(ctx)
-		if err != nil {
-			logger.Fatal("Failed to connect to relayer", zap.Error(err))
-		}
-	}
-
 	// Initialize DBus client
-	mo := dbus.WithMatchPathNamespace(dbus.ObjectPath("/com/feralfile"))
-	dbusClient := godbus.NewDBusClient(ctx, logger, mo)
+	dbusClient := godbus.NewDBusClient(ctx, logger)
 	err = dbusClient.Start()
 	if err != nil {
 		logger.Fatal("DBus init failed", zap.Error(err))
 	}
 	defer dbusClient.Stop()
 
-	// Initialize command handler
-	cmd := NewCommandHandler(cdpClient, dbusClient, logger)
+	// Initialize Monitor
+	monitor := NewMonitor(ctx, logger)
+	monitor.Start()
+	defer monitor.Stop()
+
+	// Initialize Connectivity
+	connectivity := NewConnectivity(ctx, logger)
+	connectivity.Start()
+	defer connectivity.Stop()
 
 	// Initialize Mediator
-	mediator := NewMediator(relayerClient, dbusClient, cdpClient, cmd, logger)
+	mediator := NewMediator(dbusClient, monitor, connectivity, logger)
 	mediator.Start()
 	defer mediator.Stop()
 

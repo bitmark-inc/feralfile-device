@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -168,6 +169,12 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 	}
 
 	result := resp.Result.Result
+
+	// If the result is empty ({}), return nil
+	if reflect.ValueOf(result).Kind() == reflect.Map &&
+		reflect.ValueOf(result).Len() == 0 {
+		return nil, nil
+	}
 
 	// Check for uncaught errors
 	if result.Type == CDP_TYPE_OBJECT &&

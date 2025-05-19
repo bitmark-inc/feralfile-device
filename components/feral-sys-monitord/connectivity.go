@@ -8,18 +8,22 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
-	// Target address to ping for connectivity check
-	PING_TARGET = "1.1.1.1:443"
-
 	// Ping interval in seconds
 	PING_INTERVAL = 30 * time.Second
 
 	// Connection timeout
-	PING_TIMEOUT = 2 * time.Second
+	PING_TIMEOUT = 5 * time.Second
 )
+
+var PING_TARGET_ADDRESS = []string{
+	"1.1.1.1:443", // Cloudflare
+	"8.8.8.8:443", // Google
+	"9.9.9.9:443", // Quad9
+}
 
 type ConnectivityHandler func(ctx context.Context, connected bool)
 
@@ -95,8 +99,14 @@ func (c *Connectivity) background() {
 		c.logger.Info("Connectivity background goroutine started")
 
 		// Check initial connectivity
-		connected := c.checkConnectivity()
+		connected, err := c.checkConnectivity()
+		if err != nil {
+			c.logger.Warn("Connectivity check failed", zap.Error(err))
+		}
 		c.notifyHandlers(c.ctx, connected)
+
+		ticker := time.NewTicker(PING_INTERVAL)
+		defer ticker.Stop()
 
 		for {
 			select {
@@ -106,9 +116,13 @@ func (c *Connectivity) background() {
 			case <-c.done:
 				c.logger.Info("Connectivity Watcher stopped")
 				return
-			case <-time.After(PING_INTERVAL):
+			case <-ticker.C:
 				c.logger.Info("Checking connectivity")
-				connected := c.checkConnectivity()
+				connected, err := c.checkConnectivity()
+				if err != nil {
+					c.logger.Warn("Connectivity check failed", zap.Error(err))
+					continue
+				}
 				if connected != c.lastConnected {
 					c.notifyHandlers(c.ctx, connected)
 					c.lastConnected = connected
@@ -120,12 +134,50 @@ func (c *Connectivity) background() {
 }
 
 // checkConnectivity attempts to connect to the PING_TARGET address to check connectivity
-func (c *Connectivity) checkConnectivity() bool {
-	conn, err := net.DialTimeout("tcp", PING_TARGET, PING_TIMEOUT)
-	if err != nil {
-		c.logger.Warn("Connectivity check failed", zap.Error(err))
-		return false
+func (c *Connectivity) checkConnectivity() (bool, error) {
+	ctx, cancel := context.WithTimeout(c.ctx, PING_TIMEOUT+time.Second)
+	defer cancel()
+
+	eg, egCtx := errgroup.WithContext(ctx)
+	resultChan := make(chan bool, len(PING_TARGET_ADDRESS))
+	defer close(resultChan)
+
+	for _, target := range PING_TARGET_ADDRESS {
+		target := target
+		eg.Go(func() error {
+			dialer := net.Dialer{Timeout: PING_TIMEOUT}
+			conn, err := dialer.DialContext(egCtx, "tcp", target)
+			if conn != nil {
+				conn.Close()
+			}
+
+			select {
+			case resultChan <- err == nil:
+			case <-egCtx.Done():
+				return nil
+			case <-c.done:
+				return nil
+			case <-c.ctx.Done():
+				return nil
+			}
+
+			return err
+		})
 	}
-	defer conn.Close()
-	return true
+
+	err := eg.Wait()
+	if err != nil {
+		return false, err
+	}
+
+	connected := false
+	for i := 0; i < len(PING_TARGET_ADDRESS); i++ {
+		result := <-resultChan
+		if result {
+			connected = true
+			break
+		}
+	}
+
+	return connected, nil
 }

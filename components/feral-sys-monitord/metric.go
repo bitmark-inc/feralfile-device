@@ -18,175 +18,190 @@ import (
 )
 
 const (
-	PROFILER_INTERVAL = 1 * time.Second
+	MONITOR_INTERVAL = 2 * time.Second
 )
 
-type CPUProfile struct {
+type CPUMetrics struct {
 	MaxFrequency       float64 `json:"max_frequency"`
 	CurrentFrequency   float64 `json:"current_frequency"`
 	MaxTemperature     float64 `json:"max_temperature"`
 	CurrentTemperature float64 `json:"current_temperature"`
 }
 
-type GPUProfile struct {
+type GPUMetrics struct {
 	MaxFrequency       float64 `json:"max_frequency"`
 	CurrentFrequency   float64 `json:"current_frequency"`
 	CurrentTemperature float64 `json:"current_temperature"`
 	MaxTemperature     float64 `json:"max_temperature"`
 }
 
-type MemoryProfile struct {
+type MemoryMetrics struct {
 	MaxCapacity  float64 `json:"max_capacity"`
 	UsedCapacity float64 `json:"used_capacity"`
 }
 
-func (p MemoryProfile) CapacityPercent() float64 {
+func (p MemoryMetrics) CapacityPercent() float64 {
 	return p.UsedCapacity / p.MaxCapacity
 }
 
-type ScreenProfile struct {
-	Width  int `json:"width"`
-	Height int `json:"height"`
+type ScreenMetrics struct {
+	Width       int     `json:"width"`
+	Height      int     `json:"height"`
+	RefreshRate float64 `json:"refresh_rate"`
 }
 
-type Profile struct {
-	CPU    CPUProfile    `json:"cpu"`
-	GPU    GPUProfile    `json:"gpu"`
-	Memory MemoryProfile `json:"memory"`
-	Screen ScreenProfile `json:"screen"`
+type DiskMetrics struct {
+	TotalCapacity     float64            `json:"total_capacity"`
+	UsedCapacity      float64            `json:"used_capacity"`
+	AvailableCapacity float64            `json:"available_capacity"`
+	Breakdown         map[string]float64 `json:"breakdown"`
+}
+
+type SysMetrics struct {
+	CPU    CPUMetrics    `json:"cpu"`
+	GPU    GPUMetrics    `json:"gpu"`
+	Memory MemoryMetrics `json:"memory"`
+	Screen ScreenMetrics `json:"screen"`
 	Uptime float64       `json:"uptime"`
+	Disk   DiskMetrics   `json:"disk"`
 }
 
-type ProfileHandler func(profile *Profile)
+type MonitorHandler func(metrics *SysMetrics)
 
-type Profiler struct {
+type Monitor struct {
 	sync.Mutex
 
 	ctx         context.Context
 	logger      *zap.Logger
-	lastProfile *Profile
-	handlers    []ProfileHandler
+	lastMetrics *SysMetrics
+	handlers    []MonitorHandler
 	doneChan    chan struct{}
 }
 
-func NewProfiler(ctx context.Context, logger *zap.Logger) *Profiler {
-	return &Profiler{
+func NewMonitor(ctx context.Context, logger *zap.Logger) *Monitor {
+	return &Monitor{
 		ctx:      ctx,
 		logger:   logger,
-		handlers: []ProfileHandler{},
+		handlers: []MonitorHandler{},
 		doneChan: make(chan struct{}),
 	}
 }
 
-func (p *Profiler) LastProfile() *Profile {
+func (p *Monitor) LastMetrics() *SysMetrics {
 	p.Lock()
 	defer p.Unlock()
 
-	return p.lastProfile
+	return p.lastMetrics
 }
 
-func (p *Profiler) Start() {
+func (p *Monitor) Start() {
 	go p.run()
 }
 
-func (p *Profiler) run() {
-	p.logger.Info("Profiler started in the background")
+func (p *Monitor) run() {
+	p.logger.Info("Monitor started in the background")
 
-	ticker := time.NewTicker(PROFILER_INTERVAL)
+	ticker := time.NewTicker(MONITOR_INTERVAL)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-p.doneChan:
-			p.logger.Info("Profiler stopped")
+			p.logger.Info("Monitor stopped")
 			return
 		case <-p.ctx.Done():
-			p.logger.Info("Profiler stopped because context was cancelled")
+			p.logger.Info("Monitor stopped because context was cancelled")
 			return
 		case <-ticker.C:
-			p.logger.Debug("Profiling system")
-			profile, err := p.profile()
+			metrics, err := p.monitor()
 			if err != nil {
-				p.logger.Error("Failed to profile system", zap.Error(err))
+				p.logger.Error("Failed to monitor system", zap.Error(err))
 				continue
 			}
-			p.notifyHandlers(profile)
-			p.lastProfile = profile
+			p.notifyHandlers(metrics)
+			p.lastMetrics = metrics
 		}
 	}
 }
 
-func (p *Profiler) profile() (*Profile, error) {
-	profile := &Profile{
-		CPU:    CPUProfile{},
-		GPU:    GPUProfile{},
-		Memory: MemoryProfile{},
-		Screen: ScreenProfile{},
+func (p *Monitor) monitor() (*SysMetrics, error) {
+	metrics := &SysMetrics{
+		CPU:    CPUMetrics{},
+		GPU:    GPUMetrics{},
+		Memory: MemoryMetrics{},
+		Screen: ScreenMetrics{},
 		Uptime: 0,
 	}
 
-	// CPU profile
-	cpuProfile, err := p.profileCPU()
+	// CPU metrics
+	cpuMetrics, err := p.monitorCPU()
 	if err != nil {
 		return nil, err
 	}
-	profile.CPU = cpuProfile
+	metrics.CPU = cpuMetrics
 
-	// GPU profile
-	gpuProfile, err := p.profileGPU()
+	// GPU metrics
+	gpuMetrics, err := p.monitorGPU()
 	if err != nil {
 		return nil, err
 	}
-	profile.GPU = gpuProfile
+	metrics.GPU = gpuMetrics
 
-	// Memory profile
-	memoryProfile, err := p.profileMemory()
+	// Memory metrics
+	memoryMetrics, err := p.monitorMemory()
 	if err != nil {
 		return nil, err
 	}
-	profile.Memory = memoryProfile
+	metrics.Memory = memoryMetrics
 
-	// Screen profile
-	screenProfile, err := p.profileScreen()
+	// Screen metrics
+	screenMetrics, err := p.monitorScreen()
 	if err != nil {
 		return nil, err
 	}
-	profile.Screen = screenProfile
+	metrics.Screen = screenMetrics
 
-	// Uptime profile
-	uptimeProfile, err := p.profileUptime()
+	// Uptime metrics
+	uptimeMetrics, err := p.monitorUptime()
 	if err != nil {
 		return nil, err
 	}
-	profile.Uptime = uptimeProfile
+	metrics.Uptime = uptimeMetrics
 
-	return profile, nil
+	// Disk metrics
+	diskMetrics, err := p.monitorDisk()
+	if err != nil {
+		return nil, err
+	}
+	metrics.Disk = diskMetrics
+
+	return metrics, nil
 }
 
-func (p *Profiler) profileCPU() (CPUProfile, error) {
-	cpuProfile := CPUProfile{}
+func (p *Monitor) monitorCPU() (CPUMetrics, error) {
+	metrics := CPUMetrics{}
 
 	// Get CPU frequency
 	currentFreq, maxFreq, err := p.getCPUFrequency()
 	if err != nil {
-		return cpuProfile, err
+		return metrics, err
 	}
-	cpuProfile.CurrentFrequency = currentFreq
-	cpuProfile.MaxFrequency = maxFreq
+	metrics.CurrentFrequency = currentFreq
+	metrics.MaxFrequency = maxFreq
 
 	// Get CPU temperature
 	currentTemp, maxTemp, err := p.getCPUTemperature()
 	if err != nil {
-		return cpuProfile, err
+		return metrics, err
 	}
-	cpuProfile.CurrentTemperature = currentTemp
-	cpuProfile.MaxTemperature = maxTemp
+	metrics.CurrentTemperature = currentTemp
+	metrics.MaxTemperature = maxTemp
 
-	return cpuProfile, nil
+	return metrics, nil
 }
 
 // getCPUFrequency returns the current and max CPU frequencies in MHz
-func (p *Profiler) getCPUFrequency() (current, max float64, err error) {
+func (p *Monitor) getCPUFrequency() (current, max float64, err error) {
 	// Find all CPU frequency files
 	cpuFreqFiles, err := filepath.Glob("/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq")
 	if err != nil {
@@ -232,7 +247,7 @@ func (p *Profiler) getCPUFrequency() (current, max float64, err error) {
 }
 
 // getCPUTemperature tries to get the CPU temperature from lm-sensors
-func (p *Profiler) getCPUTemperature() (current, max float64, err error) {
+func (p *Monitor) getCPUTemperature() (current, max float64, err error) {
 	cmd := exec.Command("sensors", "-u")
 	output, err := cmd.Output()
 	if err != nil {
@@ -277,30 +292,30 @@ func (p *Profiler) getCPUTemperature() (current, max float64, err error) {
 	return current, max, nil
 }
 
-func (p *Profiler) profileGPU() (GPUProfile, error) {
-	gpuProfile := GPUProfile{}
+func (p *Monitor) monitorGPU() (GPUMetrics, error) {
+	metrics := GPUMetrics{}
 
 	// Get GPU frequency
 	currentFreq, maxFreq, err := p.getIntelGPUFreq()
 	if err != nil {
-		return gpuProfile, err
+		return metrics, err
 	}
-	gpuProfile.CurrentFrequency = currentFreq
-	gpuProfile.MaxFrequency = maxFreq
+	metrics.CurrentFrequency = currentFreq
+	metrics.MaxFrequency = maxFreq
 
 	// Get GPU temperature
 	currentTemp, maxTemp, err := p.getCPUTemperature()
 	if err != nil {
-		return gpuProfile, err
+		return metrics, err
 	}
-	gpuProfile.CurrentTemperature = currentTemp
-	gpuProfile.MaxTemperature = maxTemp
+	metrics.CurrentTemperature = currentTemp
+	metrics.MaxTemperature = maxTemp
 
-	return gpuProfile, nil
+	return metrics, nil
 }
 
 // getIntelGPUFreq gets Intel GPU frequency using intel_gpu_top
-func (p *Profiler) getIntelGPUFreq() (current, max float64, err error) {
+func (p *Monitor) getIntelGPUFreq() (current, max float64, err error) {
 	// Get the current frequency
 	cmd := exec.Command("timeout", "1s", "sudo", "intel_gpu_top", "-J", "-s", "1000")
 	output, err := cmd.Output()
@@ -358,22 +373,22 @@ func (p *Profiler) getIntelGPUFreq() (current, max float64, err error) {
 	return current, max, nil
 }
 
-func (p *Profiler) profileMemory() (MemoryProfile, error) {
-	memoryProfile := MemoryProfile{}
+func (p *Monitor) monitorMemory() (MemoryMetrics, error) {
+	metrics := MemoryMetrics{}
 
 	// Get memory usage
 	used, total, err := p.getMemoryStats()
 	if err != nil {
-		return memoryProfile, err
+		return metrics, err
 	}
-	memoryProfile.UsedCapacity = used
-	memoryProfile.MaxCapacity = total
+	metrics.UsedCapacity = used
+	metrics.MaxCapacity = total
 
-	return memoryProfile, nil
+	return metrics, nil
 }
 
 // getMemoryStats returns the memory usage statistics
-func (p *Profiler) getMemoryStats() (used, total float64, err error) {
+func (p *Monitor) getMemoryStats() (used, total float64, err error) {
 	file, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return 0, 0, err
@@ -405,7 +420,7 @@ func (p *Profiler) getMemoryStats() (used, total float64, err error) {
 	return used, total, nil
 }
 
-func (p *Profiler) profileUptime() (float64, error) {
+func (p *Monitor) monitorUptime() (float64, error) {
 	// Read the uptime file
 	data, err := os.ReadFile("/proc/uptime")
 	if err != nil {
@@ -427,63 +442,152 @@ func (p *Profiler) profileUptime() (float64, error) {
 	return uptimeSec, nil
 }
 
-func (p *Profiler) profileScreen() (ScreenProfile, error) {
-	screenProfile := ScreenProfile{}
+func (p *Monitor) monitorScreen() (ScreenMetrics, error) {
+	metrics := ScreenMetrics{}
 
 	cmd := exec.Command("wlr-randr")
 	output, err := cmd.Output()
 	if err != nil {
-		return screenProfile, err
+		return metrics, err
 	}
 
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		if strings.Contains(line, "current") {
 			fields := strings.Fields(line)
-			if len(fields) < 1 {
-				return screenProfile, fmt.Errorf("unexpected format in wlr-randr output")
+			if len(fields) < 3 {
+				return metrics, fmt.Errorf("unexpected format in wlr-randr output")
 			}
 
+			// resolution
 			dimensions := strings.Split(fields[0], "x")
 			if len(dimensions) != 2 {
-				return screenProfile, fmt.Errorf("unexpected format in wlr-randr output")
+				return metrics, fmt.Errorf("unexpected format in wlr-randr output")
 			}
-			screenProfile.Width, err = strconv.Atoi(dimensions[0])
+			metrics.Width, err = strconv.Atoi(dimensions[0])
 			if err != nil {
-				return screenProfile, err
+				return metrics, err
 			}
-			screenProfile.Height, err = strconv.Atoi(dimensions[1])
+			metrics.Height, err = strconv.Atoi(dimensions[1])
 			if err != nil {
-				return screenProfile, err
+				return metrics, err
 			}
+
+			// refresh rate
+			refreshRate, err := strconv.ParseFloat(fields[2], 64)
+			if err != nil {
+				return metrics, err
+			}
+			metrics.RefreshRate = refreshRate
 
 			break
 		}
 	}
-	return screenProfile, nil
+	return metrics, nil
 }
 
-func (p *Profiler) notifyHandlers(profile *Profile) {
+func (p *Monitor) monitorDisk() (DiskMetrics, error) {
+	metrics := DiskMetrics{}
+
+	// Get total/used capacity
+	total, used, available, err := p.getDiskStats()
+	if err != nil {
+		return metrics, err
+	}
+	metrics.TotalCapacity = total
+	metrics.UsedCapacity = used
+	metrics.AvailableCapacity = available
+
+	// Get breakdown
+	breakdown, err := p.getDiskBreakdown()
+	if err != nil {
+		return metrics, err
+	}
+	metrics.Breakdown = breakdown
+
+	return metrics, nil
+}
+
+func (p *Monitor) getDiskStats() (total, used, available float64, err error) {
+	cmd, err := exec.Command("df", "-k", "/").Output()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	lines := strings.Split(string(cmd), "\n")
+	if len(lines) < 2 {
+		return 0, 0, 0, fmt.Errorf("unexpected format in df output")
+	}
+
+	fields := strings.Fields(lines[1])
+	if len(fields) < 5 {
+		return 0, 0, 0, fmt.Errorf("unexpected format in df output")
+	}
+
+	total, err = strconv.ParseFloat(fields[1], 64)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	used, err = strconv.ParseFloat(fields[2], 64)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	available, err = strconv.ParseFloat(fields[3], 64)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	return total, used, available, nil
+}
+
+func (p *Monitor) getDiskBreakdown() (map[string]float64, error) {
+	cmd, err := exec.Command("bash", "-c", "du -s /* 2>/dev/null || true").Output()
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(string(cmd), "\n")
+	metrics := make(map[string]float64)
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		total, err := strconv.ParseFloat(fields[0], 64)
+		if err != nil {
+			return nil, err
+		}
+
+		metrics[fields[1]] = total
+	}
+
+	return metrics, nil
+}
+
+func (p *Monitor) notifyHandlers(metrics *SysMetrics) {
 	p.Lock()
-	handlers := make([]ProfileHandler, len(p.handlers))
+	handlers := make([]MonitorHandler, len(p.handlers))
 	copy(handlers, p.handlers)
 	p.Unlock()
 
 	for _, handler := range handlers {
-		go func(h ProfileHandler) {
-			h(profile)
+		go func(h MonitorHandler) {
+			h(metrics)
 		}(handler)
 	}
 }
 
-func (p *Profiler) OnProfile(handler ProfileHandler) {
+func (p *Monitor) OnMonitor(handler MonitorHandler) {
 	p.Lock()
 	defer p.Unlock()
 
 	p.handlers = append(p.handlers, handler)
 }
 
-func (p *Profiler) RemoveProfileHandler(handler ProfileHandler) {
+func (p *Monitor) RemoveMonitorHandler(handler MonitorHandler) {
 	p.Lock()
 	defer p.Unlock()
 
@@ -495,7 +599,7 @@ func (p *Profiler) RemoveProfileHandler(handler ProfileHandler) {
 	}
 }
 
-func (p *Profiler) Stop() {
+func (p *Monitor) Stop() {
 	select {
 	case <-p.doneChan:
 		return
@@ -503,5 +607,5 @@ func (p *Profiler) Stop() {
 		close(p.doneChan)
 	}
 
-	p.logger.Info("Profiler stopped")
+	p.logger.Info("Monitor stopped")
 }
