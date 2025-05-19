@@ -8,12 +8,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/feral-file/godbus"
+	"github.com/godbus/dbus/v5"
 	"go.uber.org/zap"
 )
 
 const (
 	// Timeouts
-	SHUTDOWN_TIMEOUT  = 2 * time.Second
 	GOROUTINE_TIMEOUT = 1500 * time.Millisecond // 1.5 seconds
 	DEBUG_MODE        = true
 )
@@ -41,12 +42,6 @@ func main() {
 		logger.Info("Received signal, initiating shutdown...",
 			zap.String("signal", sig.String()))
 		cancel()
-
-		// Force exit if graceful shutdown takes too long
-		time.Sleep(SHUTDOWN_TIMEOUT)
-		logger.Error("Shutdown timed out, forcing exit...",
-			zap.Duration("timeout", SHUTDOWN_TIMEOUT))
-		os.Exit(1)
 	}()
 
 	// Load configuration
@@ -54,6 +49,27 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to load configuration", zap.Error(err))
 	}
+
+	// Initialize DBus client
+	mo := dbus.WithMatchPathNamespace(dbus.ObjectPath("/com/feralfile"))
+	dbusClient := godbus.NewDBusClient(ctx, logger, mo)
+	err = dbusClient.Start()
+	if err != nil {
+		logger.Fatal("DBus init failed", zap.Error(err))
+	}
+	defer dbusClient.Stop()
+
+	// Initialize system command executor
+	commandHandler := NewCommandHandler(logger)
+
+	// Initialize resource monitors
+	ramHandler := NewMemoryHandler(logger, commandHandler)
+	diskHandler := NewDiskHandler(logger, commandHandler)
+
+	// Initialize mediator
+	mediator := NewMediator(dbusClient, diskHandler, ramHandler, logger)
+	mediator.Start()
+	defer mediator.Stop()
 
 	// Create a WaitGroup to track all the monitoring goroutines
 	var wg sync.WaitGroup
@@ -72,30 +88,6 @@ func main() {
 	go func() {
 		defer wg.Done()
 		cdpMonitor.Start(ctx)
-	}()
-
-	// Start RAM monitor
-	ramMonitor := NewRAMMonitor(logger)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ramMonitor.Start(ctx)
-	}()
-
-	// Start Disk monitor
-	diskMonitor := NewDiskMonitor(logger)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		diskMonitor.Start(ctx)
-	}()
-
-	// Start GPU monitor
-	gpuMonitor := NewGPUMonitor(logger)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		gpuMonitor.Start(ctx)
 	}()
 
 	// Notify systemd that we're ready
@@ -117,7 +109,7 @@ func main() {
 	select {
 	case <-waitCh:
 		logger.Info("All goroutines have terminated cleanly")
-	case <-time.After(GOROUTINE_TIMEOUT / 2):
+	case <-time.After(GOROUTINE_TIMEOUT):
 		logger.Warn("Some goroutines did not terminate in time")
 	}
 

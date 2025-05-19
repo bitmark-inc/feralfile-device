@@ -16,8 +16,8 @@ const (
 )
 
 // ensureLogDirectory creates the log directory if it doesn't exist
-func ensureLogDirectory() error {
-	dir := filepath.Dir(LOG_FILE_PATH)
+func ensureLogDirectory(fp string) error {
+	dir := filepath.Dir(fp)
 	return os.MkdirAll(dir, 0755)
 }
 
@@ -32,7 +32,7 @@ func newLogger(debug bool) (*zap.Logger, error) {
 		config = zap.NewProductionConfig()
 	}
 
-	if err := ensureLogDirectory(); err != nil {
+	if err := ensureLogDirectory(fp); err != nil {
 		return nil, err
 	}
 
