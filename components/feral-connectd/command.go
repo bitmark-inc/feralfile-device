@@ -84,7 +84,14 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 	case RELAYER_CMD_SYS_METRICS:
 		c.Lock()
 		defer c.Unlock()
-		return c.lastSysMetrics, nil
+		var sysMetrics map[string]interface{}
+		if c.lastSysMetrics != nil {
+			err = json.Unmarshal(c.lastSysMetrics, &sysMetrics)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal last sys metrics: %s", err)
+			}
+		}
+		return sysMetrics, nil
 	default:
 		return nil, fmt.Errorf("invalid command: %s", cmd)
 	}
