@@ -6,15 +6,13 @@
 # 2. Setting timezone and time manually when offline
 
 # Configuration
-NTP_CONF="/etc/systemd/timesyncd.conf"
-TIMEZONE_FILE="/etc/timezone"
-LOCALTIME_LINK="/etc/localtime"
-ZONEINFO_PATH="/usr/share/zoneinfo"
-STATUS_FILE="/var/lib/feral-timesyncd/status"
+STATUS_DIR="/var/lib/feral-timesyncd"
+STATUS_FILE="$STATUS_DIR/status"
 
-# Create status directory if it doesn't exist
-mkdir -p "$(dirname "$STATUS_FILE")"
-touch "$STATUS_FILE"
+# Create status directory with appropriate permissions
+mkdir -p "$STATUS_DIR" 2>/dev/null || true
+touch "$STATUS_FILE" 2>/dev/null || true
+chmod -R 755 "$STATUS_DIR" 2>/dev/null || true
 
 # Ensure systemd-timesyncd is enabled
 systemctl enable systemd-timesyncd.service
@@ -40,14 +38,14 @@ sync_ntp() {
     for i in {1..30}; do
         if is_ntp_synced; then
             echo "NTP time synchronized successfully"
-            echo "ntp_synced=true" > "$STATUS_FILE"
+            echo "ntp_synced=true" > "$STATUS_FILE" 2>/dev/null || true
             return 0
         fi
         sleep 1
     done
     
     echo "Failed to synchronize time with NTP"
-    echo "ntp_synced=false" > "$STATUS_FILE"
+    echo "ntp_synced=false" > "$STATUS_FILE" 2>/dev/null || true
     return 1
 }
 
@@ -62,23 +60,18 @@ set_time() {
     timezone="$1"
     time_str="$2"
     
-    # Verify timezone exists
-    if [ ! -f "$ZONEINFO_PATH/$timezone" ]; then
-        echo "Invalid timezone: $timezone"
+    # Set timezone using timedatectl
+    if timedatectl set-timezone "$timezone"; then
+        echo "Timezone set to $timezone"
+    else
+        echo "Failed to set timezone"
         return 1
     fi
     
-    # Set timezone
-    echo "$timezone" > "$TIMEZONE_FILE"
-    ln -sf "$ZONEINFO_PATH/$timezone" "$LOCALTIME_LINK"
-    echo "Timezone set to $timezone"
-    
-    # Set system time
-    if date -s "$time_str" >/dev/null 2>&1; then
-        # Update hardware clock from system time
-        hwclock --systohc
+    # Set system time using timedatectl
+    if timedatectl set-time "$time_str"; then
         echo "System time set to $time_str"
-        echo "manual_time_set=true" > "$STATUS_FILE"
+        echo "manual_time_set=true" > "$STATUS_FILE" 2>/dev/null || true
         return 0
     else
         echo "Failed to set system time. Invalid format. Use: YYYY-MM-DD HH:MM:SS"
@@ -92,7 +85,7 @@ if check_network; then
     sync_ntp
 else
     echo "Network is unavailable. Skipping NTP sync."
-    echo "ntp_synced=false" > "$STATUS_FILE"
+    echo "ntp_synced=false" > "$STATUS_FILE" 2>/dev/null || true
 fi
 
 # Handle service commands
