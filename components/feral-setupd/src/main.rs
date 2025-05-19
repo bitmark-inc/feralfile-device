@@ -13,7 +13,7 @@ use cdp::CDP;
 use std::error::Error;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::signal;
+use tokio::signal::unix::{SignalKind, signal as unix_signal};
 use tokio::task;
 
 #[tokio::main]
@@ -22,13 +22,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let chrome = Arc::new(CDP::connect(constant::CDP_URL).await?);
     let app_cache = Arc::new(Cache::new(constant::CACHE_FILEPATH));
     let ble_service = Arc::new(BLE::new());
-    let ssids_cacher = Arc::new(SSIDsCacher::new());
     let device_id = ble_service.get_device_id().await;
 
     // Start bluetooth advertising with callbacks
     let connect_wifi_cb = create_wifi_connected_cb(app_cache.clone(), chrome.clone());
     let get_info_cb = create_get_info_cb(app_cache.clone());
     let bt_connected_cb = create_bluetooth_connected_cb(app_cache.clone(), chrome.clone());
+    let ssids_cacher = Arc::new(SSIDsCacher::new());
     match ble_service
         .start(
             bt_connected_cb,
@@ -77,9 +77,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     // Wait for Ctrl+C or shutdown event
-    signal::ctrl_c().await?; // for a grateful exit (drop the adv handle)
+    wait_for_shutdown().await; // Ignore any errors
+    println!("MAIN: Shutting down...");
+    println!("MAIN: Stopping DBus listener...");
     stop_dbus_listener.store(true, Ordering::Relaxed);
-    ble_service.stop().await?;
+    println!("MAIN: Stopping BLE service...");
+    match ble_service.stop().await {
+        Ok(_) => println!("MAIN: BLE service stopped"),
+        Err(e) => println!("MAIN: Error stopping BLE service: {}", e),
+    }
+    println!("MAIN: Shutting down...");
     Ok(())
 }
 
@@ -161,4 +168,17 @@ fn build_qrcode_url(device_id: &str, app_cache: &Cache) -> String {
         );
     }
     qrcode_url
+}
+
+async fn wait_for_shutdown() {
+    // SIGINT  = Ctrl-C on the terminal
+    // SIGTERM = “polite” kill sent by most service managers / docker / k8s
+    // (add more signals if you need them)
+    let mut sigint = unix_signal(SignalKind::interrupt()).expect("SIGINT handler");
+    let mut sigterm = unix_signal(SignalKind::terminate()).expect("SIGTERM handler");
+
+    tokio::select! {
+        _ = sigint.recv()  => {},
+        _ = sigterm.recv() => {},
+    }
 }

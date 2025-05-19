@@ -118,8 +118,16 @@ impl BLE {
             st.advertised = false;
             (st.adv_handle.take(), st.app_handle.take())
         };
-        drop(adv);
         drop(app);
+        if adv.is_some() {
+            drop(adv);
+            // BlueRust needs a delay to ask bluez to stop advertising
+            tokio::time::sleep(std::time::Duration::from_millis(
+                constant::BLE_SHUTDOWN_DELAY,
+            ))
+            .await;
+        }
+
         Ok(())
     }
 
@@ -368,6 +376,7 @@ async fn handle_set_time(
     _reply_id: String,
     params: Vec<String>,
 ) -> Result<(), ReqError> {
+    println!("BLE: Setting time");
     if params.len() < 2 {
         eprintln!(
             "BLE: Received timezone payload with only {} values",
@@ -378,16 +387,30 @@ async fn handle_set_time(
     match task::spawn_blocking(move || {
         let timezone = &params[0];
         let time = &params[1];
-        if Command::new(constant::TIMEZONE_CMD)
+        let result = Command::new(constant::TIMEZONE_CMD)
             .args(&[constant::TIMEZONE_INSTRUCTION, timezone, time])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-        {
+            .output();
+        println!("BLE: Result: {:?}", result);
+        if result.is_ok() {
+            println!("BLE: Time set successfully");
             Ok::<(), Box<dyn Error + Send + Sync>>(())
         } else {
+            println!("BLE: Failed to set time");
             Err("Failed to set time".into())
         }
+
+        // if Command::new(constant::TIMEZONE_CMD)
+        //     .args(&[constant::TIMEZONE_INSTRUCTION, timezone, time])
+        //     .status()
+        //     .map(|s| s.success())
+        //     .unwrap_or(false)
+        // {
+        //     println!("BLE: Time set successfully");
+        //     Ok::<(), Box<dyn Error + Send + Sync>>(())
+        // } else {
+        //     println!("BLE: Failed to set time");
+        //     Err("Failed to set time".into())
+        // }
     })
     .await
     {
