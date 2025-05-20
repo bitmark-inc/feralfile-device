@@ -62,7 +62,7 @@ func (c *CommandHandler) rebootSystem(ctx context.Context) {
 	}
 }
 
-func (c *CommandHandler) cleanupDiskSpace(ctx context.Context) {
+func (c *CommandHandler) cleanupPacmanCache(ctx context.Context) {
 	c.mu.Lock()
 	if c.isCleaningDisk {
 		c.mu.Unlock()
@@ -78,16 +78,8 @@ func (c *CommandHandler) cleanupDiskSpace(ctx context.Context) {
 		c.mu.Unlock()
 	}()
 
-	// Cleanup temp folder
-	cmd := exec.CommandContext(ctx, "sudo", "find", TEMP_FOLDER_PATH, "-depth", "-delete")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		c.logger.Error("Failed to cleanup temp folder",
-			zap.Error(err),
-			zap.ByteString("output", output))
-	}
-
 	// Clean pacman cache
-	cmd = exec.CommandContext(ctx, "sudo", "pacman", "-Sc", "--noconfirm")
+	cmd := exec.CommandContext(ctx, "sudo", "pacman", "-Scc", "--noconfirm")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		c.logger.Error("Failed to clean pacman cache",
 			zap.Error(err),

@@ -19,7 +19,7 @@ If hanging, immediately reboot.
 
 ## DISK
 
-If disk usage > 90% (or even > 95%), trigger cleanup /tmp/ and pacman cache. After cleanup, freeze the disk checking for 10s.
+If disk usage > 90% (or even > 95%), trigger cleanup pacman cache. After cleanup, freeze the disk checking for 10s.
 After 10s from the cleanup.
 
 - If disk usage > 95%: reboot.

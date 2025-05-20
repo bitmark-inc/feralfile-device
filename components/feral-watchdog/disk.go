@@ -80,7 +80,7 @@ func (c *DiskHandler) cleanupDiskSpace(ctx context.Context, diskUsage float64) {
 	c.logger.Warn("DISK: usage high",
 		zap.Float64("usage_percent", diskUsage),
 		zap.Float64("threshold", DISK_WARNING_THRESHOLD))
-	c.commandHandler.cleanupDiskSpace(ctx)
+	c.commandHandler.cleanupPacmanCache(ctx)
 	c.isCleaned = true
 	c.diskCleanupCooldown = time.Now().Add(DISK_MONITOR_COOLDOWN)
 }
