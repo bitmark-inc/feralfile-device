@@ -13,6 +13,7 @@ ExecStartPre=/bin/sleep 1
 ExecStart=/usr/bin/feral-sys-monitord
 Restart=always
 RestartSec=5
+WatchdogSec=30s
 
 [Install]
 WantedBy=multi-user.target
