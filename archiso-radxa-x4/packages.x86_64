@@ -54,6 +54,7 @@ pulseaudio-bluetooth
 # Debug / Monitoring
 intel-gpu-tools
 lm_sensors
+weston
 
 # Feralfile 
 feral-connectd
