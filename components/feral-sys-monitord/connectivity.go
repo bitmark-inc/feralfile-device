@@ -89,7 +89,14 @@ func (c *Connectivity) notifyHandlers(ctx context.Context, connected bool) {
 
 	for _, handler := range handlers {
 		go func(h ConnectivityHandler) {
-			h(ctx, connected)
+			select {
+			case <-ctx.Done():
+				return
+			case <-c.done:
+				return
+			default:
+				h(ctx, connected)
+			}
 		}(handler)
 	}
 }

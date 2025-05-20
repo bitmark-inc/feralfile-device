@@ -120,7 +120,7 @@ func (p *SysResMonitor) run() {
 				p.logger.Error("Failed to monitor system resources", zap.Error(err))
 				continue
 			}
-			p.notifyHandlers(metrics)
+			p.notifyHandlers(p.ctx, metrics)
 			p.lastMetrics = metrics
 		}
 	}
@@ -593,7 +593,7 @@ func (p *SysResMonitor) getDiskBreakdown() (map[string]float64, error) {
 	return metrics, nil
 }
 
-func (p *SysResMonitor) notifyHandlers(metrics *SysMetrics) {
+func (p *SysResMonitor) notifyHandlers(ctx context.Context, metrics *SysMetrics) {
 	p.Lock()
 	handlers := make([]MonitorHandler, len(p.handlers))
 	copy(handlers, p.handlers)
@@ -601,7 +601,14 @@ func (p *SysResMonitor) notifyHandlers(metrics *SysMetrics) {
 
 	for _, handler := range handlers {
 		go func(h MonitorHandler) {
-			h(metrics)
+			select {
+			case <-ctx.Done():
+				return
+			case <-p.doneChan:
+				return
+			default:
+				h(metrics)
+			}
 		}(handler)
 	}
 }

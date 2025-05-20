@@ -191,6 +191,8 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 	}
 
 	// Start pinging
+	ticker := time.NewTicker(RELAYER_PING_INTERVAL)
+	defer ticker.Stop()
 	go func() {
 		for {
 			select {
@@ -200,7 +202,7 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 				return
 			case <-r.pingDoneChan:
 				return
-			case <-time.After(RELAYER_PING_INTERVAL):
+			case <-ticker.C:
 				r.ping()
 			}
 		}
@@ -304,10 +306,17 @@ func (r *RelayerClient) background(ctx context.Context) {
 
 					// Run the handler in a separate goroutine to avoid blocking the main thread
 					go func(ctx context.Context, payload RelayerPayload, handler RelayerHandler) error {
-						if err := handler(ctx, payload); err != nil {
-							r.logger.Error("Failed to handle message", zap.Error(err))
+						select {
+						case <-ctx.Done():
+							return fmt.Errorf("context cancelled")
+						case <-r.done:
+							return fmt.Errorf("connection closed")
+						default:
+							if err := handler(ctx, payload); err != nil {
+								r.logger.Error("Failed to handle message", zap.Error(err))
+							}
+							return nil
 						}
-						return nil
 					}(ctx, p, h)
 				}
 			}
