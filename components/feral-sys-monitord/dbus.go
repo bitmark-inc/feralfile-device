@@ -8,4 +8,5 @@ const (
 
 	DBUS_EVENT_SYSMETRICS          godbus.Member = "sysmetrics"
 	DBUS_EVENT_CONNECTIVITY_CHANGE godbus.Member = "connectivity_change"
+	DBUS_EVENT_SYSEVENT            godbus.Member = "sysevent"
 )

@@ -9,33 +9,38 @@ import (
 )
 
 type Mediator struct {
-	dbus         *godbus.DBusClient
-	monitor      *Monitor
-	connectivity *Connectivity
-	logger       *zap.Logger
+	dbus          *godbus.DBusClient
+	sysResMonitor *SysResMonitor
+	connectivity  *Connectivity
+	eventWatcher  *SysEventWatcher
+	logger        *zap.Logger
 }
 
 func NewMediator(
 	dbus *godbus.DBusClient,
-	monitor *Monitor,
+	monitor *SysResMonitor,
 	connectivity *Connectivity,
+	eventWatcher *SysEventWatcher,
 	logger *zap.Logger) *Mediator {
 	return &Mediator{
-		dbus:         dbus,
-		monitor:      monitor,
-		connectivity: connectivity,
-		logger:       logger,
+		dbus:          dbus,
+		sysResMonitor: monitor,
+		connectivity:  connectivity,
+		eventWatcher:  eventWatcher,
+		logger:        logger,
 	}
 }
 
 func (p *Mediator) Start() {
-	p.monitor.OnMonitor(p.handleSysMetrics)
+	p.sysResMonitor.OnMonitor(p.handleSysMetrics)
 	p.connectivity.OnConnectivityChange(p.handleConnectivityChange)
+	p.eventWatcher.OnEvent(p.handleSysEvent)
 }
 
 func (p *Mediator) Stop() {
+	p.eventWatcher.RemoveEventHandler(p.handleSysEvent)
 	p.connectivity.RemoveConnectivityChange(p.handleConnectivityChange)
-	p.monitor.RemoveMonitorHandler(p.handleSysMetrics)
+	p.sysResMonitor.RemoveMonitorHandler(p.handleSysMetrics)
 }
 
 func (p *Mediator) handleSysMetrics(metrics *SysMetrics) {
@@ -69,6 +74,21 @@ func (p *Mediator) handleConnectivityChange(ctx context.Context, connected bool)
 		Path:      DBUS_PATH,
 		Member:    DBUS_EVENT_CONNECTIVITY_CHANGE,
 		Body:      []interface{}{connected},
+	})
+	if err != nil {
+		p.logger.Error("Failed to send DBus signal", zap.Error(err))
+	}
+}
+
+func (p *Mediator) handleSysEvent(event Event) {
+	p.logger.Debug("Received sys event", zap.String("event", string(event)))
+
+	// Send a DBus signal
+	err := p.dbus.Send(godbus.DBusPayload{
+		Interface: DBUS_INTERFACE,
+		Path:      DBUS_PATH,
+		Member:    DBUS_EVENT_SYSEVENT,
+		Body:      []interface{}{event},
 	})
 	if err != nil {
 		p.logger.Error("Failed to send DBus signal", zap.Error(err))
