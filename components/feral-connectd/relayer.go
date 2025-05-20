@@ -181,7 +181,7 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 
 	// Set pong handler
 	conn.SetPongHandler(func(_ string) error {
-		r.logger.Info("Received pong")
+		r.logger.Debug("Received pong")
 		conn.SetReadDeadline(time.Time{})
 		return nil
 	})
@@ -264,12 +264,12 @@ func (r *RelayerClient) background(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
-				r.logger.Info("Closing WebSocket connection due to context cancellation")
+				r.logger.Debug("Closing WebSocket connection due to context cancellation")
 				r.Close()
 				return
 			case <-r.done:
 				// Exit if closed manually
-				r.logger.Info("Context handler exiting due to manual close")
+				r.logger.Debug("Context handler exiting due to manual close")
 				return
 			default:
 				r.Lock()
@@ -342,7 +342,7 @@ func (r *RelayerClient) ping() {
 		return
 	}
 
-	r.logger.Info("Sending ping")
+	r.logger.Debug("Sending ping")
 	if err := r.conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
 		r.logger.Error("Failed to send ping", zap.Error(err))
 		return

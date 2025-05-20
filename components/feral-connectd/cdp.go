@@ -147,7 +147,7 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 		return nil, fmt.Errorf("failed to read CDP response: %w", err)
 	}
 
-	c.logger.Info("Received CDP response",
+	c.logger.Debug("Received CDP response",
 		zap.String("method", method),
 		zap.String("response", string(response)))
 
