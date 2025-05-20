@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
+	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/feral-file/godbus"
@@ -93,6 +96,8 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 			}
 		}
 		return sysMetrics, nil
+	case RELAYER_CMD_SCREEN_ROTATION:
+		result, err = c.handleScreenRotation(ctx, bytes)
 	default:
 		return nil, fmt.Errorf("invalid command: %s", cmd)
 	}
@@ -136,6 +141,100 @@ func (c *CommandHandler) showPairingQRCode(ctx context.Context, args []byte) (in
 			Member:    DBUS_SETUPD_EVENT_SHOW_PAIRING_QR_CODE,
 			Body:      []interface{}{cmdArgs.Show},
 		})
+	return CmdOK, nil
+}
+
+func (c *CommandHandler) handleScreenRotation(ctx context.Context, args []byte) (interface{}, error) {
+	var cmdArgs struct {
+		Clockwise bool `json:"clockwise"`
+	}
+
+	err := json.Unmarshal(args, &cmdArgs)
+	if err != nil {
+		return nil, fmt.Errorf("invalid arguments: %s", err)
+	}
+
+	clockwise := cmdArgs.Clockwise
+	c.logger.Info("Screen rotation request",
+		zap.Bool("clockwise", clockwise))
+
+	// Execute wlr-randr command
+	cmd := exec.Command("wlr-randr")
+
+	// Get current outputs
+	output, err := cmd.Output()
+	if err != nil {
+		c.logger.Error("Failed to execute wlr-randr", zap.Error(err))
+		return nil, fmt.Errorf("failed to get display info: %s", err)
+	}
+
+	// Find the active output name
+	outputName := ""
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, "Output") {
+			parts := strings.Split(line, " ")
+			if len(parts) > 1 {
+				outputName = parts[1]
+				break
+			}
+		}
+	}
+
+	if outputName == "" {
+		return nil, fmt.Errorf("could not find active output")
+	}
+
+	// Determine rotation
+	// Assume normal is 0, then 90, 180, 270 degrees
+	rotations := []string{"normal", "90", "180", "270"}
+
+	// Read current orientation from config file (this is what user perceives)
+	currentIndex := 0 // Default to normal
+	configPath := "/home/feralfile/.config/screen-orientation"
+	configData, err := os.ReadFile(configPath)
+	if err == nil && len(configData) > 0 {
+		savedRotation := strings.TrimSpace(string(configData))
+		for i, rot := range rotations {
+			if rot == savedRotation {
+				currentIndex = i
+				break
+			}
+		}
+		c.logger.Info("Using perceived rotation from config", zap.String("rotation", savedRotation))
+	} else {
+		c.logger.Warn("No saved rotation found, assuming normal orientation")
+	}
+
+	// Calculate new orientation based on perceived current orientation
+	var newIndex int
+	if clockwise {
+		newIndex = (currentIndex + 1) % 4
+	} else {
+		newIndex = (currentIndex - 1 + 4) % 4
+	}
+
+	newRotation := rotations[newIndex]
+
+	// Apply with wlr-randr (force absolute orientation)
+	// This makes wlr-randr and config file stay in sync
+	rotateCmd := exec.Command("wlr-randr", "--output", outputName, "--rotate", newRotation)
+	err = rotateCmd.Run()
+	if err != nil {
+		c.logger.Error("Failed to rotate screen", zap.Error(err))
+		return nil, fmt.Errorf("failed to rotate screen: %s", err)
+	}
+
+	// Write rotation value to file
+	if err := os.WriteFile(configPath, []byte(newRotation), 0644); err != nil {
+		c.logger.Warn("Failed to save screen orientation", zap.Error(err))
+	}
+
+	c.logger.Info("Screen rotated and saved",
+		zap.String("output", outputName),
+		zap.String("rotation", newRotation))
+
 	return CmdOK, nil
 }
 

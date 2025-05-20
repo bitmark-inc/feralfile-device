@@ -31,6 +31,7 @@ const (
 	RELAYER_CMD_MOUSE_DRAG_EVENT     RelayerCmd = "dragGesture"
 	RELAYER_CMD_MOUSE_TAP_EVENT      RelayerCmd = "tapGesture"
 	RELAYER_CMD_SYS_METRICS          RelayerCmd = "deviceMetrics"
+	RELAYER_CMD_SCREEN_ROTATION      RelayerCmd = "rotate"
 )
 
 func (c RelayerCmd) CDPCmd() bool {
