@@ -40,7 +40,8 @@ func (c RelayerCmd) CDPCmd() bool {
 		c != RELAYER_CMD_PROFILE &&
 		c != RELAYER_CMD_KEYBOARD_EVENT &&
 		c != RELAYER_CMD_MOUSE_DRAG_EVENT &&
-		c != RELAYER_CMD_MOUSE_TAP_EVENT
+		c != RELAYER_CMD_MOUSE_TAP_EVENT &&
+		c != RELAYER_CMD_SCREEN_ROTATION
 }
 
 type RelayerPayload struct {
