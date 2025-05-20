@@ -11,7 +11,7 @@ import (
 
 const (
 	// File paths for logs
-	DEBUG_LOG_FILE_PATH = "./feral-watchdog.log"
+	DEBUG_LOG_FILE_PATH = "/var/log/feralfile/feral-watchdog.log"
 	LOG_FILE_PATH       = "/home/feralfile/.logs/feral-watchdog.log"
 )
 
