@@ -57,9 +57,9 @@ func (c *MemoryHandler) checkMemoryUsage(ctx context.Context, metrics *SysMetric
 
 	// If memory usage is below threshold, reset monitoring if active
 	if memUsage < RAM_CRITICAL_THRESHOLD {
+		c.logger.Info("RAM: usage",
+			zap.Float64("usage_percent", memUsage))
 		if c.highMemoryMonitoring {
-			c.logger.Info("RAM: usage",
-				zap.Float64("usage_percent", memUsage))
 			c.resetMonitoring()
 		}
 
@@ -102,6 +102,7 @@ func (c *MemoryHandler) checkMemoryUsage(ctx context.Context, metrics *SysMetric
 
 // Helper method to reset monitoring state
 func (c *MemoryHandler) resetMonitoring() {
+	c.logger.Debug("RAM: Resetting monitoring")
 	c.highMemoryMonitoring = false
 	c.highMemStartTime = time.Time{}
 }

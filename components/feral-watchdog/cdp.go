@@ -16,7 +16,7 @@ const (
 	CDP_CHECK_INTERVAL         = 5 * time.Second // Check CDP every 5 seconds
 	CDP_REQUEST_TIMEOUT        = 3 * time.Second
 	CDP_HANG_THRESHOLD         = 20 * time.Second
-	CDP_RESTART_HISTORY_SIZE   = 20 // Store the last 20 restarts
+	CDP_RESTART_HISTORY_SIZE   = 3 // Store the last 3 restarts
 	CDP_MAX_RESTARTS_WINDOW    = 5 * time.Minute
 	CDP_MAX_RESTARTS_THRESHOLD = 3 // 3 restarts within the window triggers reboot
 )
@@ -133,23 +133,17 @@ func (m *CDPMonitor) checkHangState(ctx context.Context) {
 
 // restartChromium restarts the Chromium kiosk service
 func (m *CDPMonitor) restartChromium(ctx context.Context) {
-	var lastRestartHistory time.Time
-	if len(m.restartHistory) > 0 {
-		lastRestartHistory = m.restartHistory[len(m.restartHistory)-1]
-	}
-
 	// Add restart to history
 	now := time.Now()
 	m.restartHistory = append(m.restartHistory, now)
 
-	// Keep only the most recent restarts
+	// Keep only 3 recent restarts
 	if len(m.restartHistory) > CDP_RESTART_HISTORY_SIZE {
-		excess := len(m.restartHistory) - CDP_RESTART_HISTORY_SIZE
-		m.restartHistory = m.restartHistory[excess:]
+		m.restartHistory = m.restartHistory[1:]
 	}
 
 	// Check if we need to trigger a reboot
-	if m.shouldTriggerReboot(lastRestartHistory) {
+	if m.shouldTriggerReboot() {
 		m.logger.Error("CDP: Too many chromium restarts in a short period, triggering system reboot")
 		m.commandHandler.rebootSystem(ctx)
 		return
@@ -166,11 +160,11 @@ func (m *CDPMonitor) restartChromium(ctx context.Context) {
 
 // shouldTriggerReboot determines if we should trigger a system reboot
 // based on the restart history
-func (m *CDPMonitor) shouldTriggerReboot(lastRestartHistory time.Time) bool {
+func (m *CDPMonitor) shouldTriggerReboot() bool {
 	if len(m.restartHistory) < CDP_MAX_RESTARTS_THRESHOLD {
 		return false
 	}
 
 	// If the oldest of the recent restarts is within the window, we need to reboot
-	return time.Since(lastRestartHistory) <= CDP_MAX_RESTARTS_WINDOW
+	return time.Since(m.restartHistory[0]) <= CDP_MAX_RESTARTS_WINDOW
 }

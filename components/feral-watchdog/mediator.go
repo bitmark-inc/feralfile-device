@@ -135,7 +135,6 @@ func (m *Mediator) handleDBusSignal(
 			return nil, nil
 		}
 
-		m.logger.Debug("Received sysmetrics", zap.Any("metrics", metrics))
 		// Set timestamp if not present
 		if metrics.Timestamp.IsZero() {
 			metrics.Timestamp = time.Now()
