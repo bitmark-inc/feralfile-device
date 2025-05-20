@@ -64,6 +64,8 @@ func (m *CDPMonitor) Start(ctx context.Context) {
 		case <-ticker.C:
 			if err := m.check(ctx); err != nil {
 				m.logger.Warn("CDP: Health check failed", zap.Error(err))
+			} else {
+				m.logger.Debug("CDP: Health check passed")
 			}
 		}
 	}
@@ -71,7 +73,6 @@ func (m *CDPMonitor) Start(ctx context.Context) {
 
 // check performs a single CDP health check
 func (m *CDPMonitor) check(ctx context.Context) error {
-	m.logger.Debug("CDP: Checking CDP health", zap.String("endpoint", m.cdpConfig.Endpoint))
 	versionURL := fmt.Sprintf("%s/json/version", m.cdpConfig.Endpoint)
 
 	// Create context with timeout
@@ -132,7 +133,6 @@ func (m *CDPMonitor) checkHangState(ctx context.Context) {
 
 // restartChromium restarts the Chromium kiosk service
 func (m *CDPMonitor) restartChromium(ctx context.Context) {
-	m.logger.Warn("CDP: Restarting chromium-kiosk.service")
 	var lastRestartHistory time.Time
 	if len(m.restartHistory) > 0 {
 		lastRestartHistory = m.restartHistory[len(m.restartHistory)-1]
@@ -156,6 +156,7 @@ func (m *CDPMonitor) restartChromium(ctx context.Context) {
 	}
 
 	// Execute the restart command
+	m.logger.Warn("CDP: Restarting chromium-kiosk.service")
 	m.commandHandler.restartKiosk(ctx)
 
 	// Reset the last successful response time to force a new successful check

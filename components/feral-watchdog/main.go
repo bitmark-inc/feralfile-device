@@ -51,7 +51,7 @@ func main() {
 	}
 
 	// Initialize DBus client
-	mo := dbus.WithMatchPathNamespace(dbus.ObjectPath("/com/feralfile"))
+	mo := dbus.WithMatchPathNamespace(dbus.ObjectPath("/com/feralfile/sysmonitord"))
 	dbusClient := godbus.NewDBusClient(ctx, logger, mo)
 	err = dbusClient.Start()
 	if err != nil {
