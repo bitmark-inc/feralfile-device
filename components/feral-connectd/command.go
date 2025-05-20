@@ -171,12 +171,19 @@ func (c *CommandHandler) handleScreenRotation(ctx context.Context, args []byte) 
 	// Find the active output name
 	outputName := ""
 	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
+	for i, line := range lines {
 		line = strings.TrimSpace(line)
 		if strings.Contains(line, "Output") {
 			parts := strings.Split(line, " ")
 			if len(parts) > 1 {
 				outputName = parts[1]
+				break
+			}
+		} else if i == 0 && len(line) > 0 {
+			// First line might directly contain the output name
+			parts := strings.Split(line, " ")
+			if len(parts) > 0 {
+				outputName = parts[0]
 				break
 			}
 		}
@@ -219,7 +226,7 @@ func (c *CommandHandler) handleScreenRotation(ctx context.Context, args []byte) 
 
 	// Apply with wlr-randr (force absolute orientation)
 	// This makes wlr-randr and config file stay in sync
-	rotateCmd := exec.Command("wlr-randr", "--output", outputName, "--rotate", newRotation)
+	rotateCmd := exec.Command("wlr-randr", "--output", outputName, "--transform", newRotation)
 	err = rotateCmd.Run()
 	if err != nil {
 		c.logger.Error("Failed to rotate screen", zap.Error(err))
@@ -234,6 +241,8 @@ func (c *CommandHandler) handleScreenRotation(ctx context.Context, args []byte) 
 	c.logger.Info("Screen rotated and saved",
 		zap.String("output", outputName),
 		zap.String("rotation", newRotation))
+
+	c.screenInitialized = false
 
 	return CmdOK, nil
 }
