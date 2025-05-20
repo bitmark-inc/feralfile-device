@@ -18,10 +18,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	MONITOR_INTERVAL = 2 * time.Second
-)
-
 type CPUMetrics struct {
 	MaxFrequency       float64 `json:"max_frequency"`
 	CurrentFrequency   float64 `json:"current_frequency"`
@@ -104,9 +100,6 @@ func (p *SysResMonitor) Start() {
 func (p *SysResMonitor) run() {
 	p.logger.Info("SysResMonitor started in the background")
 
-	ticker := time.NewTicker(MONITOR_INTERVAL)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-p.doneChan:
@@ -115,7 +108,7 @@ func (p *SysResMonitor) run() {
 		case <-p.ctx.Done():
 			p.logger.Info("SysResMonitor stopped because context was cancelled")
 			return
-		case <-ticker.C:
+		default:
 			metrics, err := p.monitor()
 			if err != nil {
 				p.logger.Error("Failed to monitor system resources", zap.Error(err))
@@ -137,49 +130,105 @@ func (p *SysResMonitor) monitor() (*SysMetrics, error) {
 		Timestamp: time.Now(),
 	}
 
-	// CPU metrics
-	cpuMetrics, err := p.monitorCPU()
-	if err != nil {
-		return nil, err
-	}
-	metrics.CPU = cpuMetrics
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errs []error
 
-	// GPU metrics
-	gpuMetrics, err := p.monitorGPU()
-	if err != nil {
-		return nil, err
-	}
-	gpuMetrics.CurrentTemperature = cpuMetrics.CurrentTemperature
-	gpuMetrics.MaxTemperature = cpuMetrics.MaxTemperature
-	metrics.GPU = gpuMetrics
+	// Run CPU metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		cpuMetrics, err := p.monitorCPU()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.CPU = cpuMetrics
+	}()
 
-	// Memory metrics
-	memoryMetrics, err := p.monitorMemory()
-	if err != nil {
-		return nil, err
-	}
-	metrics.Memory = memoryMetrics
+	// Run GPU metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		gpuMetrics, err := p.monitorGPU()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.GPU = gpuMetrics
+	}()
 
-	// Screen metrics
-	screenMetrics, err := p.monitorScreen()
-	if err != nil {
-		return nil, err
-	}
-	metrics.Screen = screenMetrics
+	// Run Memory metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		memoryMetrics, err := p.monitorMemory()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.Memory = memoryMetrics
+	}()
 
-	// Uptime metrics
-	uptimeMetrics, err := p.monitorUptime()
-	if err != nil {
-		return nil, err
-	}
-	metrics.Uptime = uptimeMetrics
+	// Run Screen metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		screenMetrics, err := p.monitorScreen()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.Screen = screenMetrics
+	}()
 
-	// Disk metrics
-	diskMetrics, err := p.monitorDisk()
-	if err != nil {
-		return nil, err
+	// Run Uptime metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		uptimeMetrics, err := p.monitorUptime()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.Uptime = uptimeMetrics
+	}()
+
+	// Run Disk metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		diskMetrics, err := p.monitorDisk()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.Disk = diskMetrics
+	}()
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Apply CPU temperature to GPU temperature
+	metrics.GPU.CurrentTemperature = metrics.CPU.CurrentTemperature
+	metrics.GPU.MaxTemperature = metrics.CPU.MaxTemperature
+
+	// Check if any errors occurred
+	if len(errs) > 0 {
+		return nil, errs[0] // Return the first error
 	}
-	metrics.Disk = diskMetrics
 
 	return metrics, nil
 }
@@ -188,19 +237,19 @@ func (p *SysResMonitor) monitorCPU() (CPUMetrics, error) {
 	metrics := CPUMetrics{}
 
 	// Get CPU frequency
-	currentFreq, maxFreq, err := p.getCPUFrequency()
+	cpuFreq, maxFreq, err := p.getCPUFrequency()
 	if err != nil {
 		return metrics, err
 	}
-	metrics.CurrentFrequency = currentFreq
+	metrics.CurrentFrequency = cpuFreq
 	metrics.MaxFrequency = maxFreq
 
 	// Get CPU temperature
-	currentTemp, maxTemp, err := p.getCPUTemperature()
+	cpuTemp, maxTemp, err := p.getCPUTemperature()
 	if err != nil {
 		return metrics, err
 	}
-	metrics.CurrentTemperature = currentTemp
+	metrics.CurrentTemperature = cpuTemp
 	metrics.MaxTemperature = maxTemp
 
 	return metrics, nil
@@ -514,7 +563,7 @@ func (p *SysResMonitor) monitorScreen() (ScreenMetrics, error) {
 	}
 	defer cmd.Process.Kill()
 
-	fpsCtx, cancel := context.WithTimeout(p.ctx, 2*time.Second)
+	fpsCtx, cancel := context.WithTimeout(p.ctx, 3*time.Second)
 	defer cancel()
 
 	sumFPS := 0.0
