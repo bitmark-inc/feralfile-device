@@ -10,8 +10,9 @@ ExecStart=/usr/local/bin/feral-watchdog
 Restart=always
 RestartSec=5s
 WatchdogSec=30s
-User=root
-Group=root
+User=feralfile
+Group=feralfile
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
 
 [Install]
 WantedBy=multi-user.target
