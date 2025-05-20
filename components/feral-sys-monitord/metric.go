@@ -49,6 +49,7 @@ type ScreenMetrics struct {
 	Width       int     `json:"width"`
 	Height      int     `json:"height"`
 	RefreshRate float64 `json:"refresh_rate"`
+	FPS         float64 `json:"fps"`
 }
 
 type DiskMetrics struct {
@@ -148,6 +149,8 @@ func (p *SysResMonitor) monitor() (*SysMetrics, error) {
 	if err != nil {
 		return nil, err
 	}
+	gpuMetrics.CurrentTemperature = cpuMetrics.CurrentTemperature
+	gpuMetrics.MaxTemperature = cpuMetrics.MaxTemperature
 	metrics.GPU = gpuMetrics
 
 	// Memory metrics
@@ -309,14 +312,6 @@ func (p *SysResMonitor) monitorGPU() (GPUMetrics, error) {
 	metrics.CurrentFrequency = currentFreq
 	metrics.MaxFrequency = maxFreq
 
-	// Get GPU temperature
-	currentTemp, maxTemp, err := p.getCPUTemperature()
-	if err != nil {
-		return metrics, err
-	}
-	metrics.CurrentTemperature = currentTemp
-	metrics.MaxTemperature = maxTemp
-
 	return metrics, nil
 }
 
@@ -460,6 +455,7 @@ func (p *SysResMonitor) monitorUptime() (float64, error) {
 func (p *SysResMonitor) monitorScreen() (ScreenMetrics, error) {
 	metrics := ScreenMetrics{}
 
+	// Resolution and refresh rate
 	cmd := exec.Command("wlr-randr")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -501,6 +497,55 @@ func (p *SysResMonitor) monitorScreen() (ScreenMetrics, error) {
 			break
 		}
 	}
+
+	// FPS
+	cmd = exec.Command("weston-presentation-shm", "-f")
+	cmd.Stderr = &stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		p.logger.Error("Failed to get screen fps", zap.String("stderr", stderr.String()), zap.Error(err))
+		return metrics, err
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		p.logger.Error("Failed to get screen fps", zap.String("stderr", stderr.String()), zap.Error(err))
+		return metrics, err
+	}
+	defer cmd.Process.Kill()
+
+	fpsCtx, cancel := context.WithTimeout(p.ctx, 2*time.Second)
+	defer cancel()
+
+	sumFPS := 0.0
+	samples := 0
+	scanner := bufio.NewScanner(stdout)
+scan:
+	for scanner.Scan() {
+		select {
+		case <-fpsCtx.Done():
+			break scan
+		case <-p.ctx.Done():
+			break scan
+		case <-p.doneChan:
+			break scan
+		default:
+			re := regexp.MustCompile(`p2p\s+([0-9]+)`)
+			matches := re.FindStringSubmatch(scanner.Text())
+			if len(matches) == 2 {
+				us, _ := strconv.ParseFloat(matches[1], 64) // microseconds
+				if us == 0 {
+					continue
+				}
+				sumFPS += 1e6 / us
+				samples++
+			}
+		}
+	}
+	if samples > 0 {
+		metrics.FPS = sumFPS / float64(samples)
+	}
+
 	return metrics, nil
 }
 
