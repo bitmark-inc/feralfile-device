@@ -108,7 +108,7 @@ func (p *SysEventWatcher) Start() {
 }
 
 func (p *SysEventWatcher) monitorHangingGPU(ctx context.Context, resultChan chan<- bool, errChan chan<- error) {
-	cmd := exec.Command("sudo", "journalctl", "--lines=0", "-f", "-k", "-g", "i915")
+	cmd := exec.CommandContext(ctx, "sudo", "journalctl", "--lines=0", "-f", "-k", "-g", "i915")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()

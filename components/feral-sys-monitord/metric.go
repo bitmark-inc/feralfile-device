@@ -105,7 +105,7 @@ func (p *SysResMonitor) run() {
 			p.logger.Info("SysResMonitor stopped because context was cancelled")
 			return
 		default:
-			metrics, err := p.monitor()
+			metrics, err := p.monitor(p.ctx)
 			if err != nil {
 				p.logger.Error("Failed to monitor system resources", zap.Error(err))
 				continue
@@ -118,7 +118,7 @@ func (p *SysResMonitor) run() {
 	}
 }
 
-func (p *SysResMonitor) monitor() (*SysMetrics, error) {
+func (p *SysResMonitor) monitor(ctx context.Context) (*SysMetrics, error) {
 	metrics := &SysMetrics{
 		CPU:       CPUMetrics{},
 		GPU:       GPUMetrics{},
@@ -136,7 +136,7 @@ func (p *SysResMonitor) monitor() (*SysMetrics, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		cpuMetrics, err := p.monitorCPU()
+		cpuMetrics, err := p.monitorCPU(ctx)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -150,7 +150,7 @@ func (p *SysResMonitor) monitor() (*SysMetrics, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		gpuMetrics, err := p.monitorGPU()
+		gpuMetrics, err := p.monitorGPU(ctx)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -178,7 +178,7 @@ func (p *SysResMonitor) monitor() (*SysMetrics, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		screenMetrics, err := p.monitorScreen()
+		screenMetrics, err := p.monitorScreen(ctx)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -206,7 +206,7 @@ func (p *SysResMonitor) monitor() (*SysMetrics, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		diskMetrics, err := p.monitorDisk()
+		diskMetrics, err := p.monitorDisk(ctx)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -231,7 +231,7 @@ func (p *SysResMonitor) monitor() (*SysMetrics, error) {
 	return metrics, nil
 }
 
-func (p *SysResMonitor) monitorCPU() (CPUMetrics, error) {
+func (p *SysResMonitor) monitorCPU(ctx context.Context) (CPUMetrics, error) {
 	metrics := CPUMetrics{}
 
 	// Get CPU frequency
@@ -243,7 +243,7 @@ func (p *SysResMonitor) monitorCPU() (CPUMetrics, error) {
 	metrics.MaxFrequency = maxFreq
 
 	// Get CPU temperature
-	cpuTemp, maxTemp, err := p.getCPUTemperature()
+	cpuTemp, maxTemp, err := p.getCPUTemperature(ctx)
 	if err != nil {
 		return metrics, err
 	}
@@ -300,8 +300,8 @@ func (p *SysResMonitor) getCPUFrequency() (current, max float64, err error) {
 }
 
 // getCPUTemperature tries to get the CPU temperature from lm-sensors
-func (p *SysResMonitor) getCPUTemperature() (current, max float64, err error) {
-	cmd := exec.Command("sensors", "-u")
+func (p *SysResMonitor) getCPUTemperature(ctx context.Context) (current, max float64, err error) {
+	cmd := exec.CommandContext(ctx, "sensors", "-u")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
@@ -348,11 +348,11 @@ func (p *SysResMonitor) getCPUTemperature() (current, max float64, err error) {
 	return current, max, nil
 }
 
-func (p *SysResMonitor) monitorGPU() (GPUMetrics, error) {
+func (p *SysResMonitor) monitorGPU(ctx context.Context) (GPUMetrics, error) {
 	metrics := GPUMetrics{}
 
 	// Get GPU frequency
-	currentFreq, maxFreq, err := p.getIntelGPUFreq()
+	currentFreq, maxFreq, err := p.getIntelGPUFreq(ctx)
 	if err != nil {
 		return metrics, err
 	}
@@ -363,9 +363,9 @@ func (p *SysResMonitor) monitorGPU() (GPUMetrics, error) {
 }
 
 // getIntelGPUFreq gets Intel GPU frequency using intel_gpu_top
-func (p *SysResMonitor) getIntelGPUFreq() (current, max float64, err error) {
+func (p *SysResMonitor) getIntelGPUFreq(ctx context.Context) (current, max float64, err error) {
 	// Get the current frequency
-	cmd := exec.Command("timeout", "1s", "sudo", "intel_gpu_top", "-J", "-s", "1000")
+	cmd := exec.CommandContext(ctx, "timeout", "1s", "sudo", "intel_gpu_top", "-J", "-s", "1000")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
@@ -397,7 +397,7 @@ func (p *SysResMonitor) getIntelGPUFreq() (current, max float64, err error) {
 	current = result[0].Frequency.Actual
 
 	// Discover the card name using `ls /sys/class/drm/`
-	cmd = exec.Command("ls", "/sys/class/drm/")
+	cmd = exec.CommandContext(ctx, "ls", "/sys/class/drm/")
 	cmd.Stderr = &stderr
 	output, err = cmd.Output()
 	if err != nil {
@@ -415,7 +415,7 @@ func (p *SysResMonitor) getIntelGPUFreq() (current, max float64, err error) {
 	}
 
 	// Get the max frequency
-	cmd = exec.Command("cat", "/sys/class/drm/"+card+"/gt_max_freq_mhz")
+	cmd = exec.CommandContext(ctx, "cat", "/sys/class/drm/"+card+"/gt_max_freq_mhz")
 	cmd.Stderr = &stderr
 	output, err = cmd.Output()
 	if err != nil {
@@ -499,11 +499,11 @@ func (p *SysResMonitor) monitorUptime() (float64, error) {
 	return uptimeSec, nil
 }
 
-func (p *SysResMonitor) monitorScreen() (ScreenMetrics, error) {
+func (p *SysResMonitor) monitorScreen(ctx context.Context) (ScreenMetrics, error) {
 	metrics := ScreenMetrics{}
 
 	// Resolution and refresh rate
-	cmd := exec.Command("wlr-randr")
+	cmd := exec.CommandContext(ctx, "wlr-randr")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
@@ -546,7 +546,10 @@ func (p *SysResMonitor) monitorScreen() (ScreenMetrics, error) {
 	}
 
 	// FPS
-	cmd = exec.Command("weston-presentation-shm", "-f")
+	fpsCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	cmd = exec.CommandContext(fpsCtx, "weston-presentation-shm", "-f")
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -561,9 +564,6 @@ func (p *SysResMonitor) monitorScreen() (ScreenMetrics, error) {
 	}
 	defer cmd.Process.Kill()
 
-	fpsCtx, cancel := context.WithTimeout(p.ctx, 3*time.Second)
-	defer cancel()
-
 	sumFPS := 0.0
 	samples := 0
 	scanner := bufio.NewScanner(stdout)
@@ -572,7 +572,7 @@ scan:
 		select {
 		case <-fpsCtx.Done():
 			break scan
-		case <-p.ctx.Done():
+		case <-ctx.Done():
 			break scan
 		case <-p.doneChan:
 			break scan
@@ -596,11 +596,11 @@ scan:
 	return metrics, nil
 }
 
-func (p *SysResMonitor) monitorDisk() (DiskMetrics, error) {
+func (p *SysResMonitor) monitorDisk(ctx context.Context) (DiskMetrics, error) {
 	metrics := DiskMetrics{}
 
 	// Get total/used capacity
-	total, used, available, err := p.getDiskStats()
+	total, used, available, err := p.getDiskStats(ctx)
 	if err != nil {
 		return metrics, err
 	}
@@ -609,7 +609,7 @@ func (p *SysResMonitor) monitorDisk() (DiskMetrics, error) {
 	metrics.AvailableCapacity = available
 
 	// Get breakdown
-	breakdown, err := p.getDiskBreakdown()
+	breakdown, err := p.getDiskBreakdown(ctx)
 	if err != nil {
 		return metrics, err
 	}
@@ -618,8 +618,8 @@ func (p *SysResMonitor) monitorDisk() (DiskMetrics, error) {
 	return metrics, nil
 }
 
-func (p *SysResMonitor) getDiskStats() (total, used, available float64, err error) {
-	cmd := exec.Command("df", "-k", "/")
+func (p *SysResMonitor) getDiskStats(ctx context.Context) (total, used, available float64, err error) {
+	cmd := exec.CommandContext(ctx, "df", "-k", "/")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
@@ -656,8 +656,8 @@ func (p *SysResMonitor) getDiskStats() (total, used, available float64, err erro
 	return total, used, available, nil
 }
 
-func (p *SysResMonitor) getDiskBreakdown() (map[string]float64, error) {
-	cmd := exec.Command("bash", "-c", "du -s /* 2>/dev/null || true")
+func (p *SysResMonitor) getDiskBreakdown(ctx context.Context) (map[string]float64, error) {
+	cmd := exec.CommandContext(ctx, "bash", "-c", "du -s /* 2>/dev/null || true")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
