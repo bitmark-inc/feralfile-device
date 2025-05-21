@@ -10,7 +10,7 @@ fi
 # This script will keep cage running while we apply rotation
 cage -- /bin/bash -c '
     # Let Cage initialize
-    sleep 1
+    sleep 1.5
     
     # Apply rotation using wlr-randr
     OUTPUT=$(wlr-randr | grep Output | head -1 | awk "{print \$2}")
@@ -21,6 +21,8 @@ cage -- /bin/bash -c '
     # Start Chromium
     exec /usr/bin/chromium \
     --kiosk \
+    --ozone-platform=wayland \
+    --enable-features=UseOzonePlatform \
     --remote-debugging-port=9222 \
     --show-fps-counter \
     --no-first-run \
