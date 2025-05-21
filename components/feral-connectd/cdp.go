@@ -187,6 +187,8 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 		return v, nil
 	} else if result.Type == CDP_TYPE_OBJECT {
 		return result.Value, nil
+	} else if len(result.Type) == 0 {
+		return nil, nil
 	} else {
 		return nil, fmt.Errorf("CDP response type mismatch: %s", result.Type)
 	}
