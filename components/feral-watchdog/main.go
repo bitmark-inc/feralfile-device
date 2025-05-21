@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"os"
 	"os/signal"
 	"sync"
@@ -16,19 +17,23 @@ import (
 const (
 	// Timeouts
 	GOROUTINE_TIMEOUT = 1500 * time.Millisecond // 1.5 seconds
-	DEBUG_MODE        = true
 )
 
+var debug = false
+
 func main() {
+	// Read from options
+	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
+	flag.Parse()
+
 	// Initialize logger
-	logger, err := newLogger(DEBUG_MODE)
+	logger, err := New(debug)
 	if err != nil {
 		panic("Failed to initialize logger: " + err.Error())
 	}
 	defer logger.Sync()
 
 	logger.Info("Starting feral-watchdog daemon")
-	logger.Info("Logs are being saved to", zap.String("logFile", LOG_FILE_PATH))
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
