@@ -14,8 +14,7 @@ import (
 )
 
 const (
-	STATE_FILE       = "/home/feralfile/.state/connectd.state"
-	DEBUG_STATE_FILE = "./connectd.state"
+	STATE_FILE = "/home/feralfile/.state/connectd.state"
 )
 
 var (
@@ -57,17 +56,16 @@ func (c *State) RelayerChanReady() bool {
 
 // LoadState loads state from file or creates a new one if file doesn't exist
 func LoadState(logger *zap.Logger) (*State, error) {
-	fp := GetStateFile()
-	logger.Info("Loading state", zap.String("file", fp))
+	logger.Info("Loading state", zap.String("file", STATE_FILE))
 
 	// Ensure directory exists
-	stateDir := filepath.Dir(fp)
+	stateDir := filepath.Dir(STATE_FILE)
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create state directory: %w", err)
 	}
 
 	// Try to read the file
-	data, err := os.ReadFile(fp)
+	data, err := os.ReadFile(STATE_FILE)
 	if os.IsNotExist(err) || len(data) == 0 {
 		// File doesn't exist, return empty state
 		logger.Info("State file does not exist, returning empty state object")
@@ -93,10 +91,8 @@ func (s *State) Save() error {
 	s.Lock()
 	defer s.Unlock()
 
-	fp := GetStateFile()
-
 	// Ensure directory exists
-	stateDir := filepath.Dir(fp)
+	stateDir := filepath.Dir(STATE_FILE)
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
@@ -107,12 +103,12 @@ func (s *State) Save() error {
 	}
 
 	// Write to a temporary file first, then rename for atomic updates
-	tempFile := fp + ".tmp"
+	tempFile := STATE_FILE + ".tmp"
 	if err := os.WriteFile(tempFile, data, 0644); err != nil {
 		return fmt.Errorf("failed to write state file: %w", err)
 	}
 
-	if err := os.Rename(tempFile, fp); err != nil {
+	if err := os.Rename(tempFile, STATE_FILE); err != nil {
 		return fmt.Errorf("failed to finalize state file: %w", err)
 	}
 
@@ -128,12 +124,4 @@ func GetState() *State {
 		state = &State{}
 	}
 	return state
-}
-
-func GetStateFile() string {
-	fp := STATE_FILE
-	if debug {
-		fp = DEBUG_STATE_FILE
-	}
-	return fp
 }

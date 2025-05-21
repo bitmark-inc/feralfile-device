@@ -14,6 +14,8 @@ ExecStart=/usr/bin/feral-sys-monitord
 Restart=always
 RestartSec=5
 WatchdogSec=30s
+StandardOutput=append:/home/feralfile/.logs/sys-monitord.log
+StandardError=append:/home/feralfile/.logs/sys-monitord.log
 
 [Install]
 WantedBy=multi-user.target
