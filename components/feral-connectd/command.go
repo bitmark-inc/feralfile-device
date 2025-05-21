@@ -162,7 +162,7 @@ func (c *CommandHandler) handleScreenRotation(ctx context.Context, args []byte) 
 		zap.Bool("clockwise", clockwise))
 
 	// Execute wlr-randr command
-	cmd := exec.Command("wlr-randr")
+	cmd := exec.CommandContext(ctx, "wlr-randr")
 
 	// Get current outputs
 	output, err := cmd.Output()
@@ -229,7 +229,7 @@ func (c *CommandHandler) handleScreenRotation(ctx context.Context, args []byte) 
 
 	// Apply with wlr-randr (force absolute orientation)
 	// This makes wlr-randr and config file stay in sync
-	rotateCmd := exec.Command("wlr-randr", "--output", outputName, "--transform", newRotation)
+	rotateCmd := exec.CommandContext(ctx, "wlr-randr", "--output", outputName, "--transform", newRotation)
 	err = rotateCmd.Run()
 	if err != nil {
 		c.logger.Error("Failed to rotate screen", zap.Error(err))
