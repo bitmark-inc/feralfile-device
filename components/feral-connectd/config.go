@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	CONFIG_FILE       = "/home/feralfile/.config/connectd.json"
-	DEBUG_CONFIG_FILE = "./connectd.json"
+	CONFIG_FILE = "/home/feralfile/.config/connectd.json"
 
 	configLock sync.Mutex
 	config     *Config
@@ -26,11 +25,10 @@ type Config struct {
 
 // LoadConfig loads the configuration from a JSON file
 func LoadConfig(logger *zap.Logger) (*Config, error) {
-	fp := GetConfigFile()
-	logger.Info("Loading config", zap.String("file", fp))
+	logger.Info("Loading config", zap.String("file", CONFIG_FILE))
 
 	// Try to read the file
-	data, err := os.ReadFile(fp)
+	data, err := os.ReadFile(CONFIG_FILE)
 	if os.IsNotExist(err) {
 		return nil, fmt.Errorf("config file not found: %w", err)
 	} else if err != nil {
@@ -62,12 +60,4 @@ func GetConfig() *Config {
 		}
 	}
 	return config
-}
-
-func GetConfigFile() string {
-	fp := CONFIG_FILE
-	if debug {
-		fp = DEBUG_CONFIG_FILE
-	}
-	return fp
 }
