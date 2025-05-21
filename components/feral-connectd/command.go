@@ -512,7 +512,8 @@ func (c *CommandHandler) mapToYdoKey(keyCode int) string {
 func (c *CommandHandler) shutdown(ctx context.Context) (interface{}, error) {
 	c.logger.Info("Executing shutdown command")
 
-	cmd := exec.CommandContext(ctx, "shutdown", "-h", "now")
+	cmd := exec.CommandContext(ctx, "sudo", "shutdown", "-h", "now")
+
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("failed to execute shutdown command: %s", err)
 	}
