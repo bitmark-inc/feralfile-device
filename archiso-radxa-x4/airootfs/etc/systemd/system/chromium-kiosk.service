@@ -6,23 +6,7 @@ Type=simple
 User=feralfile
 Group=feralfile
 Environment="XDG_RUNTIME_DIR=/run/user/1000"
-ExecStart=/usr/bin/cage -- /usr/bin/chromium \
---kiosk \
---remote-debugging-port=9222 \
---show-fps-counter \
---no-first-run \
---disable-sync \
---disable-translate \
---disable-infobars \
---disable-features=TranslateUI \
---noerrdialogs \
---disable-extensions \
---autoplay-policy=no-user-gesture-required \
---allow-file-access-from-files \
---enable-logging=stderr \
---v=1 \
---disk-cache-size=1073741824  \
-file:///opt/feral/ui/launcher/index.html?step=logo
+ExecStart=/home/feralfile/scripts/start-kiosk.sh
 StandardOutput=append:/home/feralfile/.logs/chromium.log
 StandardError=append:/home/feralfile/.logs/chromium.log
 Restart=always
