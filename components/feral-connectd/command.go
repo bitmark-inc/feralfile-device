@@ -98,6 +98,9 @@ func (c *CommandHandler) Execute(ctx context.Context, cmd Command) (interface{},
 		return sysMetrics, nil
 	case RELAYER_CMD_SCREEN_ROTATION:
 		result, err = c.handleScreenRotation(ctx, bytes)
+		return c.lastSysMetrics, nil
+	case RELAYER_CMD_SHUTDOWN:
+		result, err = c.shutdown(ctx)
 	default:
 		return nil, fmt.Errorf("invalid command: %s", cmd)
 	}
@@ -504,4 +507,15 @@ func (c *CommandHandler) mapToYdoKey(keyCode int) string {
 		c.logger.Warn("Unhandled key code", zap.Int("code", keyCode))
 		return ""
 	}
+}
+
+func (c *CommandHandler) shutdown(ctx context.Context) (interface{}, error) {
+	c.logger.Info("Executing shutdown command")
+
+	cmd := exec.CommandContext(ctx, "shutdown", "-h", "now")
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to execute shutdown command: %s", err)
+	}
+
+	return CmdOK, nil
 }
