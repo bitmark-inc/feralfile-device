@@ -16,9 +16,6 @@ touch "$STATUS_FILE" 2>/dev/null || true
 touch "$TIMEZONE_FILE" 2>/dev/null || true
 chmod -R 755 "$STATUS_DIR" 2>/dev/null || true
 
-# Ensure systemd-timesyncd is enabled
-systemctl enable systemd-timesyncd.service
-
 # Function to check network connectivity
 check_network() {
     ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1
@@ -31,10 +28,11 @@ is_ntp_synced() {
     return $?
 }
 
-# Function to synchronize time with NTP
+# Function to trigger NTP sync without restarting service (non-privileged)
 sync_ntp() {
     echo "Attempting NTP synchronization..."
-    systemctl restart systemd-timesyncd.service
+    # Instead of restarting service, trigger a time sync using timedatectl
+    timedatectl set-ntp true 2>/dev/null
     
     # Wait for NTP sync for up to 30 seconds
     for i in {1..30}; do
