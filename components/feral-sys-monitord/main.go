@@ -64,7 +64,7 @@ func main() {
 	defer dbusClient.Stop()
 
 	// Initialize Monitor
-	monitor := NewMonitor(ctx, logger)
+	monitor := NewSysResMonitor(ctx, logger)
 	monitor.Start()
 	defer monitor.Stop()
 
@@ -73,8 +73,19 @@ func main() {
 	connectivity.Start()
 	defer connectivity.Stop()
 
+	// Initialize SysEventWatcher
+	eventWatcher := NewSysEventWatcher(ctx, logger)
+	eventWatcher.Start()
+	defer eventWatcher.Stop()
+
 	// Initialize Mediator
-	mediator := NewMediator(dbusClient, monitor, connectivity, logger)
+	mediator := NewMediator(
+		dbusClient,
+		monitor,
+		connectivity,
+		eventWatcher,
+		logger,
+	)
 	mediator.Start()
 	defer mediator.Stop()
 

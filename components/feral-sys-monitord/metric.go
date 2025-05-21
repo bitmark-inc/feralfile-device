@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,10 +16,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-)
-
-const (
-	MONITOR_INTERVAL = 2 * time.Second
 )
 
 type CPUMetrics struct {
@@ -48,6 +45,7 @@ type ScreenMetrics struct {
 	Width       int     `json:"width"`
 	Height      int     `json:"height"`
 	RefreshRate float64 `json:"refresh_rate"`
+	FPS         float64 `json:"fps"`
 }
 
 type DiskMetrics struct {
@@ -58,17 +56,18 @@ type DiskMetrics struct {
 }
 
 type SysMetrics struct {
-	CPU    CPUMetrics    `json:"cpu"`
-	GPU    GPUMetrics    `json:"gpu"`
-	Memory MemoryMetrics `json:"memory"`
-	Screen ScreenMetrics `json:"screen"`
-	Uptime float64       `json:"uptime"`
-	Disk   DiskMetrics   `json:"disk"`
+	CPU       CPUMetrics    `json:"cpu"`
+	GPU       GPUMetrics    `json:"gpu"`
+	Memory    MemoryMetrics `json:"memory"`
+	Screen    ScreenMetrics `json:"screen"`
+	Uptime    float64       `json:"uptime"`
+	Disk      DiskMetrics   `json:"disk"`
+	Timestamp time.Time     `json:"timestamp"`
 }
 
 type MonitorHandler func(metrics *SysMetrics)
 
-type Monitor struct {
+type SysResMonitor struct {
 	sync.Mutex
 
 	ctx         context.Context
@@ -78,8 +77,8 @@ type Monitor struct {
 	doneChan    chan struct{}
 }
 
-func NewMonitor(ctx context.Context, logger *zap.Logger) *Monitor {
-	return &Monitor{
+func NewSysResMonitor(ctx context.Context, logger *zap.Logger) *SysResMonitor {
+	return &SysResMonitor{
 		ctx:      ctx,
 		logger:   logger,
 		handlers: []MonitorHandler{},
@@ -87,121 +86,177 @@ func NewMonitor(ctx context.Context, logger *zap.Logger) *Monitor {
 	}
 }
 
-func (p *Monitor) LastMetrics() *SysMetrics {
+func (p *SysResMonitor) LastMetrics() *SysMetrics {
 	p.Lock()
 	defer p.Unlock()
 
 	return p.lastMetrics
 }
 
-func (p *Monitor) Start() {
+func (p *SysResMonitor) Start() {
 	go p.run()
 }
 
-func (p *Monitor) run() {
-	p.logger.Info("Monitor started in the background")
-
-	ticker := time.NewTicker(MONITOR_INTERVAL)
-	defer ticker.Stop()
+func (p *SysResMonitor) run() {
+	p.logger.Info("SysResMonitor started in the background")
 
 	for {
 		select {
 		case <-p.doneChan:
-			p.logger.Info("Monitor stopped")
+			p.logger.Info("SysResMonitor stopped")
 			return
 		case <-p.ctx.Done():
-			p.logger.Info("Monitor stopped because context was cancelled")
+			p.logger.Info("SysResMonitor stopped because context was cancelled")
 			return
-		case <-ticker.C:
+		default:
 			metrics, err := p.monitor()
 			if err != nil {
-				p.logger.Error("Failed to monitor system", zap.Error(err))
+				p.logger.Error("Failed to monitor system resources", zap.Error(err))
 				continue
 			}
-			p.notifyHandlers(metrics)
+			p.notifyHandlers(p.ctx, metrics)
 			p.lastMetrics = metrics
 		}
 	}
 }
 
-func (p *Monitor) monitor() (*SysMetrics, error) {
+func (p *SysResMonitor) monitor() (*SysMetrics, error) {
 	metrics := &SysMetrics{
-		CPU:    CPUMetrics{},
-		GPU:    GPUMetrics{},
-		Memory: MemoryMetrics{},
-		Screen: ScreenMetrics{},
-		Uptime: 0,
+		CPU:       CPUMetrics{},
+		GPU:       GPUMetrics{},
+		Memory:    MemoryMetrics{},
+		Screen:    ScreenMetrics{},
+		Uptime:    0,
+		Timestamp: time.Now(),
 	}
 
-	// CPU metrics
-	cpuMetrics, err := p.monitorCPU()
-	if err != nil {
-		return nil, err
-	}
-	metrics.CPU = cpuMetrics
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errs []error
 
-	// GPU metrics
-	gpuMetrics, err := p.monitorGPU()
-	if err != nil {
-		return nil, err
-	}
-	metrics.GPU = gpuMetrics
+	// Run CPU metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		cpuMetrics, err := p.monitorCPU()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.CPU = cpuMetrics
+	}()
 
-	// Memory metrics
-	memoryMetrics, err := p.monitorMemory()
-	if err != nil {
-		return nil, err
-	}
-	metrics.Memory = memoryMetrics
+	// Run GPU metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		gpuMetrics, err := p.monitorGPU()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.GPU = gpuMetrics
+	}()
 
-	// Screen metrics
-	screenMetrics, err := p.monitorScreen()
-	if err != nil {
-		return nil, err
-	}
-	metrics.Screen = screenMetrics
+	// Run Memory metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		memoryMetrics, err := p.monitorMemory()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.Memory = memoryMetrics
+	}()
 
-	// Uptime metrics
-	uptimeMetrics, err := p.monitorUptime()
-	if err != nil {
-		return nil, err
-	}
-	metrics.Uptime = uptimeMetrics
+	// Run Screen metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		screenMetrics, err := p.monitorScreen()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.Screen = screenMetrics
+	}()
 
-	// Disk metrics
-	diskMetrics, err := p.monitorDisk()
-	if err != nil {
-		return nil, err
+	// Run Uptime metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		uptimeMetrics, err := p.monitorUptime()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.Uptime = uptimeMetrics
+	}()
+
+	// Run Disk metrics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		diskMetrics, err := p.monitorDisk()
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		metrics.Disk = diskMetrics
+	}()
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Apply CPU temperature to GPU temperature
+	metrics.GPU.CurrentTemperature = metrics.CPU.CurrentTemperature
+	metrics.GPU.MaxTemperature = metrics.CPU.MaxTemperature
+
+	// Check if any errors occurred
+	if len(errs) > 0 {
+		return nil, errs[0] // Return the first error
 	}
-	metrics.Disk = diskMetrics
 
 	return metrics, nil
 }
 
-func (p *Monitor) monitorCPU() (CPUMetrics, error) {
+func (p *SysResMonitor) monitorCPU() (CPUMetrics, error) {
 	metrics := CPUMetrics{}
 
 	// Get CPU frequency
-	currentFreq, maxFreq, err := p.getCPUFrequency()
+	cpuFreq, maxFreq, err := p.getCPUFrequency()
 	if err != nil {
 		return metrics, err
 	}
-	metrics.CurrentFrequency = currentFreq
+	metrics.CurrentFrequency = cpuFreq
 	metrics.MaxFrequency = maxFreq
 
 	// Get CPU temperature
-	currentTemp, maxTemp, err := p.getCPUTemperature()
+	cpuTemp, maxTemp, err := p.getCPUTemperature()
 	if err != nil {
 		return metrics, err
 	}
-	metrics.CurrentTemperature = currentTemp
+	metrics.CurrentTemperature = cpuTemp
 	metrics.MaxTemperature = maxTemp
 
 	return metrics, nil
 }
 
 // getCPUFrequency returns the current and max CPU frequencies in MHz
-func (p *Monitor) getCPUFrequency() (current, max float64, err error) {
+func (p *SysResMonitor) getCPUFrequency() (current, max float64, err error) {
 	// Find all CPU frequency files
 	cpuFreqFiles, err := filepath.Glob("/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq")
 	if err != nil {
@@ -247,10 +302,13 @@ func (p *Monitor) getCPUFrequency() (current, max float64, err error) {
 }
 
 // getCPUTemperature tries to get the CPU temperature from lm-sensors
-func (p *Monitor) getCPUTemperature() (current, max float64, err error) {
+func (p *SysResMonitor) getCPUTemperature() (current, max float64, err error) {
 	cmd := exec.Command("sensors", "-u")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get CPU temperature", zap.String("stderr", stderr.String()), zap.Error(err))
 		return 0, 0, err
 	}
 
@@ -292,7 +350,7 @@ func (p *Monitor) getCPUTemperature() (current, max float64, err error) {
 	return current, max, nil
 }
 
-func (p *Monitor) monitorGPU() (GPUMetrics, error) {
+func (p *SysResMonitor) monitorGPU() (GPUMetrics, error) {
 	metrics := GPUMetrics{}
 
 	// Get GPU frequency
@@ -303,23 +361,20 @@ func (p *Monitor) monitorGPU() (GPUMetrics, error) {
 	metrics.CurrentFrequency = currentFreq
 	metrics.MaxFrequency = maxFreq
 
-	// Get GPU temperature
-	currentTemp, maxTemp, err := p.getCPUTemperature()
-	if err != nil {
-		return metrics, err
-	}
-	metrics.CurrentTemperature = currentTemp
-	metrics.MaxTemperature = maxTemp
-
 	return metrics, nil
 }
 
 // getIntelGPUFreq gets Intel GPU frequency using intel_gpu_top
-func (p *Monitor) getIntelGPUFreq() (current, max float64, err error) {
+func (p *SysResMonitor) getIntelGPUFreq() (current, max float64, err error) {
 	// Get the current frequency
 	cmd := exec.Command("timeout", "1s", "sudo", "intel_gpu_top", "-J", "-s", "1000")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 124 {
+		if err != nil {
+			p.logger.Error("Failed to get Intel GPU frequency", zap.String("stderr", stderr.String()), zap.Error(err))
+		}
 		return 0, 0, err
 	}
 
@@ -345,8 +400,10 @@ func (p *Monitor) getIntelGPUFreq() (current, max float64, err error) {
 
 	// Discover the card name using `ls /sys/class/drm/`
 	cmd = exec.Command("ls", "/sys/class/drm/")
+	cmd.Stderr = &stderr
 	output, err = cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get Intel GPU frequency", zap.String("stderr", stderr.String()), zap.Error(err))
 		return 0, 0, err
 	}
 	lines := strings.Split(string(output), "\n")
@@ -361,8 +418,10 @@ func (p *Monitor) getIntelGPUFreq() (current, max float64, err error) {
 
 	// Get the max frequency
 	cmd = exec.Command("cat", "/sys/class/drm/"+card+"/gt_max_freq_mhz")
+	cmd.Stderr = &stderr
 	output, err = cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get Intel GPU frequency", zap.String("stderr", stderr.String()), zap.Error(err))
 		return 0, 0, err
 	}
 	max, err = strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
@@ -373,7 +432,7 @@ func (p *Monitor) getIntelGPUFreq() (current, max float64, err error) {
 	return current, max, nil
 }
 
-func (p *Monitor) monitorMemory() (MemoryMetrics, error) {
+func (p *SysResMonitor) monitorMemory() (MemoryMetrics, error) {
 	metrics := MemoryMetrics{}
 
 	// Get memory usage
@@ -388,7 +447,7 @@ func (p *Monitor) monitorMemory() (MemoryMetrics, error) {
 }
 
 // getMemoryStats returns the memory usage statistics
-func (p *Monitor) getMemoryStats() (used, total float64, err error) {
+func (p *SysResMonitor) getMemoryStats() (used, total float64, err error) {
 	file, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return 0, 0, err
@@ -420,7 +479,7 @@ func (p *Monitor) getMemoryStats() (used, total float64, err error) {
 	return used, total, nil
 }
 
-func (p *Monitor) monitorUptime() (float64, error) {
+func (p *SysResMonitor) monitorUptime() (float64, error) {
 	// Read the uptime file
 	data, err := os.ReadFile("/proc/uptime")
 	if err != nil {
@@ -442,12 +501,16 @@ func (p *Monitor) monitorUptime() (float64, error) {
 	return uptimeSec, nil
 }
 
-func (p *Monitor) monitorScreen() (ScreenMetrics, error) {
+func (p *SysResMonitor) monitorScreen() (ScreenMetrics, error) {
 	metrics := ScreenMetrics{}
 
+	// Resolution and refresh rate
 	cmd := exec.Command("wlr-randr")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get screen metrics", zap.String("stderr", stderr.String()), zap.Error(err))
 		return metrics, err
 	}
 
@@ -483,10 +546,59 @@ func (p *Monitor) monitorScreen() (ScreenMetrics, error) {
 			break
 		}
 	}
+
+	// FPS
+	cmd = exec.Command("weston-presentation-shm", "-f")
+	cmd.Stderr = &stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		p.logger.Error("Failed to get screen fps", zap.String("stderr", stderr.String()), zap.Error(err))
+		return metrics, err
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		p.logger.Error("Failed to get screen fps", zap.String("stderr", stderr.String()), zap.Error(err))
+		return metrics, err
+	}
+	defer cmd.Process.Kill()
+
+	fpsCtx, cancel := context.WithTimeout(p.ctx, 3*time.Second)
+	defer cancel()
+
+	sumFPS := 0.0
+	samples := 0
+	scanner := bufio.NewScanner(stdout)
+scan:
+	for scanner.Scan() {
+		select {
+		case <-fpsCtx.Done():
+			break scan
+		case <-p.ctx.Done():
+			break scan
+		case <-p.doneChan:
+			break scan
+		default:
+			re := regexp.MustCompile(`p2p\s+([0-9]+)`)
+			matches := re.FindStringSubmatch(scanner.Text())
+			if len(matches) == 2 {
+				us, _ := strconv.ParseFloat(matches[1], 64) // microseconds
+				if us == 0 {
+					continue
+				}
+				sumFPS += 1e6 / us
+				samples++
+			}
+		}
+	}
+	if samples > 0 {
+		metrics.FPS = sumFPS / float64(samples)
+	}
+
 	return metrics, nil
 }
 
-func (p *Monitor) monitorDisk() (DiskMetrics, error) {
+func (p *SysResMonitor) monitorDisk() (DiskMetrics, error) {
 	metrics := DiskMetrics{}
 
 	// Get total/used capacity
@@ -508,13 +620,17 @@ func (p *Monitor) monitorDisk() (DiskMetrics, error) {
 	return metrics, nil
 }
 
-func (p *Monitor) getDiskStats() (total, used, available float64, err error) {
-	cmd, err := exec.Command("df", "-k", "/").Output()
+func (p *SysResMonitor) getDiskStats() (total, used, available float64, err error) {
+	cmd := exec.Command("df", "-k", "/")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get disk stats", zap.String("stderr", stderr.String()), zap.Error(err))
 		return 0, 0, 0, err
 	}
 
-	lines := strings.Split(string(cmd), "\n")
+	lines := strings.Split(string(output), "\n")
 	if len(lines) < 2 {
 		return 0, 0, 0, fmt.Errorf("unexpected format in df output")
 	}
@@ -542,13 +658,17 @@ func (p *Monitor) getDiskStats() (total, used, available float64, err error) {
 	return total, used, available, nil
 }
 
-func (p *Monitor) getDiskBreakdown() (map[string]float64, error) {
-	cmd, err := exec.Command("bash", "-c", "du -s /* 2>/dev/null || true").Output()
+func (p *SysResMonitor) getDiskBreakdown() (map[string]float64, error) {
+	cmd := exec.Command("bash", "-c", "du -s /* 2>/dev/null || true")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
 	if err != nil {
+		p.logger.Error("Failed to get disk breakdown", zap.String("stderr", stderr.String()), zap.Error(err))
 		return nil, err
 	}
 
-	lines := strings.Split(string(cmd), "\n")
+	lines := strings.Split(string(output), "\n")
 	metrics := make(map[string]float64)
 	for _, line := range lines {
 		fields := strings.Fields(line)
@@ -567,7 +687,7 @@ func (p *Monitor) getDiskBreakdown() (map[string]float64, error) {
 	return metrics, nil
 }
 
-func (p *Monitor) notifyHandlers(metrics *SysMetrics) {
+func (p *SysResMonitor) notifyHandlers(ctx context.Context, metrics *SysMetrics) {
 	p.Lock()
 	handlers := make([]MonitorHandler, len(p.handlers))
 	copy(handlers, p.handlers)
@@ -575,19 +695,26 @@ func (p *Monitor) notifyHandlers(metrics *SysMetrics) {
 
 	for _, handler := range handlers {
 		go func(h MonitorHandler) {
-			h(metrics)
+			select {
+			case <-ctx.Done():
+				return
+			case <-p.doneChan:
+				return
+			default:
+				h(metrics)
+			}
 		}(handler)
 	}
 }
 
-func (p *Monitor) OnMonitor(handler MonitorHandler) {
+func (p *SysResMonitor) OnMonitor(handler MonitorHandler) {
 	p.Lock()
 	defer p.Unlock()
 
 	p.handlers = append(p.handlers, handler)
 }
 
-func (p *Monitor) RemoveMonitorHandler(handler MonitorHandler) {
+func (p *SysResMonitor) RemoveMonitorHandler(handler MonitorHandler) {
 	p.Lock()
 	defer p.Unlock()
 
@@ -599,7 +726,7 @@ func (p *Monitor) RemoveMonitorHandler(handler MonitorHandler) {
 	}
 }
 
-func (p *Monitor) Stop() {
+func (p *SysResMonitor) Stop() {
 	select {
 	case <-p.doneChan:
 		return
@@ -607,5 +734,5 @@ func (p *Monitor) Stop() {
 		close(p.doneChan)
 	}
 
-	p.logger.Info("Monitor stopped")
+	p.logger.Info("SysResMonitor stopped")
 }

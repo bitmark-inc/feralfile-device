@@ -292,17 +292,9 @@ async fn handle_connect_wifi(
     let pass = &params[1];
 
     // Attempt connection; just log on failure
-    if cfg!(debug_assertions) {
-        println!("BLE: Skipping wifi connection in debug mode");
-        println!(
-            "BLE: Connecting to wifi \"{}\" with password \"{}\"",
-            ssid, pass
-        );
-    } else {
-        if let Err(e) = wifi_utils::connect(ssid, pass) {
-            eprintln!("BLE: Failed to connect to wifi \"{}\": {}", ssid, e);
-            return Ok(());
-        }
+    if let Err(e) = wifi_utils::connect(ssid, pass) {
+        eprintln!("BLE: Failed to connect to wifi \"{}\": {}", ssid, e);
+        return Ok(());
     }
 
     let relayer_info = match get_relayer_info().await {
@@ -421,8 +413,24 @@ async fn handle_set_time(
     };
     Ok(())
 }
+
 async fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
-    println!("BLE: Sending wifi connected event");
+    let start_time = Instant::now();
+
+    // Start listening **before** we announce the Wi‑Fi connection so we don't
+    // miss the very first `relayer_configured` signal sent by `connectd`.
+    println!("BLE: Preparing to wait for relayer topic");
+    let recv_task = task::spawn_blocking(|| {
+        dbus_utils::receive(
+            constant::DBUS_CONNECTD_OBJECT,
+            constant::DBUS_CONNECTD_INTERFACE,
+            constant::DBUS_EVENT_RELAYER_CONFIGURED,
+            constant::DBUS_CONNECTD_TIMEOUT,
+        )
+    });
+
+    // Now emit the `wifi_connected` event (this waits for its own ack).
+    println!("BLE: Sending wifi_connected event");
     task::spawn_blocking(|| {
         dbus_utils::send(
             constant::DBUS_SETUPD_OBJECT,
@@ -433,16 +441,12 @@ async fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error + Send + Sync>>
     })
     .await??;
 
-    println!("BLE: Waiting for relayer topic");
-    let msg = task::spawn_blocking(|| {
-        dbus_utils::receive(
-            constant::DBUS_CONNECTD_OBJECT,
-            constant::DBUS_CONNECTD_INTERFACE,
-            constant::DBUS_EVENT_RELAYER_CONFIGURED,
-            constant::DBUS_CONNECTD_TIMEOUT,
-        )
-    })
-    .await??;
-    let (a, b) = msg.read2::<String, String>()?;
-    Ok(vec![a, b])
+    // Await the relayer information we were already listening for.
+    let msg = recv_task.await??;
+    let (location_id, topic_id) = msg.read2::<String, String>()?;
+    println!(
+        "BLE: Relayer info received in {:?} ms",
+        start_time.elapsed().as_millis()
+    );
+    Ok(vec![location_id, topic_id])
 }

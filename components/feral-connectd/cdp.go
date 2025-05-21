@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"reflect"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -148,7 +147,7 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 		return nil, fmt.Errorf("failed to read CDP response: %w", err)
 	}
 
-	c.logger.Info("Received CDP response",
+	c.logger.Debug("Received CDP response",
 		zap.String("method", method),
 		zap.String("response", string(response)))
 
@@ -170,12 +169,6 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 
 	result := resp.Result.Result
 
-	// If the result is empty ({}), return nil
-	if reflect.ValueOf(result).Kind() == reflect.Map &&
-		reflect.ValueOf(result).Len() == 0 {
-		return nil, nil
-	}
-
 	// Check for uncaught errors
 	if result.Type == CDP_TYPE_OBJECT &&
 		result.Subtype != nil &&
@@ -184,17 +177,21 @@ func (c *CDPClient) SendCDPRequest(method string, params map[string]interface{})
 	}
 
 	// Check for response type mismatch
-	if result.Type != CDP_TYPE_STRING {
-		return nil, fmt.Errorf("CDP response type mismatch: %s != %s", result.Type, CDP_TYPE_STRING)
-	}
+	if result.Type == CDP_TYPE_STRING {
+		// Unmarshal the result value
+		var v map[string]interface{}
+		if err := json.Unmarshal([]byte(result.Value.(string)), &v); err != nil {
+			return nil, fmt.Errorf("CDP unmarshal error: %w", err)
+		}
 
-	// Unmarshal the result value
-	var v map[string]interface{}
-	if err := json.Unmarshal([]byte(result.Value.(string)), &v); err != nil {
-		return nil, fmt.Errorf("CDP unmarshal error: %w", err)
+		return v, nil
+	} else if result.Type == CDP_TYPE_OBJECT {
+		return result.Value, nil
+	} else if len(result.Type) == 0 {
+		return nil, nil
+	} else {
+		return nil, fmt.Errorf("CDP response type mismatch: %s", result.Type)
 	}
-
-	return v, nil
 }
 
 // Close closes the CDP connection

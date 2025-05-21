@@ -31,6 +31,7 @@ const (
 	RELAYER_CMD_MOUSE_DRAG_EVENT     RelayerCmd = "dragGesture"
 	RELAYER_CMD_MOUSE_TAP_EVENT      RelayerCmd = "tapGesture"
 	RELAYER_CMD_SYS_METRICS          RelayerCmd = "deviceMetrics"
+	RELAYER_CMD_SCREEN_ROTATION      RelayerCmd = "rotate"
 	RELAYER_CMD_SHUTDOWN             RelayerCmd = "shutdown"
 )
 
@@ -41,6 +42,7 @@ func (c RelayerCmd) CDPCmd() bool {
 		c != RELAYER_CMD_KEYBOARD_EVENT &&
 		c != RELAYER_CMD_MOUSE_DRAG_EVENT &&
 		c != RELAYER_CMD_MOUSE_TAP_EVENT &&
+		c != RELAYER_CMD_SCREEN_ROTATION &&
 		c != RELAYER_CMD_SHUTDOWN
 }
 
@@ -183,7 +185,7 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 
 	// Set pong handler
 	conn.SetPongHandler(func(_ string) error {
-		r.logger.Info("Received pong")
+		r.logger.Debug("Received pong")
 		conn.SetReadDeadline(time.Time{})
 		return nil
 	})
@@ -193,6 +195,8 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 	}
 
 	// Start pinging
+	ticker := time.NewTicker(RELAYER_PING_INTERVAL)
+	defer ticker.Stop()
 	go func() {
 		for {
 			select {
@@ -202,7 +206,7 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 				return
 			case <-r.pingDoneChan:
 				return
-			case <-time.After(RELAYER_PING_INTERVAL):
+			case <-ticker.C:
 				r.ping()
 			}
 		}
@@ -264,12 +268,12 @@ func (r *RelayerClient) background(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
-				r.logger.Info("Closing WebSocket connection due to context cancellation")
+				r.logger.Debug("Closing WebSocket connection due to context cancellation")
 				r.Close()
 				return
 			case <-r.done:
 				// Exit if closed manually
-				r.logger.Info("Context handler exiting due to manual close")
+				r.logger.Debug("Context handler exiting due to manual close")
 				return
 			default:
 				r.Lock()
@@ -306,10 +310,17 @@ func (r *RelayerClient) background(ctx context.Context) {
 
 					// Run the handler in a separate goroutine to avoid blocking the main thread
 					go func(ctx context.Context, payload RelayerPayload, handler RelayerHandler) error {
-						if err := handler(ctx, payload); err != nil {
-							r.logger.Error("Failed to handle message", zap.Error(err))
+						select {
+						case <-ctx.Done():
+							return fmt.Errorf("context cancelled")
+						case <-r.done:
+							return fmt.Errorf("connection closed")
+						default:
+							if err := handler(ctx, payload); err != nil {
+								r.logger.Error("Failed to handle message", zap.Error(err))
+							}
+							return nil
 						}
-						return nil
 					}(ctx, p, h)
 				}
 			}
@@ -335,7 +346,7 @@ func (r *RelayerClient) ping() {
 		return
 	}
 
-	r.logger.Info("Sending ping")
+	r.logger.Debug("Sending ping")
 	if err := r.conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
 		r.logger.Error("Failed to send ping", zap.Error(err))
 		return

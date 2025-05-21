@@ -1,3 +1,12 @@
 {
-  "cSpell.words": ["dbus", "nmcli", "QRCODE", "reqwest", "ssids", "zbus"]
+  "cSpell.words": [
+    "connectd",
+    "dbus",
+    "feralfile",
+    "nmcli",
+    "QRCODE",
+    "reqwest",
+    "ssids",
+    "zbus"
+  ]
 }
