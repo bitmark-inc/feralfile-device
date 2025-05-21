@@ -24,7 +24,7 @@ const (
 // CDPMonitor monitors Chromium browser health via Chrome DevTools Protocol
 type CDPMonitor struct {
 	mu                 sync.Mutex
-	cdpConfig          *CDPConfig
+	cdpEndpoint        string
 	client             *http.Client
 	logger             *zap.Logger
 	restartHistory     []time.Time
@@ -33,9 +33,9 @@ type CDPMonitor struct {
 }
 
 // NewCDPMonitor creates a new CDP monitor instance
-func NewCDPMonitor(cdpConfig *CDPConfig, logger *zap.Logger, commandHandler *CommandHandler) *CDPMonitor {
+func NewCDPMonitor(cdpEndpoint string, logger *zap.Logger, commandHandler *CommandHandler) *CDPMonitor {
 	return &CDPMonitor{
-		cdpConfig: cdpConfig,
+		cdpEndpoint: cdpEndpoint,
 		client: &http.Client{
 			Timeout: CDP_REQUEST_TIMEOUT,
 		},
@@ -49,7 +49,7 @@ func NewCDPMonitor(cdpConfig *CDPConfig, logger *zap.Logger, commandHandler *Com
 // Start begins the CDP monitoring process
 func (m *CDPMonitor) Start(ctx context.Context) {
 	m.logger.Info("CDP: Starting Chromium CDP monitor",
-		zap.String("endpoint", m.cdpConfig.Endpoint),
+		zap.String("endpoint", m.cdpEndpoint),
 		zap.Duration("check_interval", CDP_CHECK_INTERVAL),
 		zap.Duration("hang_threshold", CDP_HANG_THRESHOLD))
 
@@ -71,9 +71,13 @@ func (m *CDPMonitor) Start(ctx context.Context) {
 	}
 }
 
+func (m *CDPMonitor) Stop() {
+
+}
+
 // check performs a single CDP health check
 func (m *CDPMonitor) check(ctx context.Context) error {
-	versionURL := fmt.Sprintf("%s/json/version", m.cdpConfig.Endpoint)
+	versionURL := fmt.Sprintf("%s/json/version", m.cdpEndpoint)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(ctx, CDP_REQUEST_TIMEOUT)

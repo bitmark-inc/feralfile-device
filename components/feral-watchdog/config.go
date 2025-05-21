@@ -23,12 +23,7 @@ var (
 // Config represents the configuration for the watchdog daemon
 type Config struct {
 	sync.Mutex
-	CDPConfig *CDPConfig `json:"cdp"`
-}
-
-// CDPConfig holds the configuration for the Chrome DevTools Protocol
-type CDPConfig struct {
-	Endpoint string `json:"endpoint"`
+	CDPEndpoint string `json:"cdp_endpoint"`
 }
 
 // LoadConfig loads the configuration from a JSON file
@@ -38,15 +33,7 @@ func LoadConfig(debug bool, logger *zap.Logger) (*Config, error) {
 
 	// Try to read the file
 	data, err := os.ReadFile(fp)
-	if os.IsNotExist(err) {
-		// If the file doesn't exist, create a default config with default CDP endpoint
-		logger.Warn("Config file not found, using default configuration", zap.Error(err))
-		return &Config{
-			CDPConfig: &CDPConfig{
-				Endpoint: "http://localhost:9222",
-			},
-		}, nil
-	} else if err != nil {
+	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
@@ -60,12 +47,8 @@ func LoadConfig(debug bool, logger *zap.Logger) (*Config, error) {
 	}
 
 	// Set default endpoint if not provided
-	if c.CDPConfig == nil {
-		c.CDPConfig = &CDPConfig{
-			Endpoint: "http://localhost:9222",
-		}
-	} else if c.CDPConfig.Endpoint == "" {
-		c.CDPConfig.Endpoint = "http://localhost:9222"
+	if c.CDPEndpoint == "" {
+		return nil, fmt.Errorf("cdp_endpoint is not provided")
 	}
 
 	config = &c

@@ -84,7 +84,7 @@ func main() {
 	}()
 
 	// Start CDP monitor
-	cdpMonitor := NewCDPMonitor(config.CDPConfig, logger, commandHandler)
+	cdpMonitor := NewCDPMonitor(config.CDPEndpoint, logger, commandHandler)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

@@ -1,5 +1,3 @@
 {
-  "cdp": {
-    "endpoint": "http://localhost:9222"
-  }
+  "cdp_endpoint": "http://localhost:9222"
 }
