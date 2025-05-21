@@ -116,7 +116,7 @@ jobs:
           cp -r components/player-wrapper-ui/* /build/archiso-radxa-x4/airootfs/opt/feral/ui/player/
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.logs
 
-      - name: Add feral-connectd and feral-setupd Configs and Services
+      - name: Add Configs and Services
         run: |
           # Add connectd config
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/.config
@@ -139,6 +139,16 @@ jobs:
           }
           EOF
           chmod 755 /build/archiso-radxa-x4/airootfs/home/feralfile/.config/connectd.json
+
+          cat > /build/archiso-radxa-x4/airootfs/home/feralfile/x1-config.json << EOF
+          {
+            "branch": "${{ github.ref_name }}",
+            "version": "${{ github.event.inputs.version }}",
+            "distribution_acc": "${{ secrets.DISTRIBUTION_AUTH_USER }}",
+            "distribution_pass": "${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}"
+          }
+          EOF
+          chmod 755 /build/archiso-radxa-x4/airootfs/home/feralfile/x1-config.json
 
       - name: Setup pacman
         run: |

@@ -42,50 +42,20 @@ export async function listFiles(bucket: R2Bucket): Promise<FileInfo[]> {
     const branch = parts.join('/');
     if (!filename) continue;
 
-    if (filename.includes('feralfile-launcher')) {
-      const version = filename.match(/launcher_(.+?)_arm64\.deb/)?.[1];
-      if (version) {
-        const existing = files.find(f => f.branch === branch && f.version === version);
-        if (existing) {
-          existing.debUrl = obj.key;
-          existing.debSize = formatFileSize(obj.size);
-          existing.debEtag = obj.etag?.replace(/['"]/g, '');
-        } else {
-          files.push({
-            branch,
-            version,
-            debUrl: obj.key,
-            debSize: formatFileSize(obj.size),
-            debEtag: obj.etag?.replace(/['"]/g, ''),
-            zipUrl: '',
-            zipSize: undefined,
-            zipEtag: undefined,
-            lastUpdated: obj.uploaded?.getTime()
-          });
-        }
-      }
-    } else if (filename.includes('feralfile_device')) {
-      const version = filename.match(/feralfile_device_(.+?)\.zip/)?.[1]?.replace('_arm64', '');
-      if (version) {
-        const existing = files.find(f => f.branch === branch && f.version === version);
-        if (existing) {
-          existing.zipUrl = obj.key;
-          existing.zipSize = formatFileSize(obj.size);
-          existing.zipEtag = obj.etag?.replace(/['"]/g, '');
-        } else {
-          files.push({
-            branch,
-            version,
-            debUrl: '',
-            debSize: undefined,
-            debEtag: undefined,
-            zipUrl: obj.key,
-            zipSize: formatFileSize(obj.size),
-            zipEtag: obj.etag?.replace(/['"]/g, ''),
-            lastUpdated: obj.uploaded?.getTime()
-          });
-        }
-      }
+    const match = filename.match(/^radxa-x4-arch-(\d+\.\d+\.\d+)\.zip$/);
+    if (match) {
+      const version = match[1];
+      files.push({
+        branch,
+        version,
+        zipUrl: obj.key,
+        zipSize: formatFileSize(obj.size),
+        zipEtag: obj.etag?.replace(/['"]/g, ''),
+        debUrl: '',
+        debSize: undefined,
+        debEtag: undefined,
+        lastUpdated: obj.uploaded?.getTime(),
+      });
     }
   }
 
