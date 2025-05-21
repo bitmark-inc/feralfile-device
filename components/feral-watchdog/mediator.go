@@ -13,9 +13,11 @@ import (
 )
 
 const (
-	DBUS_SYS_MONITORD_EVENT_SYSMETRICS  godbus.Member = "sysmetrics"
-	DBUS_SYS_MONITORD_EVENT_GPU_HANGING godbus.Member = "gpu_hanging"
-	DBUS_SYS_MONITORD_EVENT_GPU_RECOVER godbus.Member = "gpu_recover"
+	DBUS_SYS_MONITORD_EVENT_SYSMETRICS godbus.Member = "sysmetrics"
+	DBUS_SYSTEM_EVENT                  godbus.Member = "sysevent"
+
+	GPU_HANGING_SIGNAL = "gpu_hanging"
+	GPU_RECOVER_SIGNAL = "gpu_recover"
 )
 
 type CPUMetrics struct {
@@ -115,13 +117,26 @@ func (m *Mediator) handleDBusSignal(
 	}
 
 	switch payload.Member {
-	case DBUS_SYS_MONITORD_EVENT_GPU_HANGING:
-		m.logger.Info("Received GPU hanging event")
-		m.gpuHandler.scheduleGPUReboot(ctx)
-		return nil, nil
-	case DBUS_SYS_MONITORD_EVENT_GPU_RECOVER:
-		m.logger.Info("Received GPU recovery event")
-		m.gpuHandler.handleGPURecovery(ctx)
+	case DBUS_SYSTEM_EVENT:
+		if len(payload.Body) != 1 {
+			m.logger.Error("Invalid number of arguments", zap.Int("expected", 1), zap.Int("actual", len(payload.Body)))
+			return nil, nil
+		}
+
+		eventType, ok := payload.Body[0].(string)
+		if !ok {
+			m.logger.Error("Invalid body type", zap.String("expected", "string"), zap.String("actual", reflect.TypeOf(payload.Body[0]).String()))
+			return nil, nil
+		}
+
+		switch eventType {
+		case GPU_HANGING_SIGNAL:
+			m.logger.Info("Received GPU hanging event")
+			m.gpuHandler.scheduleGPUReboot(ctx)
+		case GPU_RECOVER_SIGNAL:
+			m.logger.Info("Received GPU recovery event")
+			m.gpuHandler.handleGPURecovery(ctx)
+		}
 		return nil, nil
 	case DBUS_SYS_MONITORD_EVENT_SYSMETRICS:
 		if len(payload.Body) != 1 {
