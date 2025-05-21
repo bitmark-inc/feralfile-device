@@ -63,14 +63,13 @@ func (m *Mediator) handleDBusSignal(
 			return nil, fmt.Errorf("relayer channel is not ready")
 		}
 
-		// Send the locationID and topicID to the setupd
+		// Send the topicID to the setupd
 		relayerConf := GetState().Relayer
 		err = m.dbus.RetryableSend(ctx, godbus.DBusPayload{
 			Interface: DBUS_INTERFACE,
 			Path:      DBUS_PATH,
 			Member:    DBUS_SETUPD_EVENT_RELAYER_CONFIGURED,
 			Body: []interface{}{
-				relayerConf.LocationID,
 				relayerConf.TopicID,
 			},
 		})
@@ -80,7 +79,6 @@ func (m *Mediator) handleDBusSignal(
 		}
 
 		return []interface{}{
-			relayerConf.LocationID,
 			relayerConf.TopicID,
 		}, nil
 
@@ -140,16 +138,14 @@ func (m *Mediator) handleDBusSignal(
 func (m *Mediator) handleRelayerMessage(ctx context.Context, payload RelayerPayload) error {
 	switch payload.MessageID {
 	case RELAYER_MESSAGE_ID_SYSTEM:
-		locationID := payload.Message.LocationID
 		topicID := payload.Message.TopicID
-		if locationID == nil || topicID == nil {
-			m.logger.Error("Payload doesn't contain locationID or topicID", zap.Any("payload", payload))
-			return fmt.Errorf("payload doesn't contain locationID or topicID")
+		if topicID == nil {
+			m.logger.Error("Payload doesn't contain topicID", zap.Any("payload", payload))
+			return fmt.Errorf("payload doesn't contain topicID")
 		}
 
 		// Save state
 		state := GetState()
-		state.Relayer.LocationID = *locationID
 		state.Relayer.TopicID = *topicID
 		err := state.Save()
 		if err != nil {

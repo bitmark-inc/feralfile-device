@@ -27,8 +27,7 @@ type State struct {
 	sync.Mutex
 	ConnectedDevice *Device `json:"connectedDevice"`
 	Relayer         struct {
-		LocationID string `json:"locationId"`
-		TopicID    string `json:"topicId"`
+		TopicID string `json:"topicId"`
 	} `json:"relayer"`
 }
 
@@ -53,7 +52,7 @@ func (c *State) RelayerChanReady() bool {
 	c.Lock()
 	defer c.Unlock()
 
-	return c.Relayer.LocationID != "" && c.Relayer.TopicID != ""
+	return c.Relayer.TopicID != ""
 }
 
 // LoadState loads state from file or creates a new one if file doesn't exist

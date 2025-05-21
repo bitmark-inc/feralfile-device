@@ -49,10 +49,9 @@ func (c RelayerCmd) CDPCmd() bool {
 type RelayerPayload struct {
 	MessageID string `json:"messageID"`
 	Message   struct {
-		Command    *RelayerCmd            `json:"command,omitempty"`
-		Args       map[string]interface{} `json:"request,omitempty"`
-		LocationID *string                `json:"locationID,omitempty"`
-		TopicID    *string                `json:"topicID,omitempty"`
+		Command *RelayerCmd            `json:"command,omitempty"`
+		Args    map[string]interface{} `json:"request,omitempty"`
+		TopicID *string                `json:"topicID,omitempty"`
 	} `json:"message"`
 }
 
@@ -157,7 +156,7 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 	}
 	r.Unlock()
 
-	// Create URL with locationID and topicID if available
+	// Create URL with topicID if available
 	connectURL := r.config.Endpoint
 
 	if r.config.APIKey != "" {
@@ -166,7 +165,7 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 
 	state := GetState()
 	if state.RelayerChanReady() {
-		connectURL += fmt.Sprintf("&locationID=%s&topicID=%s", state.Relayer.LocationID, state.Relayer.TopicID)
+		connectURL += fmt.Sprintf("&topicID=%s", state.Relayer.TopicID)
 	}
 
 	dialer := websocket.DefaultDialer
