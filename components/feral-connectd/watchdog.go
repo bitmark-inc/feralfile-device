@@ -34,7 +34,13 @@ func (w *Watchdog) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			daemon.SdNotify(false, daemon.SdNotifyWatchdog)
+			sent, err := daemon.SdNotify(false, daemon.SdNotifyWatchdog)
+			if err != nil {
+				w.logger.Error("Failed to notify systemd", zap.Error(err))
+			}
+			if !sent {
+				w.logger.Warn("Failed to notify systemd, notification not supported. It could because NOTIFY_SOCKET is unset")
+			}
 		case <-ctx.Done():
 			w.logger.Info("Stopping watchdog due to context cancellation")
 			return
