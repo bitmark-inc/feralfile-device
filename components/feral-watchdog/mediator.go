@@ -15,6 +15,7 @@ import (
 const (
 	DBUS_SYS_MONITORD_EVENT_SYSMETRICS  godbus.Member = "sysmetrics"
 	DBUS_SYS_MONITORD_EVENT_GPU_HANGING godbus.Member = "gpu_hanging"
+	DBUS_SYS_MONITORD_EVENT_GPU_RECOVER godbus.Member = "gpu_recover"
 )
 
 type CPUMetrics struct {
@@ -115,7 +116,12 @@ func (m *Mediator) handleDBusSignal(
 
 	switch payload.Member {
 	case DBUS_SYS_MONITORD_EVENT_GPU_HANGING:
-		m.gpuHandler.restartGPU(ctx)
+		m.logger.Info("Received GPU hanging event")
+		m.gpuHandler.scheduleGPUReboot(ctx)
+		return nil, nil
+	case DBUS_SYS_MONITORD_EVENT_GPU_RECOVER:
+		m.logger.Info("Received GPU recovery event")
+		m.gpuHandler.handleGPURecovery(ctx)
 		return nil, nil
 	case DBUS_SYS_MONITORD_EVENT_SYSMETRICS:
 		if len(payload.Body) != 1 {
