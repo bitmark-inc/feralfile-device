@@ -4,12 +4,11 @@ After=network.target
 Wants=network.target
 
 [Service]
-Type=simple
+Type=notify
 User=feralfile
 Group=feralfile
 Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
 Environment="XDG_RUNTIME_DIR=/run/user/1000"
-ExecStartPre=/bin/sleep 1
 ExecStart=/usr/bin/feral-sys-monitord
 Restart=always
 RestartSec=5
