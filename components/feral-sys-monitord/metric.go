@@ -37,10 +37,6 @@ type MemoryMetrics struct {
 	UsedCapacity float64 `json:"used_capacity"`
 }
 
-func (p MemoryMetrics) CapacityPercent() float64 {
-	return p.UsedCapacity / p.MaxCapacity
-}
-
 type ScreenMetrics struct {
 	Width       int     `json:"width"`
 	Height      int     `json:"height"`
@@ -115,7 +111,9 @@ func (p *SysResMonitor) run() {
 				continue
 			}
 			p.notifyHandlers(p.ctx, metrics)
+			p.Lock()
 			p.lastMetrics = metrics
+			p.Unlock()
 		}
 	}
 }
@@ -379,7 +377,7 @@ func (p *SysResMonitor) getIntelGPUFreq() (current, max float64, err error) {
 	}
 
 	outputString := string(output)
-	if !strings.HasSuffix(outputString, "]") {
+	if strings.HasPrefix(outputString, "[") && !strings.HasSuffix(outputString, "]") {
 		outputString = outputString + "]"
 	}
 
