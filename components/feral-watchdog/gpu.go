@@ -28,6 +28,10 @@ func NewGPUHandler(logger *zap.Logger, commandHandler *CommandHandler) *GPUHandl
 	}
 }
 
+func (g *GPUHandler) GracefulShutdown(ctx context.Context) {
+	g.cancelReboot()
+}
+
 func (g *GPUHandler) scheduleGPUReboot(ctx context.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -46,7 +50,6 @@ func (g *GPUHandler) scheduleGPUReboot(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			g.logger.Info("GPU: context cancelled, skipping reboot")
-			g.cancelReboot(ctx)
 		default:
 			g.mu.Lock()
 			g.rebootScheduled = false
@@ -64,12 +67,12 @@ func (g *GPUHandler) handleGPURecovery(ctx context.Context) {
 	g.mu.Unlock()
 
 	if isRebootScheduled {
-		g.cancelReboot(ctx)
+		g.cancelReboot()
 		g.restartKiosk(ctx)
 	}
 }
 
-func (g *GPUHandler) cancelReboot(ctx context.Context) {
+func (g *GPUHandler) cancelReboot() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 

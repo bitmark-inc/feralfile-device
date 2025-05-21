@@ -72,18 +72,20 @@ func (m *CDPMonitor) Start(ctx context.Context) {
 }
 
 func (m *CDPMonitor) Stop() {
-
+	if m.client != nil {
+		m.client.CloseIdleConnections()
+	}
 }
 
 // check performs a single CDP health check
-func (m *CDPMonitor) check(ctx context.Context) error {
+func (m *CDPMonitor) check(timeoutCtx context.Context) error {
 	versionURL := fmt.Sprintf("%s/json/version", m.cdpEndpoint)
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(ctx, CDP_REQUEST_TIMEOUT)
+	timeoutCtx, cancel := context.WithTimeout(timeoutCtx, CDP_REQUEST_TIMEOUT)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, versionURL, nil)
+	req, err := http.NewRequestWithContext(timeoutCtx, http.MethodGet, versionURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -92,14 +94,14 @@ func (m *CDPMonitor) check(ctx context.Context) error {
 
 	// Check for response and connection errors
 	if err != nil {
-		m.checkHangState(ctx)
+		m.checkHangState(timeoutCtx)
 		return fmt.Errorf("CDP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		m.checkHangState(ctx)
+		m.checkHangState(timeoutCtx)
 		return fmt.Errorf("CDP returned non-200 status: %d", resp.StatusCode)
 	}
 

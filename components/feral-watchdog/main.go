@@ -45,7 +45,7 @@ func main() {
 	}()
 
 	// Load configuration
-	config, err := LoadConfig(DEBUG_MODE, logger)
+	config, err := LoadConfig(logger)
 	if err != nil {
 		logger.Fatal("Failed to load configuration", zap.Error(err))
 	}
@@ -66,6 +66,7 @@ func main() {
 	ramHandler := NewMemoryHandler(logger, commandHandler)
 	diskHandler := NewDiskHandler(logger, commandHandler)
 	gpuHandler := NewGPUHandler(logger, commandHandler)
+	defer gpuHandler.GracefulShutdown(ctx)
 
 	// Initialize mediator
 	mediator := NewMediator(dbusClient, diskHandler, ramHandler, gpuHandler, logger)
@@ -85,6 +86,7 @@ func main() {
 
 	// Start CDP monitor
 	cdpMonitor := NewCDPMonitor(config.CDPEndpoint, logger, commandHandler)
+	defer cdpMonitor.Stop()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

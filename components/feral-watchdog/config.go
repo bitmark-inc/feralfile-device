@@ -11,8 +11,7 @@ import (
 
 const (
 	// Configuration file paths
-	DEBUG_CONFIG_FILE = "./feral-watchdog.json"
-	CONFIG_FILE       = "/home/feralfile/.config/feral-watchdog.json"
+	CONFIG_FILE = "/home/feralfile/.config/feral-watchdog.json"
 )
 
 var (
@@ -27,12 +26,11 @@ type Config struct {
 }
 
 // LoadConfig loads the configuration from a JSON file
-func LoadConfig(debug bool, logger *zap.Logger) (*Config, error) {
-	fp := getConfigFile(debug)
-	logger.Info("Loading config", zap.String("file", fp))
+func LoadConfig(logger *zap.Logger) (*Config, error) {
+	logger.Info("Loading config", zap.String("file", CONFIG_FILE))
 
 	// Try to read the file
-	data, err := os.ReadFile(fp)
+	data, err := os.ReadFile(CONFIG_FILE)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -53,13 +51,4 @@ func LoadConfig(debug bool, logger *zap.Logger) (*Config, error) {
 
 	config = &c
 	return config, nil
-}
-
-// getConfigFile returns the appropriate config file path
-func getConfigFile(debug bool) string {
-	// Check if running in debug mode
-	if debug {
-		return DEBUG_CONFIG_FILE
-	}
-	return CONFIG_FILE
 }
