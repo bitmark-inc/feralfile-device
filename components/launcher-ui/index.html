@@ -160,6 +160,31 @@
                 showScreen('qr', params);
             }
         });
+
+        function handleCDPRequest({ command, params }) {
+            if (command === 'navigateWhenOnline') {
+                const url = params.url;
+                if (!url) {
+                    return { ok: false, error: 'URL is required' };
+                }
+                
+                // Check if online
+                if (navigator.onLine) {
+                    window.location.replace(url);
+                    return { ok: true };
+                } else {
+                    // Wait for online event
+                    window.addEventListener('online', function handler() {
+                        window.location.replace(url);
+                        window.removeEventListener('online', handler);
+                    });
+                    return { ok: true, message: 'Waiting for internet connection' };
+                }
+            } else {
+                return { ok:false, error: `Unknown command: ${command}` };
+            }
+        }
+        window.handleCDPRequest = handleCDPRequest;
     </script>
 </body>
 
