@@ -59,8 +59,14 @@ func (g *GPUHandler) scheduleGPUReboot(ctx context.Context) {
 }
 
 func (g *GPUHandler) handleGPURecovery(ctx context.Context) {
-	g.cancelReboot(ctx)
-	g.restartKiosk(ctx)
+	g.mu.Lock()
+	isRebootScheduled := g.rebootScheduled
+	g.mu.Unlock()
+
+	if isRebootScheduled {
+		g.cancelReboot(ctx)
+		g.restartKiosk(ctx)
+	}
 }
 
 func (g *GPUHandler) cancelReboot(ctx context.Context) {
