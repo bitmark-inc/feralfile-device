@@ -22,7 +22,6 @@ const (
 var PING_TARGET_ADDRESS = []string{
 	"1.1.1.1:443", // Cloudflare
 	"8.8.8.8:443", // Google
-	"9.9.9.9:443", // Quad9
 }
 
 type ConnectivityHandler func(ctx context.Context, connected bool)
