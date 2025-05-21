@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/feral-file/godbus"
 	"go.uber.org/zap"
 )
@@ -88,6 +89,15 @@ func main() {
 	)
 	mediator.Start()
 	defer mediator.Stop()
+
+	// send ready notification to systemd
+	sent, err := daemon.SdNotify(false, daemon.SdNotifyReady)
+	if err != nil {
+		logger.Error("Failed to notify systemd", zap.Error(err))
+	}
+	if !sent {
+		logger.Warn("Failed to notify systemd, notification not supported. It could because NOTIFY_SOCKET is unset")
+	}
 
 	<-ctx.Done()
 }
