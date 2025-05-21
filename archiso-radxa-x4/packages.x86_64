@@ -18,6 +18,9 @@ mkinitcpio
 mkinitcpio-archiso
 arch-install-scripts
 polkit
+jq
+unzip
+p7zip
 
 # Boot support
 intel-ucode

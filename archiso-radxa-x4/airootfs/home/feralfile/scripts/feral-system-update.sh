@@ -1,16 +1,23 @@
 #!/bin/bash
 set -euo pipefail
 
+if [[ $# -lt 1 || -z "${1:-}" ]]; then
+  echo "❌ Error: IMAGE_URL is required as the first argument."
+  echo "Usage: $0 /path/to/image.zip"
+  exit 1
+fi
+
+IMAGE_URL="$1"
+
 CONFIG_FILE="/home/feralfile/x1-config.json"
-IMG_MOUNT="/mnt/ota-img"
+ISO_MOUNT="/mnt/ota-iso"
 SFS_MOUNT="/mnt/ota-sfs"
 TMP_DIR="/tmp/ota"
 ZIP_FILE="$TMP_DIR/image.zip"
-ISO_FILE="$TMP_DIR/image.img"
 
 cleanup() {
   umount "$SFS_MOUNT" 2>/dev/null || true
-  umount "$IMG_MOUNT" 2>/dev/null || true
+  umount "$ISO_MOUNT" 2>/dev/null || true
   rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT
@@ -19,37 +26,21 @@ echo "=== OTA Update: Version-aware SquashFS Sync ==="
 
 # --- Step 1: Load local config --------------------------------------------------
 echo "📖 Loading config from $CONFIG_FILE"
-branch=$(jq -r '.branch' "$CONFIG_FILE")
-current_version=$(jq -r '.version' "$CONFIG_FILE")
 auth_user=$(jq -r '.distribution_acc' "$CONFIG_FILE")
 auth_pass=$(jq -r '.distribution_pass' "$CONFIG_FILE")
 
-# --- Step 2: Query latest version from server -----------------------------------
-API_URL="https://feralfile-device-distribution.bitmark-development.workers.dev/api/latest/$branch"
-echo "🌐 Fetching latest version from: $API_URL"
-response=$(curl -su "$auth_user:$auth_pass" -f "$API_URL")
-
-latest_version=$(jq -r '.latest_version' <<< "$response")
-image_url=$(jq -r '.image_url' <<< "$response")
-
-echo "🆚 Current: $current_version  →  Remote: $latest_version"
-if [[ "$latest_version" == "$current_version" ]]; then
-  echo "✅ System is already up to date. Exiting."
-  exit 0
-fi
-
 # --- Step 3: Download and extract new image -------------------------------------
-echo "📦 New version found: $latest_version. Downloading image..."
+echo "📦 Downloading new image..."
 mkdir -p "$TMP_DIR"
-curl -u "$auth_user:$auth_pass" -f -L "https://feralfile-device-distribution.bitmark-development.workers.dev$image_url" -o "$ZIP_FILE"
+curl -u "$auth_user:$auth_pass" -f -L "https://feralfile-device-distribution.bitmark-development.workers.dev$IMAGE_URL" -o "$ZIP_FILE"
 unzip -o "$ZIP_FILE" -d "$TMP_DIR"
 ISO_FILE=$(find "$TMP_DIR" -name '*.iso' | head -n1)
 
-mkdir -p "$IMG_MOUNT"
-mount -o loop "$ISO_FILE" "$IMG_MOUNT"
+mkdir -p "$ISO_MOUNT"
+mount -o loop "$ISO_FILE" "$ISO_MOUNT"
 
 # --- Step 6: Mount airootfs.sfs -------------------------------------------------
-SFS_PATH="$IMG_MOUNT/arch/x86_64/airootfs.sfs"
+SFS_PATH="$ISO_MOUNT/arch/x86_64/airootfs.sfs"
 if [[ ! -f "$SFS_PATH" ]]; then
   echo "❌ airootfs.sfs not found in image."
   exit 1
@@ -68,6 +59,8 @@ rsync -aAX --delete --info=progress2 \
 echo -n > /etc/machine-id
 rm -f /var/lib/systemd/random-seed
 
+/home/feralfile/scripts/boot-config-sync.sh
+
 # Set up pacman
 echo "Setting up pacman..."
 pacman-key --init
@@ -77,7 +70,7 @@ pacman -Syy
 # --- Step 8: Clean up ------------------------------------------------------------
 echo "🧹 Cleaning up..."
 umount "$SFS_MOUNT"
-umount "$IMG_MOUNT"
+umount "$ISO_MOUNT"
 rm -rf "$TMP_DIR"
 
 echo "✅ OTA update complete. Rebooting..."
