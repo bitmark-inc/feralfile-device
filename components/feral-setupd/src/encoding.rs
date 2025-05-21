@@ -44,11 +44,11 @@ pub fn encode_varint(mut value: u64) -> Vec<u8> {
     buf
 }
 
-pub fn encode_payload(vals: &[String]) -> Vec<u8> {
+pub fn encode_payload(vals: &Vec<&[u8]>) -> Vec<u8> {
     let mut buf = Vec::new();
     for val in vals {
         buf.extend_from_slice(&encode_varint(val.len() as u64));
-        buf.extend_from_slice(val.as_bytes());
+        buf.extend_from_slice(val);
     }
     buf
 }

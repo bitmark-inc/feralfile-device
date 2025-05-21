@@ -108,9 +108,8 @@ fn create_bluetooth_connected_cb(
 }
 
 fn create_wifi_connected_cb(app_cache: Arc<Cache>, chromium: Arc<CDP>) -> ble::ConnectWifiCallback {
-    Some(Box::new(move |topic_id: &str, location_id: &str| {
+    Some(Box::new(move |topic_id: &str| {
         app_cache.set(cache::TOPIC_ID, topic_id);
-        app_cache.set(cache::LOCATION_ID, location_id);
         app_cache.save(constant::CACHE_FILEPATH);
         let chromium = chromium.clone();
         task::spawn(async move {
@@ -159,13 +158,8 @@ fn create_qrcode_switch_cb(
 
 fn build_qrcode_url(device_id: &str, app_cache: &Cache) -> String {
     let mut qrcode_url = format!("{}{}", constant::QRCODE_URL_PREFIX, device_id);
-    if app_cache.get(cache::TOPIC_ID).is_some() && app_cache.get(cache::LOCATION_ID).is_some() {
-        qrcode_url = format!(
-            "{}|{}|{}",
-            qrcode_url,
-            app_cache.get(cache::LOCATION_ID).unwrap(),
-            app_cache.get(cache::TOPIC_ID).unwrap()
-        );
+    if app_cache.get(cache::TOPIC_ID).is_some() {
+        qrcode_url = format!("{}|{}", qrcode_url, app_cache.get(cache::TOPIC_ID).unwrap());
     }
     qrcode_url
 }

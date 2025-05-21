@@ -95,30 +95,37 @@ impl SSIDsCacher {
     }
 }
 
-pub fn connect(ssid: &str, pass: &str) -> Result<(), Box<dyn Error>> {
+pub fn connect(ssid: &str, pass: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     // delete any existing connection, don't care if it fails
     // we need this because of a bug with nmcli
     // https://bbs.archlinux.org/viewtopic.php?id=300321&p=2
-    println!("Deleting existing connection");
-    match delete(ssid) {
-        Ok(_) => println!("Deleted existing connection"),
-        Err(err) => println!("Failed to delete connection: {}", err),
+
+    if let Err(err) = delete(ssid) {
+        println!("Wifi: failed to delete existing connection: {}", err);
     }
-    println!("Connecting to {}", ssid);
-    if Command::new("nmcli")
+
+    let output = Command::new("nmcli")
         .args(&["device", "wifi", "connect", ssid, "password", pass])
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-    {
-        println!("Connected");
-        Ok(())
+        .output();
+
+    if output.is_err() {
+        return Err(format!("Wifi: failed to call nmcli: {}", output.err().unwrap()).into());
     } else {
-        Err("Failed to connect".into())
+        let output = output.unwrap();
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Wifi: failed to connect to {}: {}",
+                ssid,
+                String::from_utf8_lossy(&output.stderr)
+            )
+            .into())
+        }
     }
 }
 
-fn delete(ssid: &str) -> Result<(), Box<dyn Error>> {
+fn delete(ssid: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     if Command::new("nmcli")
         .args(&["connection", "delete", ssid])
         .status()

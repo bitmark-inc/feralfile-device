@@ -8,7 +8,7 @@ set -euo pipefail
 
 LOCAL_DIR="${1:-.}/"
 REMOTE_USER="feralfile"
-REMOTE_HOST="192.168.31.91"
+REMOTE_HOST="192.168.31.92"
 REMOTE_PASS="portal"
 REMOTE_DIR="${2:-/home/${REMOTE_USER}/project/}"
 

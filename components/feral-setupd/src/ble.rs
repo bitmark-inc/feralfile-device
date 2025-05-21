@@ -29,8 +29,12 @@ use std::time::Instant;
 use tokio::sync::Mutex;
 use tokio::task;
 
+const SUCCESS_CODE: &[u8] = &[0];
+const ERR_CODE_WRONG_WIFI_PWD: &[u8] = &[1];
+const ERR_CODE_UNKNOWN_ERROR: &[u8] = &[255];
+
 pub type BTConnectedCallback = Option<Box<dyn Fn() + Send + Sync>>;
-pub type ConnectWifiCallback = Option<Box<dyn Fn(&str, &str) + Send + Sync>>;
+pub type ConnectWifiCallback = Option<Box<dyn Fn(&str) + Send + Sync>>;
 pub type GetInfoCallback = Option<Box<dyn Fn() -> Vec<String> + Send + Sync>>;
 
 #[derive(Default)]
@@ -103,7 +107,7 @@ impl BLE {
             ..Default::default()
         };
         st.app_handle = Some(adapter.serve_gatt_application(app).await?);
-        println!("BLE: GATT app registered; awaiting writes…");
+        println!("BLE: GATT app registered; ready to receive commands");
 
         st.advertised = true;
         Ok(())
@@ -157,6 +161,7 @@ impl BLE {
             notify: Some(CharacteristicNotify {
                 notify: true,
                 method: CharacteristicNotifyMethod::Fun(Box::new(move |notifier| {
+                    println!("BLE: a device is connected");
                     let handle = notifier_for_notify.clone();
                     let bt_connected_callback = bt_connected_callback.clone();
                     async move {
@@ -252,9 +257,10 @@ async fn handle_scan_wifi(
     );
 
     // Build BLE reply payload
-    let mut reply = Vec::with_capacity(ssids.len() + 1);
-    reply.push(reply_id.clone());
-    reply.extend(ssids);
+    let mut reply = Vec::with_capacity(ssids.len() + 2);
+    reply.push(reply_id.as_bytes());
+    reply.push(SUCCESS_CODE);
+    reply.extend(ssids.iter().map(|s| s.as_bytes()));
     println!("BLE: Reply: {:?}", reply);
     let payload = encoding::encode_payload(&reply);
 
@@ -291,33 +297,43 @@ async fn handle_connect_wifi(
     let ssid = &params[0];
     let pass = &params[1];
 
-    // Attempt connection; just log on failure
+    // Attempt connection
+    // If it fails, notify central with error code
     if let Err(e) = wifi_utils::connect(ssid, pass) {
         eprintln!("BLE: Failed to connect to wifi \"{}\": {}", ssid, e);
+        // This is a bit of a hack to detect wrong password
+        // But the command doesn't provide a reliable way to detect this
+        let error_code = if e.to_string().contains("password") {
+            ERR_CODE_WRONG_WIFI_PWD
+        } else {
+            ERR_CODE_UNKNOWN_ERROR
+        };
+        let payload = vec![reply_id.as_bytes(), error_code];
+        let payload = encoding::encode_payload(&payload);
+        let mut guard = notifier.lock().await;
+        if let Some(notifier) = guard.as_mut() {
+            notifier.notify(payload).await.unwrap();
+        }
         return Ok(());
     }
 
-    let relayer_info = match get_relayer_info().await {
+    // Connected to wifi successfully
+    // Move on with relayer info
+    println!("BLE: Connected to wifi \"{}\"", ssid);
+    let topic_id = match get_relayer_info().await {
         Ok(info) => info,
         Err(e) => {
-            eprintln!("BLE: Relay‑server confirmation failed: {}", e);
+            eprintln!("BLE: can't get relayer data from connectd: {}", e);
             return Ok(());
         }
     };
-    println!(
-        "BLE: Relay‑server location: {}, topic: {}",
-        relayer_info[0], relayer_info[1]
-    );
+    println!("BLE: Relay‑server topic: {}", topic_id);
 
     if let Some(cb) = cb.as_ref() {
-        cb(&relayer_info[0], &relayer_info[1]);
+        cb(&topic_id);
     }
 
-    let payload = vec![
-        reply_id.clone(),
-        relayer_info[0].clone(),
-        relayer_info[1].clone(),
-    ];
+    let payload = vec![reply_id.as_bytes(), SUCCESS_CODE, topic_id.as_bytes()];
     let mut guard = notifier.lock().await;
     if let Some(notifier) = guard.as_mut() {
         let payload = encoding::encode_payload(&payload);
@@ -345,8 +361,9 @@ async fn handle_get_info(
         vec![]
     };
     let mut reply = Vec::with_capacity(payload.len() + 1);
-    reply.push(reply_id.clone());
-    reply.extend(payload);
+    reply.push(reply_id.as_bytes());
+    reply.push(SUCCESS_CODE);
+    reply.extend(payload.iter().map(|s| s.as_bytes()));
 
     let mut guard = notifier.lock().await;
     if let Some(notifier) = guard.as_mut() {
@@ -390,19 +407,6 @@ async fn handle_set_time(
             println!("BLE: Failed to set time");
             Err("Failed to set time".into())
         }
-
-        // if Command::new(constant::TIMEZONE_CMD)
-        //     .args(&[constant::TIMEZONE_INSTRUCTION, timezone, time])
-        //     .status()
-        //     .map(|s| s.success())
-        //     .unwrap_or(false)
-        // {
-        //     println!("BLE: Time set successfully");
-        //     Ok::<(), Box<dyn Error + Send + Sync>>(())
-        // } else {
-        //     println!("BLE: Failed to set time");
-        //     Err("Failed to set time".into())
-        // }
     })
     .await
     {
@@ -414,7 +418,7 @@ async fn handle_set_time(
     Ok(())
 }
 
-async fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+async fn get_relayer_info() -> Result<String, Box<dyn Error + Send + Sync>> {
     let start_time = Instant::now();
 
     // Start listening **before** we announce the Wi‑Fi connection so we don't
@@ -443,10 +447,10 @@ async fn get_relayer_info() -> Result<Vec<String>, Box<dyn Error + Send + Sync>>
 
     // Await the relayer information we were already listening for.
     let msg = recv_task.await??;
-    let (location_id, topic_id) = msg.read2::<String, String>()?;
+    let topic_id = msg.read1::<String>()?;
     println!(
         "BLE: Relayer info received in {:?} ms",
         start_time.elapsed().as_millis()
     );
-    Ok(vec![location_id, topic_id])
+    Ok(topic_id)
 }

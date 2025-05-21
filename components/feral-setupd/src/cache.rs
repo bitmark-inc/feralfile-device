@@ -9,7 +9,6 @@ pub struct Cache {
 }
 
 pub const TOPIC_ID: &str = "topic_id";
-pub const LOCATION_ID: &str = "location_id";
 
 impl Cache {
     pub fn new(filepath: &str) -> Self {

@@ -174,7 +174,10 @@ pub fn listen(
         conn.add_match_no_cb(&rule)
             .expect("DBUS: failed to add match");
 
-        println!("DBUS: Listening for '{}' signal", member);
+        println!(
+            "DBUS: Listening for '{}' signal in a background thread",
+            member
+        );
         while !stop.load(Ordering::Relaxed) {
             if let Ok(msg) = receive_internal(
                 &conn,
