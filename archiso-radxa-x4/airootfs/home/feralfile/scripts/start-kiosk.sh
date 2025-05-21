@@ -6,20 +6,24 @@ if [ -f /home/feralfile/.config/screen-orientation ]; then
     ROTATION=$(cat /home/feralfile/.config/screen-orientation)
 fi
 
-# Start cage with a small delay script
-# This script will keep cage running while we apply rotation
-cage -- /bin/bash -c '
-    # Let Cage initialize
-    sleep 1.5
-    
-    # Apply rotation using wlr-randr
-    OUTPUT=$(wlr-randr | grep Output | head -1 | awk "{print \$2}")
-    if [ -n "$OUTPUT" ]; then
-        wlr-randr --output "$OUTPUT" --rotate '"$ROTATION"'
-    fi
-    
-    # Start Chromium
-    exec /usr/bin/chromium \
+# Convert rotation to transform value
+TRANSFORM="0"
+if [ "$ROTATION" = "90" ]; then
+    TRANSFORM="1"
+elif [ "$ROTATION" = "180" ]; then
+    TRANSFORM="2"
+elif [ "$ROTATION" = "270" ]; then
+    TRANSFORM="3"
+fi
+
+# Set Wayland/wlroots environment variables
+export WLR_OUTPUT_HDMI-A-1_TRANSFORM="$TRANSFORM"
+export WLR_NO_DIRECT_SCANOUT=1
+export WLR_DRM_NO_MODIFIERS=0
+export WLR_DRM_FORMATS="XR24/I915_FORMAT_MOD_Y_TILED;XR24/I915_FORMAT_MOD_Yf_TILED"
+
+# Start cage with Chromium directly
+exec cage -- /usr/bin/chromium \
     --kiosk \
     --ozone-platform=wayland \
     --enable-features=UseOzonePlatform \
@@ -38,4 +42,3 @@ cage -- /bin/bash -c '
     --v=1 \
     --disk-cache-size=1073741824 \
     file:///opt/feral/ui/launcher/index.html?step=logo
-'
