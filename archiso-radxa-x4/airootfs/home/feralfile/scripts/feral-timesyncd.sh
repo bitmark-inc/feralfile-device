@@ -38,7 +38,7 @@ sync_ntp() {
     for i in {1..30}; do
         if is_ntp_synced; then
             echo "NTP time synchronized successfully"
-            echo "ntp_synced=true" > "$STATUS_FILE" 2>/dev/null || true
+            echo "f=true" > "$STATUS_FILE" 2>/dev/null || true
             return 0
         fi
         sleep 1
@@ -51,17 +51,26 @@ sync_ntp() {
 
 # Function to set timezone and time
 set_time() {
-    # First parameter is timezone, second is date, third is time
-    if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ]; then
+    # Check if we have a combined date-time format
+    if [ -z "$1" ] || [ -z "$2" ]; then
         echo "Usage: set-time TIMEZONE YYYY-MM-DD HH:MM:SS"
         return 1
     fi
     
     timezone="$1"
-    date_str="$2"
-    time_str="$3"
     
-    # Combine date and time
+    # Check if we have a combined date-time with space
+    if [[ "$2" == *" "* ]] && [ -z "$3" ]; then
+        # Split the datetime into date and time parts
+        date_str=$(echo "$2" | cut -d ' ' -f1)
+        time_str=$(echo "$2" | cut -d ' ' -f2)
+    else
+        # Use the traditional separate arguments
+        date_str="$2"
+        time_str="$3"
+    fi
+    
+    # Create the datetime string
     datetime_str="$date_str $time_str"
     
     # Try to set timezone using timedatectl
