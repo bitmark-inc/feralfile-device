@@ -5,3 +5,4 @@ enable chromium-kiosk.service
 enable feral-setupd.service
 enable feral-connectd.service
 enable feral-sys-monitord.service
+enable feral-watchdog.service
