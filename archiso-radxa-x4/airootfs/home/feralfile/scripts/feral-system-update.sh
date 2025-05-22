@@ -61,6 +61,9 @@ rm -f /var/lib/systemd/random-seed
 
 /home/feralfile/scripts/boot-config-sync.sh
 
+echo "↻ Applying systemd presets..."
+systemctl preset-all --preset-mode=enable-only
+
 # Set up pacman
 echo "Setting up pacman..."
 pacman-key --init

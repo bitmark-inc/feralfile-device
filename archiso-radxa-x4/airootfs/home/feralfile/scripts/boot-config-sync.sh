@@ -11,7 +11,7 @@ trap cleanup EXIT
 
 ISO_FILE=$(find "$TMP_DIR" -name '*.iso' | head -n1)
 
-7z e "$ISO_FILE" "[BOOT]/Boot-NoEmul.img" -o "$TMP_DIR"
+7z e "$ISO_FILE" "[BOOT]/Boot-NoEmul.img" -o"$TMP_DIR"
 
 mkdir -p "$BOOT_MOUNT"
 mount -o loop "$TMP_DIR"/Boot-NoEmul.img "$BOOT_MOUNT"

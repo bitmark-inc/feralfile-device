@@ -28,3 +28,4 @@ if [[ "$latest_version" != "$current_version" ]]; then
 else
   echo "✅ Image already up-to-date. Checking for package updates..."
   exec /home/feralfile/scripts/feral-service-update.sh
+fi
