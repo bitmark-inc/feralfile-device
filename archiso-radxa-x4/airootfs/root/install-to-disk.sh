@@ -56,6 +56,7 @@ if [[ "${NO_NETWORK:-0}" == 1 ]]; then
   echo "    - Only the base image will be used."
   read -rp "Proceed with offline installation? [y/N]: " offline_confirm
   [[ "$offline_confirm" != [yY] ]] && echo "Aborted." && exit 1
+  copy_wifi='n'
   SKIP_PACMAN_INIT=1
 else
   SKIP_PACMAN_INIT=0
