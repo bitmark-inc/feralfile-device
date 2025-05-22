@@ -96,6 +96,9 @@ func (p *SysResMonitor) Start() {
 func (p *SysResMonitor) run() {
 	p.logger.Info("SysResMonitor started in the background")
 
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-p.doneChan:
@@ -104,7 +107,7 @@ func (p *SysResMonitor) run() {
 		case <-p.ctx.Done():
 			p.logger.Info("SysResMonitor stopped because context was cancelled")
 			return
-		default:
+		case <-ticker.C:
 			metrics, err := p.monitor(p.ctx)
 			if err != nil {
 				p.logger.Error("Failed to monitor system resources", zap.Error(err))
@@ -546,52 +549,52 @@ func (p *SysResMonitor) monitorScreen(ctx context.Context) (ScreenMetrics, error
 	}
 
 	// FPS
-	fpsCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
+	// 	fpsCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	// 	defer cancel()
 
-	cmd = exec.CommandContext(fpsCtx, "weston-presentation-shm", "-f")
-	cmd.Stderr = &stderr
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		p.logger.Error("Failed to get screen fps", zap.String("stderr", stderr.String()), zap.Error(err))
-		return metrics, err
-	}
+	// 	cmd = exec.CommandContext(fpsCtx, "weston-presentation-shm", "-f")
+	// 	cmd.Stderr = &stderr
+	// 	stdout, err := cmd.StdoutPipe()
+	// 	if err != nil {
+	// 		p.logger.Error("Failed to get screen fps", zap.String("stderr", stderr.String()), zap.Error(err))
+	// 		return metrics, err
+	// 	}
 
-	err = cmd.Start()
-	if err != nil {
-		p.logger.Error("Failed to get screen fps", zap.String("stderr", stderr.String()), zap.Error(err))
-		return metrics, err
-	}
-	defer cmd.Process.Kill()
+	// 	err = cmd.Start()
+	// 	if err != nil {
+	// 		p.logger.Error("Failed to get screen fps", zap.String("stderr", stderr.String()), zap.Error(err))
+	// 		return metrics, err
+	// 	}
+	// 	defer cmd.Process.Kill()
 
-	sumFPS := 0.0
-	samples := 0
-	scanner := bufio.NewScanner(stdout)
-scan:
-	for scanner.Scan() {
-		select {
-		case <-fpsCtx.Done():
-			break scan
-		case <-ctx.Done():
-			break scan
-		case <-p.doneChan:
-			break scan
-		default:
-			re := regexp.MustCompile(`p2p\s+([0-9]+)`)
-			matches := re.FindStringSubmatch(scanner.Text())
-			if len(matches) == 2 {
-				us, _ := strconv.ParseFloat(matches[1], 64) // microseconds
-				if us == 0 {
-					continue
-				}
-				sumFPS += 1e6 / us
-				samples++
-			}
-		}
-	}
-	if samples > 0 {
-		metrics.FPS = sumFPS / float64(samples)
-	}
+	// 	sumFPS := 0.0
+	// 	samples := 0
+	// 	scanner := bufio.NewScanner(stdout)
+	// scan:
+	// 	for scanner.Scan() {
+	// 		select {
+	// 		case <-fpsCtx.Done():
+	// 			break scan
+	// 		case <-ctx.Done():
+	// 			break scan
+	// 		case <-p.doneChan:
+	// 			break scan
+	// 		default:
+	// 			re := regexp.MustCompile(`p2p\s+([0-9]+)`)
+	// 			matches := re.FindStringSubmatch(scanner.Text())
+	// 			if len(matches) == 2 {
+	// 				us, _ := strconv.ParseFloat(matches[1], 64) // microseconds
+	// 				if us == 0 {
+	// 					continue
+	// 				}
+	// 				sumFPS += 1e6 / us
+	// 				samples++
+	// 			}
+	// 		}
+	// 	}
+	// 	if samples > 0 {
+	// 		metrics.FPS = sumFPS / float64(samples)
+	// 	}
 
 	return metrics, nil
 }
