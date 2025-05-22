@@ -44,9 +44,8 @@ impl CDP {
             current_id: AtomicU64::new(constant::CDP_ID_START),
         };
 
-        // Enable the Page domain so we can later call Page.navigate, etc.
         cdp.send_cmd("Page.enable", json!({})).await?;
-
+        cdp.send_cmd("Runtime.enable", json!({})).await?;
         Ok(cdp)
     }
 
@@ -55,6 +54,30 @@ impl CDP {
         println!("CDP: Navigating to {}", url);
         self.send_cmd("Page.navigate", json!({ "url": url }))
             .await?;
+        Ok(())
+    }
+
+    pub async fn navigate_when_online(&self, url: &str) -> Result<(), Box<dyn Error>> {
+        // Create the command object as a JSON string
+        let command_obj = json!({
+            "command": "navigateWhenOnline",
+            "params": {
+                "url": url
+            }
+        });
+        
+        // Convert the command to a string
+        let command_str = command_obj.to_string();
+        let expr = format!("window.handleCDPRequest({})", command_str);
+        self.send_cmd(
+            "Runtime.evaluate",
+            json!({
+                "expression": expr,
+                "awaitPromise": true,
+                "returnByValue": true
+            }),
+        )
+        .await?;
         Ok(())
     }
 

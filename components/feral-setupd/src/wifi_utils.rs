@@ -104,9 +104,11 @@ pub fn connect(ssid: &str, pass: &str) -> Result<(), Box<dyn Error + Send + Sync
         println!("Wifi: failed to delete existing connection: {}", err);
     }
 
+    println!("Wifi: connecting to {}", ssid);
     let output = Command::new("nmcli")
         .args(&["device", "wifi", "connect", ssid, "password", pass])
         .output();
+    println!("Wifi: output: {:?}", output);
 
     if output.is_err() {
         return Err(format!("Wifi: failed to call nmcli: {}", output.err().unwrap()).into());

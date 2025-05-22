@@ -299,8 +299,17 @@ async fn handle_connect_wifi(
 
     // Attempt connection
     // If it fails, notify central with error code
+    let start_time = Instant::now();
+    let topic_id: String;
+    let mut payload = Vec::with_capacity(3); // to reply to central
+    payload.push(reply_id.as_bytes());
     if let Err(e) = wifi_utils::connect(ssid, pass) {
-        eprintln!("BLE: Failed to connect to wifi \"{}\": {}", ssid, e);
+        eprintln!(
+            "BLE: Failed to connect to wifi \"{}\" in {:?} ms: {}",
+            ssid,
+            start_time.elapsed().as_millis(),
+            e
+        );
         // This is a bit of a hack to detect wrong password
         // But the command doesn't provide a reliable way to detect this
         let error_code = if e.to_string().contains("password") {
@@ -308,34 +317,33 @@ async fn handle_connect_wifi(
         } else {
             ERR_CODE_UNKNOWN_ERROR
         };
-        let payload = vec![reply_id.as_bytes(), error_code];
-        let payload = encoding::encode_payload(&payload);
-        let mut guard = notifier.lock().await;
-        if let Some(notifier) = guard.as_mut() {
-            notifier.notify(payload).await.unwrap();
+        payload.push(error_code);
+    } else {
+        println!(
+            "BLE: Connected to wifi \"{}\" in {:?} ms",
+            ssid,
+            start_time.elapsed().as_millis()
+        );
+        topic_id = match get_relayer_info().await {
+            Ok(info) => info,
+            Err(e) => {
+                eprintln!("BLE: can't get relayer data from connectd: {}", e);
+                return Ok(());
+            }
+        };
+        println!("BLE: Relay‑server topic: {}", topic_id);
+
+        if let Some(cb) = cb.as_ref() {
+            cb(&topic_id);
         }
-        return Ok(());
+
+        payload.push(SUCCESS_CODE);
+        payload.push(topic_id.as_bytes());
     }
 
-    // Connected to wifi successfully
-    // Move on with relayer info
-    println!("BLE: Connected to wifi \"{}\"", ssid);
-    let topic_id = match get_relayer_info().await {
-        Ok(info) => info,
-        Err(e) => {
-            eprintln!("BLE: can't get relayer data from connectd: {}", e);
-            return Ok(());
-        }
-    };
-    println!("BLE: Relay‑server topic: {}", topic_id);
-
-    if let Some(cb) = cb.as_ref() {
-        cb(&topic_id);
-    }
-
-    let payload = vec![reply_id.as_bytes(), SUCCESS_CODE, topic_id.as_bytes()];
     let mut guard = notifier.lock().await;
     if let Some(notifier) = guard.as_mut() {
+        println!("BLE: Reply: {:?}", payload);
         let payload = encoding::encode_payload(&payload);
         match notifier.notify(payload).await {
             Ok(_) => (),

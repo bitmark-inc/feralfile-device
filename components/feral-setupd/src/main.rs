@@ -113,7 +113,7 @@ fn create_wifi_connected_cb(app_cache: Arc<Cache>, chromium: Arc<CDP>) -> ble::C
         app_cache.save(constant::CACHE_FILEPATH);
         let chromium = chromium.clone();
         task::spawn(async move {
-            match chromium.navigate(constant::DAILY_URL).await {
+            match chromium.navigate_when_online(constant::DAILY_URL).await {
                 Ok(_) => println!("MAIN: Navigated to daily"),
                 Err(e) => println!("MAIN: Error navigating to daily: {}", e),
             };
