@@ -16,8 +16,11 @@ TMP_DIR="/tmp/ota"
 ZIP_FILE="$TMP_DIR/image.zip"
 
 cleanup() {
-  umount "$SFS_MOUNT" 2>/dev/null || true
-  umount "$ISO_MOUNT" 2>/dev/null || true
+  cd /
+  sync
+  sleep 2
+  umount -Rl "$SFS_MOUNT" 2>/dev/null || true
+  umount -Rl "$ISO_MOUNT" 2>/dev/null || true
   rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT
@@ -72,9 +75,8 @@ pacman -Syy
 
 # --- Step 8: Clean up ------------------------------------------------------------
 echo "🧹 Cleaning up..."
-umount "$SFS_MOUNT"
-umount "$ISO_MOUNT"
-rm -rf "$TMP_DIR"
+cleanup
+trap - EXIT
 
 echo "✅ OTA update complete. Rebooting..."
-reboot
+systemctl reboot --no-wall --no-block
