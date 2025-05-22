@@ -23,5 +23,4 @@ file_permissions=(
   ["/home/feralfile/scripts/feral-updater.sh"]="1000:1000:755"
   ["/home/feralfile/scripts/feral-timesyncd.sh"]="1000:1000:755"
   ["/home/feralfile/scripts/feral-log-rotation.sh"]="1000:1000:755"
-  ["/home/feralfile/scripts/feral-timesyncd/"]="1000:1000:755"
 )

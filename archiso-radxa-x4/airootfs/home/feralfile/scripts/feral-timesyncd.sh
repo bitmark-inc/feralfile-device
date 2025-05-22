@@ -6,7 +6,7 @@
 # 2. Setting timezone and time manually when offline
 
 # Configuration
-STATUS_DIR="/home/feralfile/scripts/feral-timesyncd"
+STATUS_DIR="/home/feralfile/.state/timesyncd"
 STATUS_FILE="$STATUS_DIR/status"
 TIMEZONE_FILE="$STATUS_DIR/timezone"
 
