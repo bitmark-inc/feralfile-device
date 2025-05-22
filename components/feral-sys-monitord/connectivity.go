@@ -135,10 +135,12 @@ func (c *Connectivity) background() {
 					c.logger.Warn("Connectivity check failed", zap.Error(err))
 					continue
 				}
+				c.Lock()
 				if connected != c.lastConnected {
 					c.notifyHandlers(c.ctx, connected)
 					c.lastConnected = connected
 				}
+				c.Unlock()
 				c.logger.Info("Connectivity check result", zap.Bool("connected", connected))
 			}
 		}
