@@ -56,23 +56,30 @@ func main() {
 	go watchdog.Start(ctx)
 	defer watchdog.Stop()
 
+	// Initialize Connectivity
+	connectivity := NewConnectivity(ctx, logger)
+	connectivity.Start()
+	defer connectivity.Stop()
+
 	// Initialize DBus client
-	dbusClient := godbus.NewDBusClient(ctx, logger)
+	dbusClient := godbus.NewDBusClient(ctx, logger, DBUS_NAME)
 	err = dbusClient.Start()
 	if err != nil {
 		logger.Fatal("DBus init failed", zap.Error(err))
 	}
 	defer dbusClient.Stop()
 
+	// Initialize SysMonitordDBus
+	sysMonitordDBus := NewSysMonitordDBus(connectivity)
+	err = dbusClient.Export(sysMonitordDBus, DBUS_PATH, DBUS_INTERFACE)
+	if err != nil {
+		logger.Fatal("DBus export failed", zap.Error(err))
+	}
+
 	// Initialize Monitor
 	monitor := NewSysResMonitor(ctx, logger)
 	monitor.Start()
 	defer monitor.Stop()
-
-	// Initialize Connectivity
-	connectivity := NewConnectivity(ctx, logger)
-	connectivity.Start()
-	defer connectivity.Stop()
 
 	// Initialize SysEventWatcher
 	eventWatcher := NewSysEventWatcher(ctx, logger)

@@ -46,6 +46,12 @@ func NewConnectivity(ctx context.Context, logger *zap.Logger) *Connectivity {
 	}
 }
 
+func (c *Connectivity) GetLastConnected() bool {
+	c.Lock()
+	defer c.Unlock()
+	return c.lastConnected
+}
+
 func (c *Connectivity) Start() {
 	c.logger.Info("Starting Connectivity Watcher")
 	c.background()
@@ -105,7 +111,7 @@ func (c *Connectivity) background() {
 		c.logger.Info("Connectivity background goroutine started")
 
 		// Check initial connectivity
-		connected, err := c.checkConnectivity()
+		connected, err := c.CheckConnectivity()
 		if err != nil {
 			c.logger.Warn("Connectivity check failed", zap.Error(err))
 		}
@@ -124,7 +130,7 @@ func (c *Connectivity) background() {
 				return
 			case <-ticker.C:
 				c.logger.Info("Checking connectivity")
-				connected, err := c.checkConnectivity()
+				connected, err := c.CheckConnectivity()
 				if err != nil {
 					c.logger.Warn("Connectivity check failed", zap.Error(err))
 					continue
@@ -139,8 +145,8 @@ func (c *Connectivity) background() {
 	}()
 }
 
-// checkConnectivity attempts to connect to the PING_TARGET address to check connectivity
-func (c *Connectivity) checkConnectivity() (bool, error) {
+// CheckConnectivity attempts to connect to the PING_TARGET address to check connectivity
+func (c *Connectivity) CheckConnectivity() (bool, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, PING_TIMEOUT+time.Second)
 	defer cancel()
 
