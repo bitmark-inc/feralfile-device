@@ -56,9 +56,22 @@ jobs:
       description: 'Feral File System Monitord'
       maintainer: 'Feral File'
 
+  build-feral-watchdog:
+    name: Build Feral Watchdog
+    uses: ./.github/workflows/build-components.yaml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_ACCESS_KEY_ID }}
+      CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
+    with:
+      component: feral-watchdog
+      version: ${{ github.event.inputs.version }}
+      description: 'Feral File Watchdog'
+      maintainer: 'Feral File'
+
   build-feralfile-pacman-repo:
     name: Build Feralfile pacman repo
-    needs: [build-feral-connectd, build-feral-setupd, build-feral-sys-monitord]
+    needs: [build-feral-connectd, build-feral-setupd, build-feral-sys-monitord, build-feral-watchdog]
     uses: ./.github/workflows/pacman-repo.yaml
     secrets:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -128,17 +141,17 @@ jobs:
             },
             "cdp": {
                 "endpoint": "http://127.0.0.1:9222"
-            },
-            "indexer": {
-                "endpoint": "https://indexer.feralfile.com/v2/graphql"
-            },
-            "feralFile": {
-                "endpoint": "https://feralfile.com",
-                "assetURL": "https://cdn.feralfileassets.com"
             }
           }
           EOF
           chmod 755 /build/archiso-radxa-x4/airootfs/home/feralfile/.config/connectd.json
+
+          # Add watchdog config
+          cat > /build/archiso-radxa-x4/airootfs/home/feralfile/.config/watchdog.json << EOF
+          {
+            "cdp_endpoint": "http://127.0.0.1:9222"
+          }
+          EOF
 
           cat > /build/archiso-radxa-x4/airootfs/home/feralfile/x1-config.json << EOF
           {

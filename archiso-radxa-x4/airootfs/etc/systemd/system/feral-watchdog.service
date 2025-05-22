@@ -13,6 +13,8 @@ WatchdogSec=30s
 User=feralfile
 Group=feralfile
 Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+StandardOutput=append:/home/feralfile/.logs/watchdog.log
+StandardError=append:/home/feralfile/.logs/watchdog.log
 
 [Install]
 WantedBy=multi-user.target

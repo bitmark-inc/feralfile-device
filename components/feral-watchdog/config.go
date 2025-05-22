@@ -11,7 +11,7 @@ import (
 
 const (
 	// Configuration file paths
-	CONFIG_FILE = "/home/feralfile/.config/feral-watchdog.json"
+	CONFIG_FILE = "/home/feralfile/.config/watchdog.json"
 )
 
 var (
