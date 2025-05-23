@@ -220,9 +220,9 @@ func (c *CommandHandler) handleScreenRotation(ctx context.Context, args []byte) 
 	// Calculate new orientation based on perceived current orientation
 	var newIndex int
 	if clockwise {
-		newIndex = (currentIndex + 1) % 4
-	} else {
 		newIndex = (currentIndex - 1 + 4) % 4
+	} else {
+		newIndex = (currentIndex + 1) % 4
 	}
 
 	newRotation := rotations[newIndex]
