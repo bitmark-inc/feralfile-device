@@ -1,35 +1,6 @@
 name: Build Arch Linux Image for Radxa X4
 
 on:
-  workflow_call:
-    inputs:
-      version:
-        description: 'Image version'
-        required: true
-        type: string
-      environment:
-        description: "Environment to build"
-        required: false
-        default: "Production"
-        type: string
-      is_development:
-        description: "Whether to build a development image with Go, Rust and source code"
-        required: false
-        default: false
-        type: boolean
-    secrets:
-      CLOUDFLARE_ACCOUNT_ID:
-        required: true
-      CLOUDFLARE_ACCESS_KEY_ID:
-        required: true
-      CLOUDFLARE_SECRET_ACCESS_KEY:
-        required: true
-      DISTRIBUTION_AUTH_USER:
-        required: true
-      DISTRIBUTION_AUTH_PASSWORD:
-        required: true
-      RELAYER_API_KEY:
-        required: true
   workflow_dispatch:
     inputs:
       version:
@@ -116,7 +87,7 @@ jobs:
     name: Generate Arch Linux Image for Radxa X4
     runs-on: ubuntu-latest
     needs: [build-feralfile-pacman-repo]
-    environment: ${{ inputs.environment || github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
 
     container:
       image: archlinux:latest
@@ -138,13 +109,13 @@ jobs:
           cp -r archiso-radxa-x4 /build/
 
       - name: Update start-kiosk.sh
-        if: ${{ inputs.is_development || github.event.inputs.is_development }}
+        if: ${{ github.event.inputs.is_development }}
         run: |
           # Remove --kiosk flag from start-kiosk.sh
           sed -i 's/--kiosk//' /build/archiso-radxa-x4/airootfs/home/feralfile/scripts/start-kiosk.sh
 
       - name: Add development tools to packages list
-        if: ${{ inputs.is_development || github.event.inputs.is_development }}
+        if: ${{ github.event.inputs.is_development }}
         run: |
           # Add Go and Rust to packages list
           cat >> /build/archiso-radxa-x4/packages.x86_64 << EOF
@@ -159,7 +130,7 @@ jobs:
           sed -i 's/#NoConfirm/NoConfirm/' /etc/pacman.conf 2>/dev/null || echo "NoConfirm" >> /etc/pacman.conf
 
       - name: Setup source directory and copy components
-        if: ${{ inputs.is_development || github.event.inputs.is_development }}
+        if: ${{ github.event.inputs.is_development }}
         run: |
           # Create source directory
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/src
@@ -250,7 +221,7 @@ jobs:
           mkarchiso -v -w /build/work -o /build/out /build/archiso-radxa-x4
           ISO_FILE=$(find /build/out -name "*.iso" | head -n 1)
           if [ -f "$ISO_FILE" ]; then
-            IMAGE_TYPE="${{ inputs.is_development || github.event.inputs.is_development && 'dev-' || '' }}"
+            IMAGE_TYPE="${{ github.event.inputs.is_development && 'dev-' || '' }}"
             NEW_NAME="radxa-x4-arch-${IMAGE_TYPE}${{ inputs.version || github.event.inputs.version }}.iso"
             mv "$ISO_FILE" "/build/out/$NEW_NAME"
             echo "ISO created: /build/out/$NEW_NAME"
