@@ -147,10 +147,16 @@ jobs:
         if: ${{ inputs.is_development || github.event.inputs.is_development }}
         run: |
           # Add Go and Rust to packages list
-          echo "go" >> /build/archiso-radxa-x4/packages.x86_64
-          echo "rust" >> /build/archiso-radxa-x4/packages.x86_64
-          echo "cargo" >> /build/archiso-radxa-x4/packages.x86_64
-          echo "base-devel" >> /build/archiso-radxa-x4/packages.x86_64
+          cat >> /build/archiso-radxa-x4/packages.x86_64 << EOF
+
+          # Development tools
+          go
+          rust
+          base-devel
+          EOF
+          
+          # Configure pacman to not ask for input
+          sed -i 's/#NoConfirm/NoConfirm/' /etc/pacman.conf 2>/dev/null || echo "NoConfirm" >> /etc/pacman.conf
 
       - name: Setup source directory and copy components
         if: ${{ inputs.is_development || github.event.inputs.is_development }}
