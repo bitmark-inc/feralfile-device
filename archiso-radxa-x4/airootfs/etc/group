@@ -4,3 +4,8 @@ audio:x:92:feralfile
 video:x:91:feralfile
 input:x:97:feralfile
 feralfile:x:1000:
+wheel:x:10:soaktest
+audio:x:92:soaktest
+video:x:91:soaktest
+input:x:97:soaktest
+soaktest:x:1000:

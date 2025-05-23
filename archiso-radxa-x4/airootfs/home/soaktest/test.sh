@@ -12,12 +12,12 @@ set -uo pipefail # -e off, script handles errors
 # --- Configuration ------------------------------------------------------------
 # !!! IMPORTANT: UPDATE THESE PATHS !!!
 FILES_TO_TEST=(
-  "file:///root/soak-test/36-point/index.html?edition_number=0&artwork_number=1&blockchain=bitmark#02_hex_hole_open"
-  "file:///root/soak-test/e-volved-formula-23/index.html"
-  "file:///root/soak-test/TransparentGrit/index.html"
-  "file:///root/soak-test/uneasy-dream/index.html"
-  "file:///root/soak-test/autoplay_10bits.html"
-  "file:///root/soak-test/autoplay_8bits.html"
+  "file:///home/soaktest/36-point/index.html?edition_number=0&artwork_number=1&blockchain=bitmark#02_hex_hole_open"
+  "file:///home/soaktest/e-volved-formula-23/index.html"
+  "file:///home/soaktest/TransparentGrit/index.html"
+  "file:///home/soaktest/uneasy-dream/index.html"
+  "file:///home/soaktest/autoplay_10bits.html"
+  "file:///home/soaktest/autoplay_8bits.html"
 )
 
 RESULTS_JSON_FILE="soak_results.json"
