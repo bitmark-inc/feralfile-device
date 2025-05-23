@@ -45,7 +45,7 @@ on:
           - Development
           - Production
       is_development:
-        description: "Whether to build a development image with Go, Rust and source code"
+        description: "Build a development image (includes Go, Rust and source code)"
         required: false
         default: false
         type: boolean
@@ -158,15 +158,13 @@ jobs:
           # Create source directory
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/src
           
-          # Copy git status to a file
-          git status > /build/archiso-radxa-x4/airootfs/home/feralfile/src/git-status.txt
+          # Create a file with repository information
+          echo "Branch: ${{ github.ref_name }}" > /build/archiso-radxa-x4/airootfs/home/feralfile/src/repo-info.txt
+          echo "Version: ${{ inputs.version || github.event.inputs.version }}" >> /build/archiso-radxa-x4/airootfs/home/feralfile/src/repo-info.txt
+          echo "Build Date: $(date)" >> /build/archiso-radxa-x4/airootfs/home/feralfile/src/repo-info.txt
           
           # Copy components directory with current checkout
           cp -r components /build/archiso-radxa-x4/airootfs/home/feralfile/src/
-          
-          # Copy relevant source directories
-          [ -d cmd ] && cp -r cmd /build/archiso-radxa-x4/airootfs/home/feralfile/src/
-          [ -d pkg ] && cp -r pkg /build/archiso-radxa-x4/airootfs/home/feralfile/src/
 
       - name: Inject pacman.conf
         env:
