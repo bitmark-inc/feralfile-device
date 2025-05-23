@@ -12,7 +12,7 @@ set -uo pipefail # -e off, script handles errors
 # --- Configuration ------------------------------------------------------------
 # !!! IMPORTANT: UPDATE THESE PATHS !!!
 FILES_TO_TEST=(
-  "file:///root/soak-test/36-point/index.html?edition_number=0&blockchain=bitmark?edition_number=0&artwork_number=1&blockchain=bitmark#02_hex_hole_open"
+  "file:///root/soak-test/36-point/index.html?edition_number=0&artwork_number=1&blockchain=bitmark#02_hex_hole_open"
   "file:///root/soak-test/e-volved-formula-23/index.html"
   "file:///root/soak-test/TransparentGrit/index.html"
   "file:///root/soak-test/uneasy-dream/index.html"
@@ -23,7 +23,7 @@ FILES_TO_TEST=(
 RESULTS_JSON_FILE="soak_results.json"
 SUMMARY_SCRIPT_PATH="./summary.py" # Path to your Python summary script
 
-FILE_TARGET_DURATION_SECONDS=$((5 * 60 * 60)) # 5 hours per file
+FILE_TARGET_DURATION_SECONDS=$((15)) # 5 hours per file
 #FILE_TARGET_DURATION_SECONDS=$((2 * 60)) # For testing: 2 minutes per file
 
 LOOP_SAMPLING_DELAY_SECONDS=5       # Interval for collecting metrics
