@@ -221,7 +221,7 @@ jobs:
           mkarchiso -v -w /build/work -o /build/out /build/archiso-radxa-x4
           ISO_FILE=$(find /build/out -name "*.iso" | head -n 1)
           if [ -f "$ISO_FILE" ]; then
-            IMAGE_TYPE="${{ github.event.inputs.is_development && 'dev-' || '' }}"
+            IMAGE_TYPE="${{ (inputs.is_development == 'true' || github.event.inputs.is_development == 'true') && 'dev-' || '' }}"
             NEW_NAME="radxa-x4-arch-${IMAGE_TYPE}${{ inputs.version || github.event.inputs.version }}.iso"
             mv "$ISO_FILE" "/build/out/$NEW_NAME"
             echo "ISO created: /build/out/$NEW_NAME"
