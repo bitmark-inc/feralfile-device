@@ -1,4 +1,4 @@
 #!/bin/bash
 set -euo pipefail
 
-cage foot -- /home/soak-test/test.sh
+cage bash -- --login /home/soaktest/test.sh > soaktest.log 2>&1

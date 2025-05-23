@@ -106,6 +106,7 @@ get_cpu_usages() {
         if [ -r "/proc/$pid/stat" ]; then
           local t
           t=$(awk '{print $14 + $15}' "/proc/$pid/stat" 2>/dev/null)
+          t=${t:-0}
           sum_pids_time=$((sum_pids_time + (t:-0) ))
         fi
       done
