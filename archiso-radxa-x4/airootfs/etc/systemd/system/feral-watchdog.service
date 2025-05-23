@@ -6,7 +6,7 @@ ExecStartPre=/bin/sh -c 'while ! curl -s http://localhost:9222/json/version >/de
 
 [Service]
 Type=notify
-ExecStart=/usr/local/bin/feral-watchdog
+ExecStart=/usr/bin/feral-watchdog
 Restart=always
 RestartSec=5s
 WatchdogSec=30s
