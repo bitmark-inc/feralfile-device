@@ -111,8 +111,7 @@ jobs:
           mkdir -p /build
           cp -r archiso-radxa-x4 /build/
           if [ "${{ inputs.soak-test }}" == "false" ]; then
-            rm -rf /build/archiso-radxa-x4/airootfs/root/soak-test
-            rm -f /build/archiso-radxa-x4/airootfs/root/soak-test.sh
+            rm -rf /build/archiso-radxa-x4/airootfs/home/soaktest
             rm -f /build/archiso-radxa-x4/efiboot/loader/entries/archiso-x86_64-linux-soak-test.conf
           else 
             cat >> /build/archiso-radxa-x4/packages.x86_64 << EOF
