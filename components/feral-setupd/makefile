@@ -8,6 +8,11 @@ sync-connectd:
 	@echo "📡 Syncing connectd..."
 	@./scripts/sync-to-x4.sh ../feral-connectd /home/feralfile/feral-connectd
 
+.PHONY: sync-sys-monitord
+sync-sys-monitord:
+	@echo "📡 Syncing sys-monitord..."
+	@./scripts/sync-to-x4.sh ../feral-sys-monitord /home/feralfile/feral-sys-monitord
+
 .PHONY: sync-launcher-ui
 sync-launcher-ui:
 	@echo "📡 Syncing launcher-ui..."
@@ -38,16 +43,40 @@ restart-bluetooth:
 	@echo "🔄 Restarting bluetooth service..."
 	@./scripts/restart-bluetooth.sh
 
-LOGFILE  := ./app.log
-PIDFILE  := ./app.pid
-.PHONY: start-silent
-start-silent:
-	@cd /home/feralfile/feral-connectd && go build && nohup ./feral-connectd >$(LOGFILE) 2>&1 & echo $$! > $(PIDFILE)
-	@echo "Started feral-connectd; pid=$$(cat $(PIDFILE))"
-	@cd /home/feralfile/feral-setupd && cargo build && nohup ./target/debug/feral-setupd >$(LOGFILE) 2>&1 & echo $$! > $(PIDFILE)
-	@echo "Started feral-setupd; pid=$$(cat $(PIDFILE))"
+# ───────────────────────────────────────────────────────────────────────────────
+# Paths
+ROOT             := /home/feralfile
+CONNECTD_DIR     := $(ROOT)/feral-connectd
+SETUPD_DIR       := $(ROOT)/feral-setupd
+MONITORD_DIR     := $(ROOT)/feral-sys-monitord
+LOGDIR           := $(CURDIR)/logs
 
-.PHONY: stop-silent
+# ───────────────────────────────────────────────────────────────────────────────
+.PHONY: start-silent stop-silent
+
+start-silent:
+	@mkdir -p $(LOGDIR)
+
+	@echo "Building & starting feral-sys-monitord…"
+	@cd $(MONITORD_DIR) && go build
+	@nohup $(MONITORD_DIR)/feral-sys-monitord \
+	    >>$(LOGDIR)/feral-sys-monitord.log 2>&1 & \
+	    echo "  ↳ PID $$!"
+
+	@echo "Building & starting feral-connectd…"
+	@cd $(CONNECTD_DIR) && go build
+	@nohup $(CONNECTD_DIR)/feral-connectd \
+	    >>$(LOGDIR)/feral-connectd.log 2>&1 & \
+	    echo "  ↳ PID $$!"
+
+	@echo "Building & starting feral-setupd…"
+	@sleep 2
+	@cd $(SETUPD_DIR) && cargo build --quiet
+	@nohup $(SETUPD_DIR)/target/debug/feral-setupd \
+	    >>$(LOGDIR)/feral-setupd.log 2>&1 & \
+	    echo "  ↳ PID $$!"
+
 stop-silent:
-	@cd /home/feralfile/feral-connectd && kill $$(cat $(PIDFILE))
-	@cd /home/feralfile/feral-setupd && kill $$(cat $(PIDFILE))
+	@echo "Stopping all feral-* processes…"
+	@pkill -f '^feral-' || true
+	@echo "Done."
