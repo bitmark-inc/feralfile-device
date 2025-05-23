@@ -1,6 +1,35 @@
 name: Build Arch Linux Image for Radxa X4
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Image version'
+        required: true
+        type: string
+      environment:
+        description: "Environment to build"
+        required: false
+        default: "Production"
+        type: string
+      is_development:
+        description: "Whether to build a development image with Go, Rust and source code"
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+      CLOUDFLARE_ACCESS_KEY_ID:
+        required: true
+      CLOUDFLARE_SECRET_ACCESS_KEY:
+        required: true
+      DISTRIBUTION_AUTH_USER:
+        required: true
+      DISTRIBUTION_AUTH_PASSWORD:
+        required: true
+      RELAYER_API_KEY:
+        required: true
   workflow_dispatch:
     inputs:
       version:
@@ -15,6 +44,11 @@ on:
         options:
           - Development
           - Production
+      is_development:
+        description: "Whether to build a development image with Go, Rust and source code"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build-feral-connectd:
@@ -26,7 +60,7 @@ jobs:
       CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
     with:
       component: feral-connectd
-      version: ${{ github.event.inputs.version }}
+      version: ${{ inputs.version || github.event.inputs.version }}
       description: 'Feral File Connectd Service'
       maintainer: 'Feral File'
       
@@ -39,7 +73,7 @@ jobs:
       CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
     with:
       component: feral-setupd
-      version: ${{ github.event.inputs.version }}
+      version: ${{ inputs.version || github.event.inputs.version }}
       description: 'Feral File Setup Service'
       maintainer: 'Feral File'
 
@@ -52,7 +86,7 @@ jobs:
       CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
     with:
       component: feral-sys-monitord
-      version: ${{ github.event.inputs.version }}
+      version: ${{ inputs.version || github.event.inputs.version }}
       description: 'Feral File System Monitord'
       maintainer: 'Feral File'
 
@@ -65,7 +99,7 @@ jobs:
       CLOUDFLARE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_SECRET_ACCESS_KEY }}
     with:
       component: feral-watchdog
-      version: ${{ github.event.inputs.version }}
+      version: ${{ inputs.version || github.event.inputs.version }}
       description: 'Feral File Watchdog'
       maintainer: 'Feral File'
 
@@ -82,7 +116,7 @@ jobs:
     name: Generate Arch Linux Image for Radxa X4
     runs-on: ubuntu-latest
     needs: [build-feralfile-pacman-repo]
-    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
+    environment: ${{ inputs.environment || github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'Production' || 'Development') }}
 
     container:
       image: archlinux:latest
@@ -102,6 +136,37 @@ jobs:
         run: |
           mkdir -p /build
           cp -r archiso-radxa-x4 /build/
+
+      - name: Update start-kiosk.sh
+        if: ${{ inputs.is_development || github.event.inputs.is_development }}
+        run: |
+          # Remove --kiosk flag from start-kiosk.sh
+          sed -i 's/--kiosk//' /build/archiso-radxa-x4/airootfs/home/feralfile/scripts/start-kiosk.sh
+
+      - name: Add development tools to packages list
+        if: ${{ inputs.is_development || github.event.inputs.is_development }}
+        run: |
+          # Add Go and Rust to packages list
+          echo "go" >> /build/archiso-radxa-x4/packages.x86_64
+          echo "rust" >> /build/archiso-radxa-x4/packages.x86_64
+          echo "cargo" >> /build/archiso-radxa-x4/packages.x86_64
+          echo "base-devel" >> /build/archiso-radxa-x4/packages.x86_64
+
+      - name: Setup source directory and copy components
+        if: ${{ inputs.is_development || github.event.inputs.is_development }}
+        run: |
+          # Create source directory
+          mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/src
+          
+          # Copy git status to a file
+          git status > /build/archiso-radxa-x4/airootfs/home/feralfile/src/git-status.txt
+          
+          # Copy components directory with current checkout
+          cp -r components /build/archiso-radxa-x4/airootfs/home/feralfile/src/
+          
+          # Copy relevant source directories
+          [ -d cmd ] && cp -r cmd /build/archiso-radxa-x4/airootfs/home/feralfile/src/
+          [ -d pkg ] && cp -r pkg /build/archiso-radxa-x4/airootfs/home/feralfile/src/
 
       - name: Inject pacman.conf
         env:
@@ -156,7 +221,7 @@ jobs:
           cat > /build/archiso-radxa-x4/airootfs/home/feralfile/x1-config.json << EOF
           {
             "branch": "${{ github.ref_name }}",
-            "version": "${{ github.event.inputs.version }}",
+            "version": "${{ inputs.version || github.event.inputs.version }}",
             "distribution_acc": "${{ secrets.DISTRIBUTION_AUTH_USER }}",
             "distribution_pass": "${{ secrets.DISTRIBUTION_AUTH_PASSWORD }}"
           }
@@ -181,7 +246,8 @@ jobs:
           mkarchiso -v -w /build/work -o /build/out /build/archiso-radxa-x4
           ISO_FILE=$(find /build/out -name "*.iso" | head -n 1)
           if [ -f "$ISO_FILE" ]; then
-            NEW_NAME="radxa-x4-arch-${{ github.event.inputs.version }}.iso"
+            IMAGE_TYPE="${{ inputs.is_development || github.event.inputs.is_development && 'dev-' || '' }}"
+            NEW_NAME="radxa-x4-arch-${IMAGE_TYPE}${{ inputs.version || github.event.inputs.version }}.iso"
             mv "$ISO_FILE" "/build/out/$NEW_NAME"
             echo "ISO created: /build/out/$NEW_NAME"
           else
@@ -206,16 +272,19 @@ jobs:
       - name: Compress and Upload Image
         run: |
           cd /build/out
-          ISO_FILE="radxa-x4-arch-${{ github.event.inputs.version }}.iso"
-          zip -j "radxa-x4-arch-${{ github.event.inputs.version }}.zip" "$ISO_FILE"
-          rclone copyto "radxa-x4-arch-${{ github.event.inputs.version }}.zip" \
-            "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/radxa-x4-arch-${{ github.event.inputs.version }}.zip" \
+          BRANCH_NAME="${{ github.ref_name }}"
+          IMAGE_TYPE="${{ inputs.is_development || github.event.inputs.is_development && 'dev-' || '' }}"
+          ISO_FILE="radxa-x4-arch-${IMAGE_TYPE}${{ inputs.version || github.event.inputs.version }}.iso"
+          ZIP_FILE="${BRANCH_NAME}-radxa-x4-arch-${IMAGE_TYPE}${{ inputs.version || github.event.inputs.version }}.zip"
+          zip -j "$ZIP_FILE" "$ISO_FILE"
+          rclone copyto "$ZIP_FILE" \
+            "r2:${{vars.CLOUDFLARE_R2_BUCKET_NAME}}/${{ github.ref_name }}/$ZIP_FILE" \
             --s3-upload-cutoff=100M \
             --s3-chunk-size=100M \
             --transfers=7 \
             --verbose \
             --stats=1s
-          echo "Image successfully uploaded to R2"
+          echo "Image successfully uploaded to R2: ${ZIP_FILE}"
 
       - name: Cleanup
         if: always()
