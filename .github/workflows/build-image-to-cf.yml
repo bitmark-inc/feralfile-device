@@ -109,13 +109,13 @@ jobs:
           cp -r archiso-radxa-x4 /build/
 
       - name: Update start-kiosk.sh
-        if: ${{ github.event.inputs.is_development }}
+        if: ${{ (inputs.is_development == true) || (github.event.inputs.is_development == true) }}
         run: |
           # Remove --kiosk flag from start-kiosk.sh
           sed -i 's/--kiosk//' /build/archiso-radxa-x4/airootfs/home/feralfile/scripts/start-kiosk.sh
 
       - name: Add development tools to packages list
-        if: ${{ github.event.inputs.is_development }}
+        if: ${{ (inputs.is_development == true) || (github.event.inputs.is_development == true) }}
         run: |
           # Add Go and Rust to packages list
           cat >> /build/archiso-radxa-x4/packages.x86_64 << EOF
@@ -130,7 +130,7 @@ jobs:
           sed -i 's/#NoConfirm/NoConfirm/' /etc/pacman.conf 2>/dev/null || echo "NoConfirm" >> /etc/pacman.conf
 
       - name: Setup source directory and copy components
-        if: ${{ github.event.inputs.is_development }}
+        if: ${{ (inputs.is_development == true) || (github.event.inputs.is_development == true) }}
         run: |
           # Create source directory
           mkdir -p /build/archiso-radxa-x4/airootfs/home/feralfile/src
