@@ -4,6 +4,8 @@ if grep -Fqa 'accessibility=' /proc/cmdline &> /dev/null; then
 fi
 
 sudo chown soaktest:soaktest /home/soaktest
+
+sudo chmod 755 /home/soaktest/.automated_script.sh
 sudo chmod 755 /home/soaktest/soak-test.sh
 sudo chmod 755 /home/soaktest/test.sh
 sudo chmod 755 /home/soaktest/summary.py
