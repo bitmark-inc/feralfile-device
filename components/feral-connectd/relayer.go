@@ -185,8 +185,7 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 	// Set pong handler
 	conn.SetPongHandler(func(_ string) error {
 		r.logger.Debug("Received pong")
-		conn.SetReadDeadline(time.Time{})
-		return nil
+		return conn.SetReadDeadline(time.Time{})
 	})
 
 	if r.pingDoneChan == nil {
@@ -221,22 +220,19 @@ func (r *RelayerClient) connect(ctx context.Context) error {
 
 func (r *RelayerClient) reconnect(ctx context.Context) error {
 	r.Lock()
-
 	r.logger.Info("Reconnecting to Relayer")
 
 	// Close the connection
-	if r.conn != nil {
-		if err := r.conn.Close(); err != nil {
-			r.Unlock()
-			r.logger.Info("Failed to close connection", zap.Error(err))
-			return err
-		}
+	err := r.closeConn()
+	if err != nil {
+		r.Unlock()
+		return err
 	}
+
 	if r.pingDoneChan != nil {
 		close(r.pingDoneChan)
 		r.pingDoneChan = nil
 	}
-	r.conn = nil
 	r.Unlock()
 
 	// Retry to connect
@@ -378,9 +374,34 @@ func (r *RelayerClient) Close() {
 		r.pingDoneChan = nil
 	}
 
-	if r.conn != nil {
-		r.conn.Close()
-		r.conn = nil
-		r.logger.Info("Relayer connection closed")
+	err := r.closeConn()
+	if err != nil {
+		r.logger.Error("Failed to close Relayer connection", zap.Error(err))
 	}
+}
+
+func (r *RelayerClient) closeConn() error {
+	if r.conn == nil {
+		return nil
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	err := r.conn.WriteControl(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+		deadline,
+	)
+	if err != nil {
+		return err
+	}
+
+	err = r.conn.Close()
+	if err != nil {
+		return err
+	}
+
+	r.conn = nil
+	r.logger.Info("Relayer connection closed")
+
+	return nil
 }
